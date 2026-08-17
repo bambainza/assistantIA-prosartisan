@@ -1,0 +1,37 @@
+name: Laravel / PHP CI
+
+on:
+  push:
+    branches: [ "main" ]
+  pull_request:
+    branches: [ "main" ]
+
+jobs:
+  laravel-tests:
+    runs-on: ubuntu-latest
+
+    steps:
+    - uses: actions/checkout@v4
+
+    - name: Setup PHP
+      uses: shivammathur/setup-php@v2
+      with:
+        php-version: '8.2'
+        extensions: mbstring, dom, fileinfo, pdo, pdo_pgsql, sqlite3
+        coverage: none
+
+    - name: Install Dependencies
+      run: composer install --prefer-dist --no-progress --no-interaction
+      if: hashFiles('composer.json') != ''
+
+    - name: Copy .env
+      run: php -r "file_exists('.env') || copy('.env.example', '.env');"
+      if: hashFiles('.env.example') != ''
+
+    - name: Generate key
+      run: php artisan key:generate
+      if: hashFiles('artisan') != ''
+
+    - name: Execute tests
+      run: php artisan test
+      if: hashFiles('artisan') != ''
