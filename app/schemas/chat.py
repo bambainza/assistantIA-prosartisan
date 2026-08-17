@@ -14,6 +14,7 @@ class ChatResponse(BaseModel):
 
 class WebSocketMessage(BaseModel):
     """Message transitant via WebSocket."""
+
     type: str  # "stream", "stream_end", "payment_required", "payment_success", "error"
     chunk: str | None = None
     message: str | None = None

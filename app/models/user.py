@@ -1,13 +1,20 @@
 """Modèle ORM : Utilisateur (artisan)."""
 
+from __future__ import annotations
+
 import uuid
 from datetime import datetime
+from typing import TYPE_CHECKING
 
 from sqlalchemy import ForeignKey, String, func
 from sqlalchemy.dialects.postgresql import UUID
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.models.base import Base
+
+if TYPE_CHECKING:
+    from app.models.quota import QuotaUtilisateur
+    from app.models.transaction import TransactionMobileMoney
 
 
 class User(Base):
@@ -30,9 +37,7 @@ class User(Base):
     sous_metier_id: Mapped[int | None] = mapped_column(
         ForeignKey("sous_metiers.id"), default=None
     )
-    type_abonnement: Mapped[str] = mapped_column(
-        String(20), default="FREE"
-    )
+    type_abonnement: Mapped[str] = mapped_column(String(20), default="FREE")
 
     created_at: Mapped[datetime] = mapped_column(server_default=func.now())
     updated_at: Mapped[datetime] = mapped_column(
