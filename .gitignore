@@ -1,0 +1,42 @@
+# =========================
+# SÉCURITÉ ET CONFIGURATION LOCALE (CRITIQUE)
+# =========================
+.env
+.env.local
+.env.*.local
+*.pem
+*.key
+
+# =========================
+# DÉPENDANCES
+# =========================
+/vendor/
+/node_modules/
+/npm-debug.log
+/yarn-error.log
+
+# =========================
+# CACHE ET BUILD
+# =========================
+/public/build/
+/public/hot
+/public/storage
+/storage/*.key
+/storage/app/public/
+/storage/framework/cache/
+/storage/framework/sessions/
+/storage/framework/views/
+/storage/logs/
+
+# =========================
+# OUTILS IDE ET SYSTÈME
+# =========================
+.idea/
+.vscode/
+*.suo
+*.ntvs*
+*.njsproj
+*.sln
+*.sw?
+.DS_Store
+Thumbs.db

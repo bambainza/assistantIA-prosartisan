@@ -1,0 +1,15 @@
+# top-most EditorConfig file
+root = true
+
+# Règles par défaut pour tous les fichiers
+[*]
+charset = utf-8
+end_of_line = lf
+indent_size = 4
+indent_style = space
+insert_final_newline = true
+trim_trailing_whitespace = true
+
+# Surcharge pour les fichiers web (HTML, CSS, JS, JSON)
+[*.{js,jsx,ts,tsx,vue,json,yml,md,html,css}]
+indent_size = 2

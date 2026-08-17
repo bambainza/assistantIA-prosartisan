@@ -1,0 +1,6 @@
+Copyright (c) 2026 - le professionnel de l'artisant (ProsArtisan)
+Tous droits réservés.
+
+Ce code source est la propriété exclusive de le professionnel de l'artisant. 
+Toute reproduction, distribution, modification ou utilisation, partielle ou totale, 
+sans l'autorisation écrite préalable de l'auteur est strictement interdite.
