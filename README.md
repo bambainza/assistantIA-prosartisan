@@ -10,7 +10,7 @@ Assistant Ia permettant l'aide technique aux artisans
 ## 🛠️ Installation en local
 
 1. Cloner le dépôt :
-   `git clone git@github.com:organisation/projet.git`
+   `git clone https://github.com/bambainza/assistantIA-prosartisan.git`
 2. Installer les dépendances :
    `composer install && npm install`
 3. Configurer l'environnement :
