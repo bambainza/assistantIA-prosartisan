@@ -1,0 +1,1546 @@
+Vue d'ensemble de l'Architecture "IA Expert Artisanat"
+Plaintext
+┌─────────────────────────────────────────────────────────────────┐
+│                 1. INTERFACE UTILISATEUR (UI)                   │
+│    App Mobile / Web (Chat interactif, Jauge de consommation)    │
+└────────────────────────────────┬────────────────────────────────┘
+                                 │
+                                 ▼
+┌─────────────────────────────────────────────────────────────────┐
+│                 2. PASSERELLE API & RATE LIMITER                │
+│    Vérification des droits | Comptage des requêtes en temps réel│
+└─────────────────┬──────────────────────────────┬────────────────┘
+                  │                              │
+        (Si quota disponible)            (Si quota épuisé)
+                  ▼                              ▼
+┌────────────────────────────────┐ ┌────────────────────────────────┐
+│      3. MOTEUR IA & RAG        │ │  4. GESTION QUOTAS & PAIEMENT  │
+│ - Routage sémantique           │ │ - Moteur de facturation (SaaS) │
+│ - Filtrage par métier/catégorie│ │ - Suivi des tokens/requêtes    │
+│ - Génération de la réponse     │ │ - Webhooks Mobile Money        │
+└─────────┬──────────────┬───────┘ └──────────────┬─────────────────┘
+          │              │                        │
+          ▼              ▼                        ▼
+┌───────────────┐ ┌──────────────┐ ┌────────────────────────────────┐
+│ BASE VECTORIE │ │  MOTEUR LLM  │ │   5. OPÉRATEURS MOBILE MONEY   │
+│ (Techniques,  │ │ (API externe │ │   (Wave, Orange, MTN, Moov)    │
+│  Astuces)     │ │  ou Local)   │ │                                │
+└───────────────┘ └──────────────┘ └────────────────────────────────┘
+          ▲              ▲                        │
+          └──────────────┴────────────────────────┘
+                                 ▼
+┌─────────────────────────────────────────────────────────────────┐
+│                    6. BASES DE DONNÉES MÉTIER                   │
+│    PostgreSQL : Profils (Métier/Sous-métier), Historique,       │
+│                 Abonnements, Transactions Mobile Money.         │
+└─────────────────────────────────────────────────────────────────┘
+I- Description des Composants Adaptés au Nouveau Contexte
+
+1. Interface Utilisateur (Le "Gemini des Artisans")
+Interface de Chat : Similaire à l'interface de Gemini ou Claude, optimisée pour mobile, permettant de poser des questions vocales ou textuelles.
+Jauge de Quota (Visibilité) : Un indicateur clair en haut de l'écran affichant "Recherches restantes" ou "Temps d'utilisation PRO restant".
+Tunnel de conversion : Un bouton "Passer en illimité / Recharger" qui déclenche directement le prompt USSD ou l'API Mobile Money de l'utilisateur.
+
+2. Le "Rate Limiter" (Le Gardien du Freemium)
+C'est la pièce maîtresse pour gérer le modèle économique.
+Chaque requête envoyée par un artisan passe d'abord par ici. Le système vérifie dans un cache ultra-rapide (comme Redis) si l'utilisateur Free 
+a encore des crédits pour la journée/semaine, ou si l'utilisateur Premium a un abonnement actif.
+Si le quota est dépassé, l'API bloque la requête IA et renvoie un signal à l'application mobile pour afficher le pop-up de paiement.
+
+3. Le Moteur IA & RAG (Filtrage par Métier)
+Puisque l'IA s'adresse à des artisans très variés, la base de données vectorielle doit être compartimentée.
+- Ingestion des connaissances : Alimentez la base (Qdrant ou Pinecone) avec des manuels, des normes, et des fiches techniques.
+- Métadonnées par métier : Chaque document vectorisé reçoit un tag (ex: secteur: "artisanat_art", metier: "maroquinerie" ou metier: "menuiserie").
+- Filtrage Dynamique : Quand un menuisier pose une question sur "le traitement du bois contre l'humidité", le système RAG ne cherche que dans l'espace vectoriel tagué "menuiserie". 
+Cela garantit des réponses ultra-précises et évite que l'IA ne confonde les techniques d'un maçon avec celles d'un sculpteur.
+
+4. Microservice de Quotas & Paiement (Le Modèle Économique)
+Pour répliquer le modèle Gemini/Anthropic avec du Mobile Money, deux approches à gérer ici :
+- Le Modèle "Crédits" (Pay-as-you-go) : L'utilisateur achète un pack de recherches (ex: 500 FCFA pour 50 requêtes expertes). Idéal pour un usage ponctuel.
+- Le Modèle "Durée" (Abonnement SaaS) : L'utilisateur paie un accès illimité (ou avec un plafond haut) pour une durée définie (ex: 2000 FCFA pour 1 mois).
+- Gestion des Webhooks : Quand le paiement Mobile Money est validé, l'opérateur envoie une confirmation (Webhook) à ce microservice, qui met instantanément à jour 
+le statut de l'artisan en "Premium" dans la base de données.
+
+5. Le Schéma de Base de Données
+Pour supporter cette architecture, la base relationnelle (PostgreSQL) doit se concentrer sur l'accès et la catégorisation :
+
+- Table Utilisateurs :
+
+id, telephone, metier_id, sous_metier_id, type_abonnement (Enum: FREE, PREMIUM_TEMPORAIRE).
+
+- Table Quotas_Utilisateurs :
+
+user_id
+
+requetes_restantes_gratuites (Réinitialisé chaque mois ou semaine)
+
+date_fin_premium (Timestamp, si l'artisan a payé pour une durée)
+
+- Table Metiers_Sous_Metiers :
+
+Pour structurer l'arborescence (ex: Bâtiment -> Électricité -> Basse Tension).
+
+- Table Transactions_Mobile_Money :
+
+id_transaction, user_id, montant, operateur (Wave, Orange, etc.), statut_paiement, type_achat (Pack requêtes ou Abonnement temps).
+
+6. Flux d'une Requête Utilisateur "Free" vers "Pro"
+Un électricien (profil Free) a épuisé ses 5 questions gratuites de la semaine. Il pose une 6ème question sur les normes de câblage.
+Le Rate Limiter intercepte la requête, vérifie la table Quotas_Utilisateurs, et bloque l'action.
+- L'application affiche : "Vous avez atteint votre limite gratuite. Débloquez 1 mois d'accès Pro pour 1000 FCFA".
+L'artisan clique, saisit son numéro, valide sur son téléphone via Mobile Money. Le Microservice de Paiement reçoit le succès, met à jour la 
+date_fin_premium à J+30. L'application se débloque en temps réel (via WebSockets ou polling court) et relance automatiquement la question de l'artisan à l'IA.
+
+II- Définition structurée de la logique des quotas pour la plateforme. 
+Pour s'adresser efficacement aux artisans, la mécanique doit être transparente, culturellement adaptée aux habitudes de consommation numérique 
+similaire aux "pass" internet), et techniquement robuste pour protéger la rentabilité.
+
+1. L'Unité de Mesure : "Requêtes" vs "Tokens"
+Il est crucial de séparer ce que l'utilisateur voit de ce que le système calcule en arrière-plan.
+- Front-end (Côté Artisan) : L'unité de mesure est la "Question" (ou "Requête"). Un maroquinier à Bingerville ou un éleveur de volaille ne comprendra pas un 
+solde de "4000 tokens". Il doit voir : Il vous reste 3 questions gratuites aujourd'hui.
+- Back-end (Côté Serveur) : Le système compte les "Tokens". C'est essentiel car une réponse longue coûte plus cher qu'une réponse courte. 
+Le système doit définir une limite maximale de tokens par réponse pour éviter qu'une seule question gratuite ne draine le budget de l'API LLM.
+
+2. Les Paliers de Consommation (Le Modèle Freemium)
+Le modèle par "Pass" (inspiré de la vente de data mobile) est le plus adapté pour une conversion rapide via Wave ou Orange Money.
+- Le Palier "Découverte" (Gratuit) : Volume : 3 à 5 questions par jour (ou par semaine).
+Logique : Les compteurs sont remis à zéro automatiquement (ex: tous les jours à minuit). Cela crée une habitude d'utilisation.
+Contrainte technique : Les réponses générées dans ce palier peuvent être artificiellement tronquées ou résumées pour économiser les tokens, 
+avec un message d'incitation : "Pour voir les étapes détaillées du schéma de câblage, passez au Pass Pro."
+- Le Palier "Pro" (Les Pass Payants via Mobile Money) : Pass 24h (L'urgence chantier) : Ex: 500 FCFA. Donne un accès illimité (avec un Fair Use caché, ex: 100 questions max pour éviter les abus) 
+pendant 24 heures. Idéal pour un artisan bloqué sur un problème technique précis.
+Pass Mensuel (L'accompagnement continu) : Ex: 3000 FCFA. Accès garanti tout le mois.
+Pass "Projet" (Paiement à l'acte) : L'artisan achète un pack de 50 questions valables à vie, qu'il consomme à son rythme.
+
+3. Architecture Technique de la Gestion des Quotas
+Pour éviter la latence à chaque message, la base de données principale (PostgreSQL) ne doit pas être interrogée à chaque frappe au clavier.
+- Le Cache (Redis) en première ligne : Lorsqu'un artisan se connecte, son quota restant est chargé de PostgreSQL vers Redis.
+Chaque fois qu'il pose une question, Redis décrémente instantanément le compteur de 1.
+Si Redis indique 0, le système bloque la requête avant même de l'envoyer au LLM (coût zéro pour vous).
+- Mise à jour asynchrone : Une tâche de fond met à jour PostgreSQL depuis Redis toutes les X minutes pour garder une trace durable, ou immédiatement lors 
+d'un paiement Mobile Money.
+- Le Time-To-Live (TTL) : Pour les utilisateurs gratuits, la clé Redis est configurée pour expirer à minuit. À sa suppression, le quota se réinitialise 
+automatiquement au prochain appel.
+
+4. Le Parcours UX de la Jauge et du Blocage (Le "Paywall")
+L'expérience de restriction doit être pensée non pas comme une punition, mais comme une opportunité d'achat impulsif et fluide.
+- Visibilité : La barre de saisie de texte indique : "Posez votre question (2 recherches restantes)".
+- L'Alerte (80% d'utilisation) : Lorsqu'il ne reste qu'une question, un léger indicateur visuel (changement de couleur en orange) prévient l'artisan.
+- Le Blocage (Hard Stop) : L'artisan pose sa question. La bulle de l'IA s'affiche mais au lieu de la réponse, le composant renvoie un écran de paiement natif.
+Texte suggéré : "Vous avez posé une excellente question sur les proportions de ciment. Pour lire la réponse détaillée de l'IA, débloquez un Pass 24h."
+- Le Paiement sans friction : Un bouton "Payer 500F avec Wave/Orange Money". Le paiement s'effectue via USSD push ou l'application de l'opérateur, et la réponse de l'IA s'affiche automatiquement dès la confirmation du webhook.
+
+III- structurer la base de connaissances pour optimiser le modèle RAG (Retrieval-Augmented Generation).
+
+1. L'Architecture de la Base Vectorielle
+Au lieu de créer une base de données séparée pour chaque métier (ce qui serait coûteux et complexe à maintenir), la meilleure approche consiste à utiliser un 
+Index Unique avec Filtrage par Métadonnées (Metadata Filtering). Chaque morceau de texte (ou "Chunk") stocké dans la base possèdera une "carte d'identité" 
+sous forme de métadonnées.
+
+Exemple de Métadonnées (Taxonomie)
+Chaque document vectorisé devra être accompagné d'un fichier JSON structurant son contexte :
+
+JSON
+{
+  "secteur_id": "artisanat_art",
+  "metier_id": "maroquinerie",
+  "categorie_competence": "finition",
+  "type_document": "fiche_technique",
+  "titre_source": "Guide pratique du travail du cuir",
+  "niveau_expertise": "intermediaire",
+  "mots_cles": ["cuir", "tannage", "teinture", "finition"]
+}
+Pourquoi c'est crucial ? Lorsqu'un utilisateur pose une question, le backend récupère son metier_id depuis son profil (ex: maroquinerie) et applique un 
+pré-filtre strict ("Ne cherche QUE dans les vecteurs où metier_id = maroquinerie"). Le LLM n'a ainsi accès qu'aux informations pertinentes pour ce métier précis.
+
+2. La Stratégie de Découpage (Chunking)
+Un manuel PDF de 200 pages ne peut pas être envoyé d'un coup au LLM. Il faut le découper en petits blocs ("chunks") de texte. Pour des fiches techniques 
+artisanales, il faut éviter le découpage aveugle au nombre de caractères.
+Privilégiez le Chunking Sémantique ou Structurel : 
+Mauvais découpage : Couper le texte tous les 500 mots. Cela risque de couper une étape de fabrication en plein milieu ("Étape 3 : Appliquez le vernis puis... [FIN DU CHUNK]").
+Bon découpage : Découper par sections logiques (Titres, Sous-titres, Paragraphes). 
+Un "chunk" doit contenir une idée ou une méthode complète (ex: Tout le paragraphe sur le dosage du ciment hydrofuge en maçonnerie).
+Conseil : Gardez une taille de chunk d'environ 500 à 1000 "tokens" et prévoyez un chevauchement (overlap) de 10% à 15% entre deux chunks pour ne pas perdre le contexte.
+
+3. Typologie des Données à Ingester
+Pour que l'IA soit perçue comme un véritable "Copilote Expert", la base doit contenir des documents variés et qualitatifs, classés par type_document :
+- Les Normes et DTU (Documents Techniques Unifiés) : Les règles de l'art (sécurité électrique, normes de construction, résistance des matériaux).
+- Guides de Bonnes Pratiques : Techniques de base et avancées (ex: techniques d'assemblage en menuiserie, préparation des supports en peinture).
+- Fiches Produits/Matériaux : Caractéristiques des intrants (temps de séchage d'une colle, types de bois, spécificités des tissus).
+- Dépannage & Résolution de problèmes (Troubleshooting) : Formats "Problème -> Cause -> Solution" (ex: "Pourquoi mon enduit fissure-t-il au séchage ?").
+- Guides de Gestion & Stratégie : Comment chiffrer un devis, comment gérer sa relation client, ou comprendre les possibilités d'accompagnement financier (microfinance).
+
+4. Le Flux d'Exécution du RAG (Comment l'IA utilise la base)
+Processus techniquement en une fraction de seconde lorsqu'un artisan interroge l'application :
+- La Requête : Un maçon sur un chantier ouvre l'application et demande : "Quel dosage de ciment dois-je utiliser pour une fondation en zone très humide ?"
+- Enrichissement (Backend) : Votre API reçoit la question. Elle identifie que l'utilisateur a le metier_id = maconnerie.
+- Recherche Vectorielle (Pinecone / Qdrant) : La base vectorielle applique le filtre métadonnée : metier_id == maconnerie.
+Elle compare l'embedding de la question avec la base et trouve les 3 "chunks" de texte les plus pertinents parlant des dosages pour fondations humides.
+- Construction du Prompt Système : Le backend crée un prompt caché pour le LLM : "Tu es un expert en maçonnerie. Réponds à la question de l'artisan en utilisant
+uniquement le contexte suivant. Si l'information n'y est pas, dis que tu ne sais pas."
+Contexte récupéré : [Texte du chunk 1], [Texte du chunk 2]
+Question : Quel dosage de ciment...
+- Génération (OpenAI / Claude) : Le LLM rédige la réponse structurée et l'envoie sur le mobile de l'artisan.
+
+5. Maintenir et Améliorer la Base (Feedback Loop)
+L'avantage de cette architecture SaaS est que l'outil s'améliore avec le temps :
+- Le bouton "Pouce en l'air / Pouce en bas" : À chaque réponse, l'artisan peut noter la qualité. Si une réponse est mal notée, 
+l'équipe technique peut consulter le log pour voir quels documents (chunks) ont été utilisés par l'IA et corriger la base de connaissances si elle est obsolète ou erronée.
+- Mise à jour granulaire : Si une norme change (ex: nouvelle norme électrique), vous n'avez pas besoin de réentraîner l'IA. Il suffit de supprimer 
+l'ancien document vectorisé de la base et d'uploader le nouveau. L'IA sera instantanément à jour.
+
+IV- Définition complète de la logique métier, technique et utilisateur du paywall pour ProsArtisan.
+
+1. La Logique d'Interception (Backend)
+Le paywall n'est pas qu'un simple écran, c'est avant tout un mécanisme de sécurité côté serveur. L'application mobile ne doit jamais décider seule si elle 
+affiche ou non la réponse de l'IA (sinon, l'application pourrait être facilement piratée).
+- Le Statut HTTP 402 : Lorsqu'un artisan envoie une question, l'API Gateway interroge Redis (le cache des quotas). Si le solde de requêtes est à 0 et 
+qu'aucun abonnement n'est actif, le serveur refuse de transmettre la question au LLM. Il renvoie immédiatement à l'application mobile un code HTTP 402 (Payment Required).
+- La Charge Utile (Payload) de la réponse 402 : Le serveur ne renvoie pas juste une erreur, il renvoie le contexte de l'offre.
+
+JSON
+{
+  "statut": "erreur",
+  "code": 402,
+  "message": "Quota gratuit épuisé.",
+  "offres_disponibles": [
+    {"id": "pass_24h", "nom": "Pass 24H Urgence", "prix": 500},
+    {"id": "pass_mois", "nom": "Pass Mensuel Pro", "prix": 3000}
+  ]
+}
+2. Le Parcours UX : L'Écran du Paywall
+Lorsque l'application mobile intercepte le code 402, l'interface de chat bascule instantanément.
+- Maintien du Contexte : La question que l'artisan vient de taper reste affichée dans le chat. Elle n'est pas effacée. Cela le rassure : "L'application n'a pas planté, ma question est en attente".
+- L'Affichage du Mur : Un composant (type "Bottom Sheet" ou "Carte superposée") glisse par-dessus la zone de réponse de l'IA.
+- Le Message de Vente (Copywriting empathique) : À éviter : "Erreur. Payez pour continuer."
+- À privilégier : "Vous posez d'excellentes questions ! Pour lire la réponse détaillée de notre IA experte et débloquer toutes les fiches techniques, 
+passez à la version Pro."
+- L'Appel à l'Action (CTA) : Les boutons de paiement Mobile Money doivent être énormes, clairs et afficher les logos de confiance (Wave, Orange, MTN, Moov).
+
+3. Le Flux de Transaction Mobile Money (Le Cœur du Système)
+Pour garantir une conversion maximale, le paiement doit se faire en "Seamless" (sans quitter l'application ProsArtisan). 
+Voici la chorégraphie technique, à utiliser par exemple un agrégateur (comme CinetPay, TouchPay) ou l'API directe de Wave Business :
+- Étape A : L'Intention de paiement. L'artisan clique sur "Payer 500 FCFA avec Wave". 
+L'application mobile envoie une requête à votre backend : "Crée une transaction pour l'utilisateur X, montant 500".
+- Étape B : L'Appel à l'Opérateur. Votre backend contacte l'API de paiement et reçoit une URL de paiement ou déclenche un "USSD Push" 
+(une notification directe sur le téléphone de l'artisan).
+- Étape C : La Validation (Côté Artisan). L'artisan tape son code secret à 4 chiffres sur son téléphone pour valider le retrait depuis son compte Mobile Money.
+- Étape D : Le Webhook (Asynchrone). L'opérateur Mobile Money (ou l'agrégateur) envoie une requête "Succès" (Webhook) à votre backend.
+- Étape E : La Mise à jour. Votre backend passe le profil de l'artisan en "Premium" dans la base de données (PostgreSQL) et recharge ses droits dans le cache (Redis).
+
+4. Le Déblocage en Temps Réel (La Magie du Push)
+C'est ici que l'expérience utilisateur devient excellente. L'artisan ne devrait pas avoir à rafraîchir l'application ou à cliquer sur un bouton "J'ai payé, vérifiez".
+- Utilisation des WebSockets ou de Firebase : Dès que votre backend reçoit le Webhook de confirmation de paiement (Étape D), il pousse un événement en temps réel 
+à l'application mobile (via Firebase Cloud Messaging ou une base de données temps réel).
+- Reprise automatique : L'application mobile, recevant ce signal, fait disparaître le Paywall de l'écran avec une belle animation, et renvoie automatiquement 
+la question (celle de l'étape 2) vers l'IA. L'artisan voit la réponse commencer à s'écrire presque immédiatement après avoir validé son paiement Mobile Money.
+
+5. Gestion des Frictions (Edge Cases)
+- Paiement échoué ou annulé : Si l'artisan n'a pas assez de fonds ou annule l'USSD, le paywall affiche un petit message discret ("Paiement non abouti. Réessayez.") mais reste actif.
+- Problème réseau après paiement : Si l'artisan paie mais perd la connexion, l'historique des transactions dans la base de données est souverain. 
+À sa prochaine ouverture de l'application, l'API vérifiera qu'il a bien un pass valide et l'interface sera débloquée.
+
+V- La Maquette (Vue Mobile)
+Plaintext
+┌─────────────────────────────────────────────────────────┐
+│  < Retour      ProsArtisan - IA Expert         [ 0 ] 💡 │
+├─────────────────────────────────────────────────────────┤
+│                                                         │
+│                                           [Vous] 10:14  │
+│  ╭───────────────────────────────────────────────────╮  │
+│  │ Quel dosage exact de ciment dois-je utiliser pour │  │
+│  │ une fondation en zone très humide à Bingerville ? │  │
+│  ╰───────────────────────────────────────────────────╯  │
+│                                                         │
+│  [IA] 10:14                                             │
+│  ╭──────────────────────────                            │
+│  │ ⏳ Recherche dans les n...                           │
+│                                                         │
+├─────────────────────────────────────────────────────────┤
+│ ▼                                                     ▼ │
+│ ╭─────────────────────────────────────────────────────╮ │
+│ │                                                     │ │
+│ │                         🔒                          │ │
+│ │                                                     │ │
+│ │             VOUS AVEZ ÉPUISÉ VOS CRÉDITS            │ │
+│ │                                                     │ │
+│ │  C'est une excellente question technique !          │ │
+│ │  Pour lire la réponse détaillée de l'IA et          │ │
+│ │  débloquer l'accès illimité aux fiches métiers,     │ │
+│ │  passez à la version Pro.                           │ │
+│ │                                                     │ │
+│ │  ─────────────────────────────────────────────────  │ │
+│ │                                                     │ │
+│ │  [ 🌟 PASS 24H URGENCE CHANTIER ]          500 FCFA │ │
+│ │   Accès illimité pour aujourd'hui.                  │ │
+│ │                                                     │ │
+│ │  [ 👑 PASS MENSUEL PRO          ]         3000 FCFA │ │
+│ │   Votre assistant disponible 24/7.                  │ │
+│ │                                                     │ │
+│ │  ─────────────────────────────────────────────────  │ │
+│ │                                                     │ │
+│ │               Paiement sécurisé via :               │ │
+│ │     (Wave)  (Orange Money)  (MTN MoMo)  (Moov)      │ │
+│ │                                                     │ │
+│ │             [ PAYER ET DÉBLOQUER ]                  │ │
+│ │                                                     │ │
+│ │               Non merci, plus tard                  │ │
+│ ╰─────────────────────────────────────────────────────╯ │
+└─────────────────────────────────────────────────────────┘
+Anatomie UX/UI de cet écran (Pourquoi ces choix ?)
+1. La Préservation du Contexte (L'arrière-plan)
+Remarquez que la question de l'artisan (sur les fondations à Bingerville) reste bien visible en arrière-plan. 
+L'indicateur de chargement (⏳ Recherche...) montre que la réponse existe et l'attend. Cela crée un léger "FOMO" (la peur de manquer l'information) 
+qui incite à l'achat.
+
+2. Le Copywriting Empathique
+Le texte "C'est une excellente question technique !" valorise l'utilisateur. On ne le blâme pas d'avoir épuisé son quota, 
+on le félicite pour son utilisation pertinente de l'outil.
+
+3. La Hiérarchie des Offres
+Le Pass 24H (Le produit d'appel) : À 500 FCFA, c'est un achat d'impulsion indolore. Un artisan bloqué sur un chantier paiera ce montant sans hésiter 
+pour gagner du temps. Le Pass Mensuel (La rétention) : Affiché juste en dessous, il sert d'ancrage de prix (3000 FCFA pour 30 jours semble très rentable 
+par rapport à 500 FCFA pour 1 jour).
+
+4. La Réassurance Mobile Money
+L'intégration visuelle des logos familiers des opérateurs de Côte d'Ivoire (Wave, Orange Money, etc.) juste au-dessus du bouton de paiement dissipe les craintes liées à la sécurité.
+
+5. L'Échappatoire (Soft Exit)
+Le lien discret "Non merci, plus tard" permet de fermer la fenêtre modale sans frustration. L'artisan reste dans l'application, et le système lui suggèrera 
+de payer plus tard lorsqu'il tentera une nouvelle question.
+
+VI- Les Règles de Sécurité du Webhook (Crucial)
+Vous ne devez jamais faire confiance aveuglément à une requête qui arrive sur votre webhook. Un utilisateur malveillant pourrait simuler une requête pour se 
+donner un accès Pro gratuit. Pour contrer cela, on utilise une Signature HMAC :
+Lors de la création de votre compte chez l'agrégateur de paiement, celui-ci vous donne une Clé Secrète (Secret Key).
+À chaque paiement, l'agrégateur hache les données de la transaction avec cette clé et envoie ce "sceau" dans les en-têtes HTTP (Headers).
+Votre serveur refait le même calcul. Si les deux sceaux correspondent, le paiement est authentique.
+
+1. Implémentation du Webhook (Exemple en Python / FastAPI)
+Puisque nous avons utilisé l'écosystème Python pour le RAG (LangChain), voici à quoi ressemble le microservice de paiement sous FastAPI.
+
+Python
+import os
+import hmac
+import hashlib
+import json
+from fastapi import FastAPI, Request, HTTPException, Header
+from datetime import datetime, timedelta
+# Import fictif de vos modules de base de données et de notification
+# from database import update_user_premium_status
+# from notifications import push_realtime_unlock_event
+
+app = FastAPI()
+
+2. La clé secrète fournie par votre opérateur Mobile Money (ex: CinetPay/Wave)
+PAYMENT_SECRET_KEY = os.getenv("MOBILE_MONEY_SECRET_KEY", "votre_cle_secrete_super_longue")
+
+@app.post("/api/webhooks/mobile-money")
+async def handle_payment_webhook(
+    request: Request,
+    x_signature: str = Header(None) # L'en-tête contenant la signature de l'opérateur
+):
+    # 1. Lire le corps de la requête (le Payload)
+    payload = await request.body()
+    
+    # 2. Vérifier la signature HMAC (Sécurité anti-fraude)
+    if not x_signature:
+        raise HTTPException(status_code=401, detail="Signature manquante")
+        
+    expected_signature = hmac.new(
+        key=PAYMENT_SECRET_KEY.encode('utf-8'),
+        msg=payload,
+        digestmod=hashlib.sha256
+    ).hexdigest()
+    
+    if not hmac.compare_digest(expected_signature, x_signature):
+        raise HTTPException(status_code=403, detail="Signature invalide. Tentative de fraude.")
+
+    # 3. Analyser les données du paiement
+    data = json.loads(payload)
+    transaction_id = data.get("transaction_id")
+    statut = data.get("status") # Ex: "ACCEPTED", "REFUSED"
+    user_id = data.get("metadata", {}).get("user_id")
+    type_pass = data.get("metadata", {}).get("type_pass") # "pass_24h" ou "pass_mois"
+
+    # 4. Logique Métier (Si le paiement est un succès)
+    if statut == "ACCEPTED":
+        print(f"Paiement validé pour l'utilisateur {user_id} - {type_pass}")
+        
+        # A. Calculer la nouvelle date d'expiration du quota
+        now = datetime.now()
+        if type_pass == "pass_24h":
+            date_fin = now + timedelta(days=1)
+        elif type_pass == "pass_mois":
+            date_fin = now + timedelta(days=30)
+            
+        # B. Mettre à jour la base de données (PostgreSQL) et le cache (Redis)
+        # update_user_premium_status(user_id, date_fin)
+        
+        # C. Déclencher le déblocage en temps réel sur le mobile de l'artisan
+        # (Via WebSocket ou Firebase Cloud Messaging)
+        # push_realtime_unlock_event(user_id=user_id, status="UNLOCKED")
+        
+        return {"status": "success", "message": "Compte mis à jour"}
+
+    elif statut == "REFUSED":
+        # Gérer l'échec (fonds insuffisants, annulation)
+        # push_realtime_unlock_event(user_id=user_id, status="FAILED")
+        return {"status": "ignored", "message": "Paiement refusé"}
+
+    return {"status": "ignored", "message": "Statut inconnu"}
+3. Le Lien avec l'Application Mobile (Le "Metadata")
+Pour que le webhook sache quel artisan vient de payer, l'application mobile doit transmettre un contexte initial.
+Lorsque l'artisan clique sur le bouton "Payer 500 FCFA", votre backend initialise la transaction avec un champ metadata (ou custom_data).
+
+JSON
+{
+  "montant": 500,
+  "devise": "XOF",
+  "description": "Achat Pass 24H ProsArtisan",
+  "metadata": {
+    "user_id": "uuid-artisan-1234",
+    "type_pass": "pass_24h"
+  }
+}
+C'est ce metadata qui vous est renvoyé intact dans le webhook (Étape 3 du code ci-dessus) et qui permet à votre base de données de faire le lien.
+
+4. Gérer la Résilience du Webhook
+Les réseaux peuvent être capricieux. Voici les règles d'or pour un webhook de paiement :
+- Réponse ultra-rapide (200 OK) : Votre serveur doit répondre immédiatement à l'opérateur pour dire "J'ai bien reçu l'info". 
+Les traitements lourds (comme l'envoi d'un email de facture) doivent être faits de manière asynchrone (ex: via Celery ou Redis Queue). 
+Si le serveur tarde à répondre, l'opérateur pensera que votre serveur est en panne et renverra le webhook en boucle.
+- Idempotence : L'opérateur peut parfois envoyer le même webhook de succès deux fois par erreur. Votre code doit vérifier dans la base de données si 
+la transaction_id a déjà été traitée, pour ne pas rajouter deux fois 30 jours d'abonnement au lieu d'un.
+
+VII- Configuration de Redis 
+La gestion des quotas est une étape technique fondamentale. Redis est une base de données en mémoire, ce qui signifie qu'elle est extrêmement rapide 
+(temps de réponse de l'ordre de la milliseconde). C'est parfait pour vérifier les droits d'un utilisateur à chaque fois qu'il tape une touche sans ralentir 
+l'application.
+Voici comment structurer ce gestionnaire de quotas (Rate Limiter) pour soutenir le modèle Freemium (Questions gratuites vs Pass Pro).
+
+1. La Stratégie des Clés Redis (Key Design)
+Pour chaque artisan, nous allons utiliser deux types de clés dans Redis :
+- La Clé "Premium" : artisan:{id}:premium_until
+Valeur : Le timestamp (date exacte en secondes) de la fin de son abonnement.
+Logique : Si cette clé existe et que sa valeur est dans le futur, l'artisan a un Pass actif. On ne décompte aucune question.
+- La Clé "Freemium" : artisan:{id}:questions_gratuites:{date_du_jour}
+Valeur : Un compteur (entier) du nombre de questions posées aujourd'hui.
+Logique : On incrémente cette valeur à chaque question. Si elle dépasse 5, on bloque avec le statut HTTP 402 (celui qui déclenche votre Paywall).
+Astuce technique (TTL) : Cette clé recevra un "Time-To-Live" (durée de vie) pour s'autodétruire tous les soirs à minuit.
+
+2. Le Script du Gestionnaire de Quotas (Python / Redis)
+Voici l'implémentation du gestionnaire qui pourras être utiliser comme "Dépendance" ou "Middleware" dans l' API FastAPI.
+
+Python
+import redis
+import time
+from datetime import datetime
+from fastapi import HTTPException
+
+# Connexion à Redis (à adapter selon votre environnement)
+redis_client = redis.Redis(host='localhost', port=6379, db=0, decode_responses=True)
+
+# Configuration de la limite gratuite
+MAX_QUESTIONS_GRATUITES_PAR_JOUR = 5
+
+class QuotaManager:
+    @staticmethod
+    def _get_midnight_seconds():
+        """Calcule le nombre de secondes restantes avant minuit pour le TTL."""
+        now = datetime.now()
+        midnight = datetime(now.year, now.month, now.day, 23, 59, 59)
+        return int((midnight - now).total_seconds())
+
+    @staticmethod
+    def verifier_droits_artisan(user_id: str):
+        """
+        Vérifie si l'artisan a le droit de poser une question à l'IA.
+        Soulève une erreur HTTP 402 s'il doit payer.
+        """
+        # 1. Vérification du statut Premium (Le plus rapide)
+        premium_key = f"artisan:{user_id}:premium_until"
+        premium_until = redis_client.get(premium_key)
+        
+        if premium_until and float(premium_until) > time.time():
+            # L'artisan a un abonnement valide, on le laisse passer
+            return {"statut": "premium", "message": "Pass actif"}
+
+        # 2. Gestion du Quota Gratuit
+        today_str = datetime.now().strftime("%Y-%m-%d")
+        quota_key = f"artisan:{user_id}:questions_gratuites:{today_str}"
+
+        # On incrémente le compteur de manière atomique (INCR)
+        # Si la clé n'existe pas, Redis la crée et la met à 1.
+        questions_posees = redis_client.incr(quota_key)
+
+        # Si c'est la première question de la journée, on configure l'autodestruction à minuit
+        if questions_posees == 1:
+            redis_client.expire(quota_key, QuotaManager._get_midnight_seconds())
+
+        # 3. Vérification du dépassement
+        if questions_posees > MAX_QUESTIONS_GRATUITES_PAR_JOUR:
+            # On empêche le compteur de grimper indéfiniment si le front-end bug
+            redis_client.decr(quota_key) 
+            
+            # On déclenche le PAYWALL (Erreur HTTP 402)
+            raise HTTPException(
+                status_code=402,
+                detail={
+                    "code": 402,
+                    "message": "Quota gratuit épuisé. Passez à la version Pro.",
+                    "offres_disponibles": [
+                        {"id": "pass_24h", "nom": "Pass 24H Urgence", "prix": 500},
+                        {"id": "pass_mois", "nom": "Pass Mensuel Pro", "prix": 3000}
+                    ]
+                }
+            )
+
+        # Il reste des crédits gratuits
+        questions_restantes = MAX_QUESTIONS_GRATUITES_PAR_JOUR - questions_posees
+        return {
+            "statut": "freemium", 
+            "restantes": questions_restantes
+        }
+
+    @staticmethod
+    def activer_pass_premium(user_id: str, jours_validite: int):
+        """
+        Appelé par le Webhook Mobile Money quand un paiement est réussi.
+        """
+        premium_key = f"artisan:{user_id}:premium_until"
+        
+        # Calcul du nouveau timestamp d'expiration
+        fin_timestamp = time.time() + (jours_validite * 24 * 3600)
+        
+        # Mise à jour dans Redis
+        redis_client.set(premium_key, fin_timestamp)
+        return True
+3. Comment l'utiliser dans votre API IA ?
+Maintenant que le QuotaManager est configuré, il sera intégré en première ligne de la route API qui gère le chat avec le LLM.
+Si un artisan essaie de contourner l'application mobile en envoyant des requêtes directement à votre serveur, cette route le bloquera instantanément.
+
+Python
+from fastapi import FastAPI, Depends
+
+app = FastAPI()
+
+@app.post("/api/chat/ia")
+async def poser_question_ia(
+    question: str, 
+    user_id: str = "uuid-artisan-1234" # En réalité, récupéré via le token d'authentification
+):
+    # 1. LE PORTIER : Vérification des quotas avant de solliciter l'IA
+    # Si le quota est dépassé, cette ligne va stopper l'exécution et renvoyer l'erreur 402
+    droits = QuotaManager.verifier_droits_artisan(user_id)
+    
+    # 2. Si on arrive ici, l'artisan a le droit. On lance le pipeline RAG
+    # ... (Votre code LangChain de recherche vectorielle et d'appel OpenAI) ...
+    reponse_ia = "Voici le dosage de ciment exact pour votre fondation..."
+
+    # 3. On renvoie la réponse et on ajoute le quota restant pour l'interface
+    return {
+        "reponse": reponse_ia,
+        "quota_info": droits # Permet à l'application mobile de mettre à jour la jauge
+    }
+Pourquoi cette approche est-elle robuste ?
+L'atomicité de INCR : Même si un utilisateur a une mauvaise connexion et clique 4 fois très vite sur le bouton "Envoyer", l'opération INCR de Redis est atomique. 
+Il ne pourra jamais tricher sur le compteur de questions posées.
+- Tolérance aux pannes : Si le serveur PostgreSQL redémarre ou subit un pic de charge, Redis, lui, reste en ligne et continue de filtrer les requêtes en bloquant ceux qui ne paient pas.
+- Nettoyage automatique : Grâce à expire(), vous n'avez pas besoin de créer un script lourd qui tourne toutes les nuits à minuit pour remettre les compteurs gratuits à zéro dans la base de données. Redis s'en occupe tout seul.
+
+VIII -Intégration des WebSockets (ou d'une solution temps réel)
+
+Dans notre architecture, le temps réel a deux missions critiques :
+- L'effet "Machine à écrire" (Streaming) : Afficher la réponse de l'IA mot par mot pour éviter que l'artisan n'attende 10 secondes devant un écran vide.
+- Le "Magic Unlock" (Déblocage Paywall) : Faire disparaître instantanément le mur de paiement dès que l'API Mobile Money valide la transaction, sans que l'utilisateur n'ait à rafraîchir l'écran.
+
+Voici comment implémenter cette communication bidirectionnelle entre votre Backend (FastAPI) et votre Frontend mobile (ex: Flutter).
+
+1. Le Gestionnaire de WebSockets (Backend FastAPI)
+Il faut créer un "Manager" qui va garder en mémoire les connexions actives. Ainsi, quand le webhook de paiement reçoit une confirmation pour l'artisan "1234", 
+il sait exactement sur quel "tuyau" envoyer le signal de déblocage.
+
+Python
+from fastapi import FastAPI, WebSocket, WebSocketDisconnect
+from typing import Dict
+import json
+
+app = FastAPI()
+
+class ConnectionManager:
+    def __init__(self):
+        # Dictionnaire pour stocker : { "user_id": WebSocket }
+        self.active_connections: Dict[str, WebSocket] = {}
+
+    async def connect(self, websocket: WebSocket, user_id: str):
+        await websocket.accept()
+        self.active_connections[user_id] = websocket
+        print(f"Artisan {user_id} connecté au WebSocket.")
+
+    def disconnect(self, user_id: str):
+        if user_id in self.active_connections:
+            del self.active_connections[user_id]
+            print(f"Artisan {user_id} déconnecté.")
+
+    async def send_personal_message(self, message: dict, user_id: str):
+        """Envoie un message JSON à un utilisateur précis."""
+        if user_id in self.active_connections:
+            websocket = self.active_connections[user_id]
+            await websocket.send_json(message)
+
+manager = ConnectionManager()
+
+2. La Route WebSocket principale (Le Chat)
+C'est ici que l'application mobile se connecte lorsqu'elle s'ouvre.
+
+Python
+@app.websocket("/ws/chat/{user_id}")
+async def websocket_endpoint(websocket: WebSocket, user_id: str):
+    await manager.connect(websocket, user_id)
+    try:
+        while True:
+            # Attend de recevoir une question de l'application mobile
+            data = await websocket.receive_text()
+            question = json.loads(data).get("question")
+            
+            # --- LOGIQUE IA ---
+            # 1. Vérification des quotas (Redis)
+            # 2. Si OK -> Génération RAG (Langchain)
+            # 3. Streaming des mots générés vers le mobile :
+            # await manager.send_personal_message({"type": "stream", "chunk": "Voici "}, user_id)
+            # await manager.send_personal_message({"type": "stream", "chunk": "le "}, user_id)
+            
+    except WebSocketDisconnect:
+        manager.disconnect(user_id)
+3. Le Lien avec le Webhook Mobile Money
+Dans votre route de webhook (vue précédemment), vous injectez simplement un appel au ConnectionManager.
+
+Python
+# Extrait de la route du Webhook de paiement
+@app.post("/api/webhooks/mobile-money")
+async def handle_payment_webhook(request: Request):
+    # ... vérification de la signature ...
+    
+    if statut == "ACCEPTED":
+        # 1. Mise à jour de PostgreSQL et Redis...
+        
+        # 2. Le signal magique ! On prévient l'application mobile de retirer le paywall.
+        await manager.send_personal_message(
+            {
+                "type": "payment_success", 
+                "action": "unlock_ui",
+                "message": "Paiement validé, reprise de la génération !"
+            }, 
+            user_id
+        )
+        
+        # 3. (Optionnel) Vous pouvez même relancer automatiquement la génération 
+        # de l'IA ici pour que la réponse apparaisse toute seule !
+		
+4. L'Écoute côté Application Mobile (Exemple Flutter/Dart)
+Côté mobile, l'application écoute passivement ce qui arrive dans le "tuyau". En Flutter, on utilise généralement le package web_socket_channel.
+Puisque Firebase est un excellent environnement pour le développement mobile et facilite grandement la gestion des états en temps réel, 
+l'option Firebase Cloud Messaging (FCM) pourra etre envisager  ou Realtime Database pour cette étape. 
+Cependant, voici la logique standard avec un WebSocket pur :
+
+Dart
+import 'package:web_socket_channel/web_socket_channel.dart';
+import 'dart:convert';
+
+class ChatScreen extends StatefulWidget {
+  final String userId;
+  ChatScreen({required this.userId});
+
+  @override
+  _ChatScreenState createState() => _ChatScreenState();
+}
+
+class _ChatScreenState extends State<ChatScreen> {
+  late WebSocketChannel channel;
+  bool showPaywall = false;
+  String aiResponse = "";
+
+  @override
+  void initState() {
+    super.initState();
+    // Connexion au Backend FastAPI
+    channel = WebSocketChannel.connect(
+      Uri.parse('wss://votre-api.com/ws/chat/${widget.userId}'),
+    );
+
+    // Écoute des messages entrants
+    channel.stream.listen((message) {
+      final data = jsonDecode(message);
+
+      if (data['type'] == 'stream') {
+        // Ajoute le mot à l'écran (Effet machine à écrire)
+        setState(() {
+          aiResponse += data['chunk'];
+        });
+      } 
+      else if (data['type'] == 'payment_required') {
+        // Affiche le mur de paiement (Le quota est vide)
+        setState(() {
+          showPaywall = true;
+        });
+      } 
+      else if (data['type'] == 'payment_success' && data['action'] == 'unlock_ui') {
+        // MAGIE : Le paiement est validé via Mobile Money, on cache le paywall !
+        setState(() {
+          showPaywall = false;
+        });
+        
+        // Afficher un petit toast "Pass Pro Activé !"
+      }
+    });
+  }
+
+  // Fonction appelée quand l'artisan clique sur "Envoyer"
+  void sendMessage(String text) {
+    channel.sink.add(jsonEncode({"question": text}));
+  }
+
+  @override
+  void dispose() {
+    channel.sink.close();
+    super.dispose();
+  }
+  
+  // ... build() method avec l'UI du chat et du Paywall ...
+}
+5. Gérer les contraintes du Mobile (Déconnexions)
+Le principal défi des WebSockets sur mobile (contrairement au Web) est l'instabilité du réseau (passage en zone blanche sur un chantier, passage du Wi-Fi à la 4G).
+
+- Bonnes pratiques à implémenter : Reconnexion automatique (Ping/Pong) : l' application Flutter doit envoyer un "Ping" toutes les 30 secondes. Si le serveur ne répond pas (Pong), 
+l'application tente de relancer le WebSocketChannel.connect().
+- Statut d'envoi : Ne pas supprimez le texte saisi par l'artisan de sa barre de saisie tant que le serveur n'a pas confirmé la réception (un peu comme la coche grise sur WhatsApp).
+
+IX- Implémentation de l'interface de chat en Flutter. 
+Elle intègre directement la logique que nous avons définie précédemment : le streaming de la réponse (effet machine à écrire) et l'affichage dynamique du Paywall 
+(superposé au chat) via les WebSockets.
+
+Pour ce faire, nous allons utiliser deux packages essentiels. Ajoutez ceci à votre pubspec.yaml :
+
+YAML
+dependencies:
+  flutter:
+    sdk: flutter
+  web_socket_channel: ^2.4.0  # Pour la communication temps réel
+  flutter_markdown: ^0.6.18   # Pour formater les listes et le gras de l'IA
+1. Le Modèle de Message
+Créons d'abord une petite classe pour structurer les messages affichés à l'écran.
+
+Dart
+class ChatMessage {
+  String text;
+  final bool isUser;
+
+  ChatMessage({required this.text, required this.isUser});
+}
+2. L'Interface Principale (Chat & Paywall)
+Voici le code complet du widget ChatScreen. Il utilise un Stack pour pouvoir faire glisser le mur de paiement 
+par-dessus la conversation sans la cacher complètement (comme dans notre maquette).
+
+Dart
+import 'dart:convert';
+import 'package:flutter/material.dart';
+import 'package:web_socket_channel/web_socket_channel.dart';
+import 'package:flutter_markdown/flutter_markdown.dart';
+
+class ChatScreen extends StatefulWidget {
+  final String userId; // L'ID de l'artisan connecté
+
+  const ChatScreen({Key? key, required this.userId}) : super(key: key);
+
+  @override
+  _ChatScreenState createState() => _ChatScreenState();
+}
+
+class _ChatScreenState extends State<ChatScreen> {
+  late WebSocketChannel _channel;
+  final TextEditingController _textController = TextEditingController();
+  final ScrollController _scrollController = ScrollController();
+  
+  List<ChatMessage> _messages = [];
+  bool _showPaywall = false;
+  bool _isGenerating = false;
+
+  @override
+  void initState() {
+    super.initState();
+    _connectWebSocket();
+  }
+
+  void _connectWebSocket() {
+    // Remplacer par l'URL de votre backend FastAPI
+    _channel = WebSocketChannel.connect(
+      Uri.parse('ws://votre-api.com/ws/chat/${widget.userId}'),
+    );
+
+    _channel.stream.listen(
+      (message) {
+        final data = jsonDecode(message);
+        _handleServerEvent(data);
+      },
+      onDone: () {
+        // Logique de reconnexion à ajouter ici
+        print("WebSocket déconnecté");
+      },
+      onError: (error) => print("Erreur WS: $error"),
+    );
+  }
+
+  void _handleServerEvent(Map<String, dynamic> data) {
+    if (data['type'] == 'stream') {
+      // Effet machine à écrire : on ajoute le bout de texte au dernier message de l'IA
+      setState(() {
+        if (_messages.isNotEmpty && !_messages.last.isUser) {
+          _messages.last.text += data['chunk'];
+        } else {
+          // Si c'est le premier mot, on crée la bulle de l'IA
+          _messages.add(ChatMessage(text: data['chunk'], isUser: false));
+        }
+      });
+      _scrollToBottom();
+    } 
+    else if (data['type'] == 'payment_required') {
+      // Le quota est épuisé, on affiche le paywall
+      setState(() {
+        _showPaywall = true;
+        _isGenerating = false;
+      });
+    } 
+    else if (data['type'] == 'payment_success' && data['action'] == 'unlock_ui') {
+      // Le webhook a validé le Mobile Money, on cache le paywall !
+      setState(() {
+        _showPaywall = false;
+      });
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Pass Pro activé ! Reprise de la réponse...')),
+      );
+    }
+  }
+
+  void _sendMessage() {
+    if (_textController.text.trim().isEmpty) return;
+
+    final text = _textController.text;
+    setState(() {
+      _messages.add(ChatMessage(text: text, isUser: true));
+      _isGenerating = true; // Affiche un indicateur de chargement
+    });
+
+    _channel.sink.add(jsonEncode({"question": text}));
+    _textController.clear();
+    _scrollToBottom();
+  }
+
+  void _scrollToBottom() {
+    Future.delayed(const Duration(milliseconds: 100), () {
+      if (_scrollController.hasClients) {
+        _scrollController.animateTo(
+          _scrollController.position.maxScrollExtent,
+          duration: const Duration(milliseconds: 300),
+          curve: Curves.easeOut,
+        );
+      }
+    });
+  }
+
+  @override
+  void dispose() {
+    _channel.sink.close();
+    _textController.dispose();
+    _scrollController.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Scaffold(
+      appBar: AppBar(
+        title: const Text('ProsArtisan - IA Expert 💡'),
+        backgroundColor: Colors.blueGrey[900],
+      ),
+      body: Stack(
+        children: [
+          // 1. La zone de Chat
+          Column(
+            children: [
+              Expanded(
+                child: ListView.builder(
+                  controller: _scrollController,
+                  padding: const EdgeInsets.all(16.0),
+                  itemCount: _messages.length,
+                  itemBuilder: (context, index) {
+                    final msg = _messages[index];
+                    return _buildMessageBubble(msg);
+                  },
+                ),
+              ),
+              if (_isGenerating) 
+                const Padding(
+                  padding: EdgeInsets.all(8.0),
+                  child: CircularProgressIndicator(),
+                ),
+              _buildInputArea(),
+            ],
+          ),
+
+          // 2. Le Paywall (Superposé conditionnellement)
+          if (_showPaywall) _buildPaywallOverlay(),
+        ],
+      ),
+    );
+  }
+
+  // --- COMPOSANTS UI MINEURS ---
+
+  Widget _buildMessageBubble(ChatMessage msg) {
+    return Align(
+      alignment: msg.isUser ? Alignment.centerRight : Alignment.centerLeft,
+      child: Container(
+        margin: const EdgeInsets.symmetric(vertical: 4.0),
+        padding: const EdgeInsets.all(12.0),
+        constraints: BoxConstraints(maxWidth: MediaQuery.of(context).size.width * 0.75),
+        decoration: BoxDecoration(
+          color: msg.isUser ? Colors.blue[600] : Colors.grey[200],
+          borderRadius: BorderRadius.circular(12.0),
+        ),
+        // Utilisation de Markdown pour bien rendre les listes à puces de l'IA
+        child: MarkdownBody(
+          data: msg.text,
+          styleSheet: MarkdownStyleSheet(
+            p: TextStyle(color: msg.isUser ? Colors.white : Colors.black87),
+          ),
+        ),
+      ),
+    );
+  }
+
+  Widget _buildInputArea() {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 8.0, vertical: 8.0),
+      color: Colors.white,
+      child: Row(
+        children: [
+          Expanded(
+            child: TextField(
+              controller: _textController,
+              decoration: InputDecoration(
+                hintText: 'Posez votre question technique...',
+                border: OutlineInputBorder(borderRadius: BorderRadius.circular(20.0)),
+                contentPadding: const EdgeInsets.symmetric(horizontal: 16.0),
+              ),
+              onSubmitted: (_) => _sendMessage(),
+            ),
+          ),
+          IconButton(
+            icon: const Icon(Icons.send, color: Colors.blue),
+            onPressed: _sendMessage,
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildPaywallOverlay() {
+    return Container(
+      color: Colors.black.withOpacity(0.6), // Assombrit le fond du chat
+      alignment: Alignment.bottomCenter,
+      child: Container(
+        padding: const EdgeInsets.all(24.0),
+        decoration: const BoxDecoration(
+          color: Colors.white,
+          borderRadius: BorderRadius.vertical(top: Radius.circular(24.0)),
+        ),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            const Icon(Icons.lock_outline, size: 48, color: Colors.orange),
+            const SizedBox(height: 16),
+            const Text(
+              "VOUS AVEZ ÉPUISÉ VOS CRÉDITS",
+              style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
+            ),
+            const SizedBox(height: 8),
+            const Text(
+              "C'est une excellente question technique ! Pour lire la réponse détaillée de l'IA, passez à la version Pro.",
+              textAlign: TextAlign.center,
+              style: TextStyle(color: Colors.black54),
+            ),
+            const SizedBox(height: 24),
+            ElevatedButton(
+              style: ElevatedButton.styleFrom(
+                backgroundColor: Colors.blue[800],
+                minimumSize: const Size(double.infinity, 50),
+              ),
+              onPressed: () {
+                // TODO: Déclencher l'API de paiement Mobile Money
+                print("Lancement du paiement Mobile Money...");
+              },
+              child: const Text("PASS 24H URGENCE - 500 FCFA"),
+            ),
+            TextButton(
+              onPressed: () {
+                setState(() { _showPaywall = false; }); // Soft Exit
+              },
+              child: const Text("Non merci, plus tard", style: TextStyle(color: Colors.grey)),
+            )
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+Explication de l'interactivité
+- L'artisan pose une question : La fonction _sendMessage envoie le texte au format JSON via le WebSocket et fait défiler la vue vers le bas.
+- L'IA répond (Succès) : Le backend envoie des morceaux de texte. La condition data['type'] == 'stream' s'active, et setState ajoute les caractères au fur et à mesure dans la bulle grise, créant une animation naturelle.
+- L'IA bloque (Paywall) : Le backend renvoie payment_required. La condition déclenche _showPaywall = true. L'écran s'assombrit légèrement et la carte d'achat surgit du bas de l'écran, tandis que la question de l'artisan reste visible derrière.
+- L'Artisan paie : Dès que le webhook backend valide le Mobile Money, il pousse un événement payment_success dans le WebSocket. L'application le capte, passe _showPaywall à false, et la carte disparaît instantanément.
+
+X-  Préparer la chaîne RAG pour le Streaming (LangChain)
+Dans un fichier séparé (ex: llm_service.py), nous allons définir la fonction asynchrone qui interroge la base vectorielle et génère la réponse en continu.
+
+Python
+from langchain_openai import ChatOpenAI
+from langchain_core.prompts import PromptTemplate
+from langchain_core.output_parsers import StrOutputParser
+from langchain_core.runnables import RunnablePassthrough
+# Import fictif de votre client Qdrant configuré lors du pipeline d'ingestion
+# from database import retriever 
+
+# 1. Instanciation du modèle configuré pour le streaming
+# (Utilisation de GPT-4o-mini ou GPT-3.5-turbo pour un bon rapport vitesse/prix)
+llm = ChatOpenAI(
+    model="gpt-4o-mini", 
+    temperature=0.2, 
+    streaming=True # Crucial pour activer le flux
+)
+
+# 2. Le Prompt Système (défini précédemment)
+template = """
+Tu es l'Assistant Expert de ProsArtisan, le copilote technique dédié aux artisans professionnels.
+Réponds à la question en utilisant EXCLUSIVEMENT le contexte ci-dessous.
+
+<CONTEXTE>
+{context}
+</CONTEXTE>
+
+Question de l'artisan : {question}
+"""
+prompt = PromptTemplate.from_template(template)
+
+def get_rag_chain(metier_id: str):
+    """
+    Construit la chaîne de traitement en appliquant un filtre 
+    sur le métier de l'artisan (ex: 'maconnerie', 'maroquinerie').
+    """
+    # Configuration du retriever avec un filtre sur les métadonnées (Qdrant)
+    # search_kwargs={"filter": {"metier_id": metier_id}}
+    # En situation réelle, on utilise le retriever lié à votre base Qdrant.
+    
+    # Pour l'exemple, on simule une fonction qui récupère le contexte
+    def mock_retriever(query):
+        return "Contexte technique récupéré depuis la base vectorielle..."
+
+    chain = (
+        {"context": mock_retriever, "question": RunnablePassthrough()}
+        | prompt
+        | llm
+        | StrOutputParser() # Permet de ne récupérer que le texte pur, sans les métadonnées de l'API
+    )
+    return chain
+2. Connecter le flux au WebSocket (FastAPI)
+Maintenant, nous mettons à jour la route WebSocket que nous avions préparée. Nous allons itérer sur le flux asynchrone généré par LangChain et pousser chaque "chunk" (morceau de mot) dans le tuyau ouvert avec l'application Flutter.
+
+Python
+import json
+import asyncio
+from fastapi import FastAPI, WebSocket, WebSocketDisconnect
+from llm_service import get_rag_chain
+# from quota_manager import QuotaManager, HTTPException # Votre gestionnaire Redis
+# from websocket_manager import manager # Le ConnectionManager vu précédemment
+
+app = FastAPI()
+
+@app.websocket("/ws/chat/{user_id}")
+async def websocket_endpoint(websocket: WebSocket, user_id: str):
+    # 1. Acceptation de la connexion mobile
+    await manager.connect(websocket, user_id)
+    
+    # Simulation d'une récupération du métier de l'utilisateur depuis PostgreSQL
+    metier_utilisateur = "maconnerie" 
+
+    try:
+        while True:
+            # 2. Attente d'une question venant de Flutter
+            data = await websocket.receive_text()
+            payload = json.loads(data)
+            question = payload.get("question")
+            
+            if not question:
+                continue
+
+            try:
+                # 3. VÉRIFICATION DU QUOTA (Le Paywall)
+                # Si le quota est dépassé, cette fonction lève une erreur HTTP 402
+                # droits = QuotaManager.verifier_droits_artisan(user_id)
+                
+                # 4. INITIALISATION DU STREAMING LLM
+                chain = get_rag_chain(metier_id=metier_utilisateur)
+                
+                # .astream() crée un générateur asynchrone
+                async for chunk in chain.astream(question):
+                    
+                    # 5. ENVOI DU CHUNK AU MOBILE (Effet machine à écrire)
+                    await manager.send_personal_message(
+                        {
+                            "type": "stream", 
+                            "chunk": chunk
+                        }, 
+                        user_id
+                    )
+                    
+                    # (Optionnel) Une micro-pause pour s'assurer que le réseau et
+                    # le moteur de rendu Flutter suivent la cadence sans saturer.
+                    await asyncio.sleep(0.02)
+                
+                # 6. FIN DE LA GÉNÉRATION
+                # On envoie un signal pour dire à l'UI d'arrêter l'indicateur de chargement
+                await manager.send_personal_message({"type": "stream_end"}, user_id)
+
+            except Exception as e:
+                # Gestion de l'erreur 402 (Quota dépassé)
+                if hasattr(e, 'status_code') and e.status_code == 402:
+                    await manager.send_personal_message(
+                        {
+                            "type": "payment_required",
+                            "message": e.detail["message"]
+                        },
+                        user_id
+                    )
+                else:
+                    # Autre erreur (ex: API OpenAI indisponible)
+                    await manager.send_personal_message(
+                        {
+                            "type": "error",
+                            "message": "Désolé, une erreur technique est survenue."
+                        },
+                        user_id
+                    )
+
+    except WebSocketDisconnect:
+        manager.disconnect(user_id)
+La mécanique derrière ce code
+- Le RunnablePassthrough : Dans LCEL, RunnablePassthrough() indique à LangChain que la donnée entrante dans la chaîne (ici, la question envoyée dans chain.astream(question)) doit être injectée directement dans le paramètre {question} du prompt.
+- L'itérateur async for chunk in ... : Au lieu d'attendre 10 secondes que GPT-4o-mini finisse sa phrase, FastAPI réceptionne les mots (tokens) au rythme où OpenAI les calcule (environ 40 à 60 mots par seconde).
+- Le non-blocage (asyncio) : Pendant que votre serveur attend le prochain mot d'OpenAI, grâce à l'asynchrone, il peut s'occuper de répondre aux WebSockets de 500 autres artisans connectés en même temps, ce qui rend votre architecture extrêmement scalable et économe en ressources serveur.
+
+XI- Implémentation API Wave Business
+
+Voici comment implémenter cette intégration de bout en bout.
+
+1. Le Backend (FastAPI) : Initialiser le paiement
+Votre serveur doit exposer une route que l'application mobile appellera lorsque l'artisan clique sur le bouton "Payer 500 FCFA". Pour cela, nous utiliserons la bibliothèque asynchrone httpx.
+
+Python
+import os
+import httpx
+from fastapi import FastAPI, HTTPException
+from pydantic import BaseModel
+
+app = FastAPI()
+
+# La clé API secrète fournie sur votre tableau de bord Wave Business
+WAVE_API_KEY = os.getenv("WAVE_API_KEY", "wave_sk_live_votre_cle_secrete")
+
+# Le modèle de données attendu depuis l'application Flutter
+class PaiementRequest(BaseModel):
+    user_id: str
+    type_pass: str # "pass_24h" ou "pass_mois"
+
+@app.post("/api/paiement/initier-wave")
+async def initier_paiement_wave(request: PaiementRequest):
+    # Définition du montant selon le type de pass
+    montant = 500 if request.type_pass == "pass_24h" else 3000
+    
+    # Payload attendu par l'API Wave Business
+    payload = {
+        "amount": str(montant),
+        "currency": "XOF",
+        # client_reference est crucial : il est renvoyé dans le Webhook !
+        "client_reference": f"{request.user_id}|{request.type_pass}",
+        "success_url": "prosartisan://paiement-succes", # Deep link de retour vers votre app
+        "error_url": "prosartisan://paiement-erreur"
+    }
+
+    headers = {
+        "Authorization": f"Bearer {WAVE_API_KEY}",
+        "Content-Type": "application/json"
+    }
+
+    # Appel asynchrone à l'API Wave
+    async with httpx.AsyncClient() as client:
+        try:
+            response = await client.post(
+                "https://api.wave.com/v1/checkout/sessions",
+                json=payload,
+                headers=headers
+            )
+            response.raise_for_status()
+            data = response.json()
+            
+            # Wave nous renvoie une 'wave_launch_url'
+            return {
+                "status": "success",
+                "payment_url": data["wave_launch_url"]
+            }
+            
+        except httpx.HTTPStatusError as e:
+            # Gérer les erreurs (ex: clé invalide, API down)
+            print(f"Erreur API Wave: {e.response.text}")
+            raise HTTPException(status_code=500, detail="Impossible d'initialiser le paiement.")
+2. Le Frontend (Flutter) : Lancer l'application Wave
+Côté mobile, lorsque l'artisan est bloqué par le Paywall, il clique sur le bouton de paiement. 
+L'application Flutter va appeler la route FastAPI ci-dessus, récupérer l'URL de paiement, et l'ouvrir.
+Pour cela, vous devez ajouter le package url_launcher et http dans votre pubspec.yaml :
+
+YAML
+dependencies:
+  http: ^1.1.0
+  url_launcher: ^6.2.1
+
+- Voici la mise à jour du composant Paywall avec la logique d'appel (à intégrer dans votre _ChatScreenState) :
+
+Dart
+import 'package:http/http.dart' as http;
+import 'package:url_launcher/url_launcher.dart';
+import 'dart:convert';
+
+// ... (dans votre classe _ChatScreenState) ...
+
+bool _isProcessingPayment = false;
+
+Future<void> _lancerPaiementWave(String typePass) async {
+  setState(() {
+    _isProcessingPayment = true;
+  });
+
+  try {
+    // 1. Appel au backend FastAPI pour générer la session Wave
+    final response = await http.post(
+      Uri.parse('https://votre-api.com/api/paiement/initier-wave'),
+      headers: {'Content-Type': 'application/json'},
+      body: jsonEncode({
+        'user_id': widget.userId,
+        'type_pass': typePass,
+      }),
+    );
+
+    if (response.statusCode == 200) {
+      final data = jsonDecode(response.body);
+      final waveUrl = Uri.parse(data['payment_url']);
+
+      // 2. Lancement de l'URL. Cela ouvre nativement l'application Wave !
+      if (await canLaunchUrl(waveUrl)) {
+        await launchUrl(waveUrl, mode: LaunchMode.externalApplication);
+      } else {
+        throw 'Impossible d'ouvrir l\'application Wave.';
+      }
+    }
+  } catch (e) {
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(content: Text('Erreur de connexion : $e')),
+    );
+  } finally {
+    setState(() {
+      _isProcessingPayment = false;
+    });
+  }
+}
+Et dans le code de votre bouton (dans la méthode _buildPaywallOverlay vue précédemment) :
+
+Dart
+ElevatedButton(
+  style: ElevatedButton.styleFrom(
+    backgroundColor: const Color(0xFF1B49FF), // Le bleu distinctif de Wave
+    minimumSize: const Size(double.infinity, 50),
+  ),
+  onPressed: _isProcessingPayment 
+      ? null 
+      : () => _lancerPaiementWave("pass_24h"),
+  child: _isProcessingPayment
+      ? const CircularProgressIndicator(color: Colors.white)
+      : const Text("Payer 500 FCFA avec Wave", style: TextStyle(color: Colors.white)),
+),
+3. La Boucle est Bouclée (Rappel de la logique de déblocage)
+C'est ici que l'architecture technique prend tout son sens :
+- Flutter lance l'URL de Wave (launchUrl). L'application ProsArtisan passe en arrière-plan.
+- L'application Wave s'ouvre. L'artisan voit "ProsArtisan demande 500F". Il valide avec son code secret.
+- En arrière-plan : Les serveurs de Wave contactent immédiatement votre serveur FastAPI via la Route Webhook (vue dans l'étape précédente de notre conception).
+- le serveur FastAPI valide la signature de Wave, met à jour PostgreSQL et Redis.
+- le serveur FastAPI pousse instantanément le signal "Paiement Validé !" dans le WebSocket toujours actif.
+L'artisan revient sur ProsArtisan (ou y est redirigé via le success_url). L'interface Flutter a reçu le signal WebSocket : le Paywall a déjà disparu, et la réponse de l'IA a commencé à s'écrire à l'écran.
+
+XII- Structuration de la base de connaissances pour optimiser le modèle RAG (Retrieval-Augmented Generation).
+
+1. L'Architecture de la Base Vectorielle
+Au lieu de créer une base de données séparée pour chaque métier (ce qui serait coûteux et complexe à maintenir), 
+la meilleure approche consiste à utiliser un Index Unique avec Filtrage par Métadonnées (Metadata Filtering).
+Chaque morceau de texte (ou "Chunk") stocké dans la base possèdera une "carte d'identité" sous forme de métadonnées.
+
+Exemple de Métadonnées (Taxonomie)
+Chaque document vectorisé devra être accompagné d'un fichier JSON structurant son contexte :
+
+JSON
+{
+  "secteur_id": "artisanat_art",
+  "metier_id": "maroquinerie",
+  "categorie_competence": "finition",
+  "type_document": "fiche_technique",
+  "titre_source": "Guide pratique du travail du cuir",
+  "niveau_expertise": "intermediaire",
+  "mots_cles": ["cuir", "tannage", "teinture", "finition"]
+}
+Pourquoi c'est crucial ? Lorsqu'un utilisateur pose une question, le backend récupère son metier_id depuis son profil (ex: maroquinerie) et applique un pré-filtre strict ("Ne cherche QUE dans les vecteurs où metier_id = maroquinerie"). Le LLM n'a ainsi accès qu'aux informations pertinentes pour ce métier précis.
+
+2. La Stratégie de Découpage (Chunking)
+Un manuel PDF de 200 pages ne peut pas être envoyé d'un coup au LLM. Il faut le découper en petits blocs ("chunks") de texte. 
+Pour des fiches techniques artisanales, il faut éviter le découpage aveugle au nombre de caractères. Privilégiez le Chunking Sémantique ou Structurel :
+- Mauvais découpage : Couper le texte tous les 500 mots. Cela risque de couper une étape de fabrication en plein milieu ("Étape 3 : Appliquez le vernis puis... [FIN DU CHUNK]").
+- Bon découpage : Découper par sections logiques (Titres, Sous-titres, Paragraphes). Un "chunk" doit contenir une idée ou une méthode complète (ex: Tout le paragraphe sur le dosage du ciment hydrofuge en maçonnerie).
+Conseil : Gardez une taille de chunk d'environ 500 à 1000 "tokens" et prévoyez un chevauchement (overlap) de 10% à 15% entre deux chunks pour ne pas perdre le contexte.
+
+3. Typologie des Données à Ingester
+Pour que l'IA soit perçue comme un véritable "Copilote Expert", la base doit contenir des documents variés et qualitatifs, classés par type_document :
+Les Normes et DTU (Documents Techniques Unifiés) : Les règles de l'art (sécurité électrique, normes de construction, résistance des matériaux).
+- Guides de Bonnes Pratiques : Techniques de base et avancées (ex: techniques d'assemblage en menuiserie, préparation des supports en peinture).
+- Fiches Produits/Matériaux : Caractéristiques des intrants (temps de séchage d'une colle, types de bois, spécificités des tissus).
+- Dépannage & Résolution de problèmes (Troubleshooting) : Formats "Problème -> Cause -> Solution" (ex: "Pourquoi mon enduit fissure-t-il au séchage ?").
+- Guides de Gestion & Stratégie : Comment chiffrer un devis, comment gérer sa relation client, ou comprendre les possibilités d'accompagnement financier (microfinance).
+
+4. Le Flux d'Exécution du RAG (Comment l'IA utilise la base)
+Voici ce qui se passe techniquement en une fraction de seconde lorsqu'un artisan interroge l'application :
+- La Requête : Un maçon sur un chantier ouvre l'application et demande : "Quel dosage de ciment dois-je utiliser pour une fondation en zone très humide ?"
+- Enrichissement (Backend) : Votre API reçoit la question. Elle identifie que l'utilisateur a le metier_id = maconnerie.
+- Recherche Vectorielle (Pinecone / Qdrant) : La base vectorielle applique le filtre métadonnée : metier_id == maconnerie.
+Elle compare l'embedding de la question avec la base et trouve les 3 "chunks" de texte les plus pertinents parlant des dosages pour fondations humides.
+- Construction du Prompt Système : Le backend crée un prompt caché pour le LLM : "Tu es un expert en maçonnerie. 
+Réponds à la question de l'artisan en utilisant uniquement le contexte suivant. Si l'information n'y est pas, dis que tu ne sais pas."
+- Contexte récupéré : [Texte du chunk 1], [Texte du chunk 2]
+- Question : Quel dosage de ciment...
+- Génération (OpenAI / Claude) : Le LLM rédige la réponse structurée et l'envoie sur le mobile de l'artisan.
+
+5. Maintenir et Améliorer la Base (Feedback Loop)
+L'avantage de cette architecture SaaS est que l'outil s'améliore avec le temps :
+- Le bouton "Pouce en l'air / Pouce en bas" : À chaque réponse, l'artisan peut noter la qualité. Si une réponse est mal notée, 
+votre équipe technique peut consulter le log pour voir quels documents (chunks) ont été utilisés par l'IA et corriger la base de connaissances 
+si elle est obsolète ou erronée.
+- Mise à jour granulaire : Si une norme change (ex: nouvelle norme électrique), vous n'avez pas besoin de réentraîner l'IA. 
+Il suffit de supprimer l'ancien document vectorisé de la base et d'uploader le nouveau. L'IA sera instantanément à jour.
+
+XIII- Modèle code Pyton du pipeline
+import zipfile
+import os
+import json
+
+# Création du répertoire temporaire
+os.makedirs('pipeline_demo', exist_ok=True)
+
+# 1. Le script Python d'ingestion principal
+py_code = """import os
+import json
+from dotenv import load_dotenv
+from langchain_community.document_loaders import PyPDFLoader, DirectoryLoader
+from langchain_text_splitters import RecursiveCharacterTextSplitter
+from langchain_openai import OpenAIEmbeddings
+from langchain_community.vectorstores import Qdrant
+
+# Chargement des variables d'environnement (.env)
+load_dotenv()
+
+OPENAI_API_KEY = os.getenv("OPENAI_API_KEY", "votre-cle-openai")
+QDRANT_URL = os.getenv("QDRANT_URL", "http://localhost:6333")
+QDRANT_API_KEY = os.getenv("QDRANT_API_KEY", "votre-cle-qdrant")
+COLLECTION_NAME = "connaissances_prosartisan"
+
+def load_metadata_config(json_path):
+    \"\"\"Charge le fichier de mapping des métadonnées pour attribuer le bon métier à chaque document.\"\"\"
+    with open(json_path, 'r', encoding='utf-8') as f:
+        return json.load(f)
+
+def run_ingestion_pipeline(docs_dir, metadata_path):
+    print(f"--- DÉMARRAGE DU PIPELINE D'INGESTION ---")
+    
+    # ÉTAPE 1 : Extraction
+    print(f"1. Chargement des documents PDF depuis {docs_dir}...")
+    loader = DirectoryLoader(docs_dir, glob="**/*.pdf", loader_cls=PyPDFLoader)
+    documents = loader.load()
+    print(f"-> {len(documents)} pages brutes extraites.")
+
+    # ÉTAPE 2 : Enrichissement (Injection des Métadonnées)
+    print("2. Injection des métadonnées (Secteur, Métier, Catégorie)...")
+    metadata_map = load_metadata_config(metadata_path)
+    
+    for doc in documents:
+        filename = os.path.basename(doc.metadata["source"])
+        if filename in metadata_map:
+            # Ajout des tags spécifiques au métier (ex: maroquinerie, maconnerie)
+            doc.metadata.update(metadata_map[filename])
+        else:
+            # Fallback de sécurité
+            doc.metadata["secteur_id"] = "non_classe"
+            doc.metadata["metier_id"] = "general"
+            
+    # ÉTAPE 3 : Transformation (Chunking Sémantique)
+    print("3. Découpage des documents en chunks sémantiques...")
+    text_splitter = RecursiveCharacterTextSplitter(
+        chunk_size=800,       # Taille idéale pour garder un contexte complet (une technique, un dosage)
+        chunk_overlap=150,    # Chevauchement pour ne pas couper une phrase en deux
+        separators=["\\n\\n", "\\n", "(?<=\\. )", " ", ""]
+    )
+    chunks = text_splitter.split_documents(documents)
+    print(f"-> {len(chunks)} chunks générés.")
+
+    # ÉTAPE 4 : Vectorisation et Chargement
+    print("4. Génération des embeddings et envoi vers la base vectorielle...")
+    embeddings = OpenAIEmbeddings(model="text-embedding-3-small")
+    
+    # Upsert dans Qdrant
+    qdrant = Qdrant.from_documents(
+        documents=chunks,
+        embedding=embeddings,
+        url=QDRANT_URL,
+        prefer_grpc=True,
+        api_key=QDRANT_API_KEY,
+        collection_name=COLLECTION_NAME
+    )
+    
+    print("--- INGESTION TERMINÉE AVEC SUCCÈS ---")
+    print("Les connaissances sont désormais disponibles pour l'IA.")
+
+if __name__ == "__main__":
+    # Décommenter pour exécuter localement avec vos vrais dossiers
+    # run_ingestion_pipeline(docs_dir="./documents_source", metadata_path="./metadata.json")
+    pass
+"""
+with open('pipeline_demo/ingestion.py', 'w', encoding='utf-8') as f:
+    f.write(py_code)
+
+# 2. Le fichier de configuration des métadonnées (Json)
+json_code = {
+    "guide_cuir_finitions.pdf": {
+        "secteur_id": "artisanat_art",
+        "metier_id": "maroquinerie",
+        "categorie": "finition",
+        "type_document": "fiche_technique",
+        "niveau_expertise": "avance"
+    },
+    "dtu_maconnerie_fondations.pdf": {
+        "secteur_id": "batiment",
+        "metier_id": "maconnerie",
+        "categorie": "gros_oeuvre",
+        "type_document": "norme_officielle",
+        "niveau_expertise": "intermediaire"
+    },
+    "normes_cablage_electrique.pdf": {
+        "secteur_id": "batiment",
+        "metier_id": "electricite",
+        "categorie": "installation",
+        "type_document": "norme_officielle",
+        "niveau_expertise": "debutant"
+    },
+    "financement_imf_artisans.pdf": {
+        "secteur_id": "transversal",
+        "metier_id": "tous",
+        "categorie": "gestion_finance",
+        "type_document": "guide_pratique",
+        "niveau_expertise": "debutant"
+    }
+}
+with open('pipeline_demo/metadata.json', 'w', encoding='utf-8') as f:
+    json.dump(json_code, f, indent=4, ensure_ascii=False)
+
+# 3. Fichier des dépendances Python
+req_code = """langchain==0.1.13
+langchain-openai==0.1.1
+langchain-community==0.0.29
+qdrant-client==1.8.0
+pypdf==4.1.0
+tiktoken==0.6.0
+python-dotenv==1.0.1
+"""
+with open('pipeline_demo/requirements.txt', 'w', encoding='utf-8') as f:
+    f.write(req_code)
+
+# Compression en archive ZIP
+zip_path = '/mnt/data/pipeline_ingestion.zip'
+with zipfile.ZipFile(zip_path, 'w') as zf:
+    zf.write('pipeline_demo/ingestion.py', 'ingestion.py')
+    zf.write('pipeline_demo/metadata.json', 'metadata.json')
+    zf.write('pipeline_demo/requirements.txt', 'requirements.txt')
+
+print(f"[file-tag: {os.path.basename(zip_path)}]")
+
+XIV - Modème de prompt Système IA
+Le prompt système (System Prompt) est le "cerveau comportemental" de votre IA. 
+C'est le texte caché qui est envoyé au LLM avant même la question de l'artisan. 
+Il définit son identité, son ton, et surtout, ses limites (les fameux garde-fous pour éviter les hallucinations).
+Dans le cadre d'une architecture RAG stricte (où l'IA doit se baser uniquement sur vos documents), le prompt doit être autoritaire.
+
+Voici une proposition de Prompt Système optimisé pour l'assistant ProsArtisan.
+
+- Le Prompt Système (À intégrer dans le Backend)
+Plaintext
+Tu es l'Assistant Expert de ProsArtisan, le copilote technique dédié aux artisans professionnels (maçons, maroquiniers, menuisiers, plombiers, etc.). 
+Ton rôle est de fournir des réponses techniques, précises et directement applicables sur le terrain, en te basant EXCLUSIVEMENT sur les documents techniques fournis.
+
+=== RÈGLES STRICTES DE GÉNÉRATION (Garde-fous) ===
+1. FIDÉLITÉ AU CONTEXTE : Tu dois formuler ta réponse UNIQUEMENT à partir des informations contenues dans le bloc <CONTEXTE> ci-dessous. 
+2. ZÉRO HALLUCINATION : Si l'information nécessaire pour répondre à la question de l'artisan ne se trouve pas dans le <CONTEXTE>, tu ne dois RIEN inventer. Réponds exactement ceci : "Les documents techniques actuels de ProsArtisan ne contiennent pas cette information spécifique pour votre métier. Souhaitez-vous reformuler votre question ?"
+3. SÉCURITÉ : Si la question porte sur un domaine critique (structures porteuses, haute tension) et que le contexte manque de précisions sur les normes de sécurité, ajoute toujours un avertissement de prudence.
+
+=== TON ET FORMATAGE ===
+- Sois direct, pédagogique et respectueux. Tu t'adresses à des professionnels qui sont sur le terrain et qui ont besoin d'informations rapides.
+- Utilise un vocabulaire technique approprié au métier, mais évite le jargon inutile ou trop académique.
+- Structure tes réponses avec des listes à puces (-), des étapes numérotées (1, 2, 3) et du texte en gras pour mettre en évidence les dosages, les mesures ou les outils essentiels.
+- Ne fais jamais de longues introductions ou de longues conclusions. Va droit au but.
+
+=== DONNÉES DE LA REQUÊTE ===
+<CONTEXTE>
+{context}
+</CONTEXTE>
+
+Question de l'artisan : {question}
+Pourquoi ce prompt est-il structuré ainsi ?
+- L'ancrage d'identité (Tu es l'Assistant Expert de ProsArtisan) : Cela donne à l'IA un cadre professionnel. Elle ne se comportera pas comme un chatbot bavard, mais comme un outil métier.
+- Le Garde-fou anti-hallucination (ZÉRO HALLUCINATION) : C'est la règle la plus importante du RAG. Sans cette directive explicite de dire "Je ne sais pas", un LLM a naturellement tendance 
+à inventer une réponse plausible (mais potentiellement fausse) pour "faire plaisir" à l'utilisateur. Sur un chantier de maçonnerie ou pour une installation électrique, une information inventée peut être dangereuse.
+- L'optimisation du format (TON ET FORMATAGE) : En forçant l'IA à utiliser des listes à puces et à aller "droit au but", vous économisez des tokens (donc de l'argent) à chaque réponse générée, 
+tout en offrant une meilleure expérience de lecture à l'artisan sur son téléphone mobile.
+- Les balises (<CONTEXTE>) : Les LLM modernes (comme GPT-4 ou Claude) comprennent extrêmement bien les balises de type XML. 
+Cela permet au modèle de délimiter clairement où se trouve la vérité absolue (vos documents vectorisés) et où se trouve la question de l'utilisateur.
+- Comment l'utiliser dans le code (Exemple avec LangChain)
+Dans le script de génération, ce prompt sera intégré sous forme de Template dynamique :
+
+Python
+from langchain.prompts import PromptTemplate
+
+template_prosartisan = """
+Tu es l'Assistant Expert de ProsArtisan...
+[... le texte du prompt ci-dessus ...]
+<CONTEXTE>
+{context}
+</CONTEXTE>
+
+Question de l'artisan : {question}
+"""
+
+prompt = PromptTemplate(
+    template=template_prosartisan,
+    input_variables=["context", "question"]
+)

@@ -8,25 +8,45 @@
 *.key
 
 # =========================
-# DÉPENDANCES
+# PYTHON
 # =========================
-/vendor/
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.venv/
+venv/
+ENV/
+*.egg-info/
+dist/
+build/
+.eggs/
+
+# =========================
+# DÉPENDANCES NODE (si frontend)
+# =========================
 /node_modules/
 /npm-debug.log
 /yarn-error.log
 
 # =========================
+# DOCKER
+# =========================
+docker-compose.override.yml
+
+# =========================
 # CACHE ET BUILD
 # =========================
-/public/build/
-/public/hot
-/public/storage
-/storage/*.key
-/storage/app/public/
-/storage/framework/cache/
-/storage/framework/sessions/
-/storage/framework/views/
-/storage/logs/
+.pytest_cache/
+.coverage
+htmlcov/
+.mypy_cache/
+.ruff_cache/
+
+# =========================
+# DOCUMENTS D'INGESTION (volumineux)
+# =========================
+ingestion/documents/*.pdf
 
 # =========================
 # OUTILS IDE ET SYSTÈME

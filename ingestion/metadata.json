@@ -1,0 +1,30 @@
+{
+    "guide_cuir_finitions.pdf": {
+        "secteur_id": "artisanat_art",
+        "metier_id": "maroquinerie",
+        "categorie": "finition",
+        "type_document": "fiche_technique",
+        "niveau_expertise": "avance"
+    },
+    "dtu_maconnerie_fondations.pdf": {
+        "secteur_id": "batiment",
+        "metier_id": "maconnerie",
+        "categorie": "gros_oeuvre",
+        "type_document": "norme_officielle",
+        "niveau_expertise": "intermediaire"
+    },
+    "normes_cablage_electrique.pdf": {
+        "secteur_id": "batiment",
+        "metier_id": "electricite",
+        "categorie": "installation",
+        "type_document": "norme_officielle",
+        "niveau_expertise": "debutant"
+    },
+    "financement_imf_artisans.pdf": {
+        "secteur_id": "transversal",
+        "metier_id": "tous",
+        "categorie": "gestion_finance",
+        "type_document": "guide_pratique",
+        "niveau_expertise": "debutant"
+    }
+}
