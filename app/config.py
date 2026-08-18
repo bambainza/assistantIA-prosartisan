@@ -1,5 +1,7 @@
 """Configuration centralisée de l'application (pydantic-settings)."""
 
+from urllib.parse import quote_plus
+
 from pydantic_settings import BaseSettings
 
 
@@ -25,8 +27,9 @@ class Settings(BaseSettings):
 
     @property
     def database_url(self) -> str:
+        password = quote_plus(self.db_password)
         return (
-            f"postgresql+asyncpg://{self.db_username}:{self.db_password}"
+            f"postgresql+asyncpg://{self.db_username}:{password}"
             f"@{self.db_host}:{self.db_port}/{self.db_database}"
         )
 
@@ -37,7 +40,8 @@ class Settings(BaseSettings):
 
     @property
     def redis_url(self) -> str:
-        return f"redis://:{self.redis_password}@{self.redis_host}:{self.redis_port}/0"
+        password = quote_plus(self.redis_password)
+        return f"redis://:{password}@{self.redis_host}:{self.redis_port}/0"
 
     # ── Qdrant ──
     qdrant_host: str = "qdrant"
