@@ -58,7 +58,9 @@ async def handle_webhook(
     raw_body = await request.body()
 
     # Si en production ou clé configurée, valider la signature
-    if x_signature and not payment_service.verify_webhook_signature(raw_body, x_signature):
+    if x_signature and not payment_service.verify_webhook_signature(
+        raw_body, x_signature
+    ):
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail="Signature HMAC invalide",

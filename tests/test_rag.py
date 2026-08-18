@@ -1,8 +1,9 @@
 """Tests pour le découpage de documents et le service RAG."""
 
 import pytest
-from ingestion.pipeline import chunk_text, extract_text_from_pdf
+
 from app.services.rag_service import rag_service
+from ingestion.pipeline import chunk_text
 
 
 def test_chunk_text_overlap():

@@ -1,6 +1,7 @@
 """Tests pour le service et les routes de Quotas."""
 
 import uuid
+
 import pytest
 from httpx import ASGITransport, AsyncClient
 

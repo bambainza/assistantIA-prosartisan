@@ -7,10 +7,10 @@ la vérification de signature HMAC SHA-256 et la mise à jour des droits utilisa
 
 from __future__ import annotations
 
-import hmac
 import hashlib
+import hmac
 import uuid
-from datetime import datetime, timedelta, timezone
+from datetime import UTC, datetime, timedelta
 from typing import Any
 
 from sqlalchemy import select
@@ -19,7 +19,6 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.config import settings
 from app.models.quota import QuotaUtilisateur
 from app.models.transaction import TransactionMobileMoney
-
 
 TARIFS_PASS = {
     "pass_24h": {"nom": "Pass 24H Urgence", "montant": 500, "duree_heures": 24},
@@ -31,7 +30,9 @@ TARIFS_PASS = {
 class PaymentService:
     """Gestionnaire de transactions Mobile Money et validation HMAC."""
 
-    def verify_webhook_signature(self, payload_bytes: bytes, signature_header: str | None) -> bool:
+    def verify_webhook_signature(
+        self, payload_bytes: bytes, signature_header: str | None
+    ) -> bool:
         """Vérifie la signature HMAC SHA-256 du webhook entrant."""
         if not signature_header:
             return False
@@ -119,20 +120,27 @@ class PaymentService:
 
         if statut.upper() in ["ACCEPTED", "SUCCESS", "PAID"]:
             info_pass = TARIFS_PASS.get(txn.type_achat, {})
-            quota_stmt = select(QuotaUtilisateur).where(QuotaUtilisateur.user_id == txn.user_id)
+            quota_stmt = select(QuotaUtilisateur).where(
+                QuotaUtilisateur.user_id == txn.user_id
+            )
             quota_res = await db.execute(quota_stmt)
             quota_obj = quota_res.scalar_one_or_none()
 
             if not quota_obj:
-                quota_obj = QuotaUtilisateur(user_id=txn.user_id, requetes_restantes_gratuites=5)
+                quota_obj = QuotaUtilisateur(
+                    user_id=txn.user_id, requetes_restantes_gratuites=5
+                )
                 db.add(quota_obj)
 
-            now = datetime.now(timezone.utc)
+            now = datetime.now(UTC)
             if "duree_heures" in info_pass:
                 heures = info_pass["duree_heures"]
                 start_base = (
-                    quota_obj.date_fin_premium.replace(tzinfo=timezone.utc)
-                    if (quota_obj.date_fin_premium and quota_obj.date_fin_premium.replace(tzinfo=timezone.utc) > now)
+                    quota_obj.date_fin_premium.replace(tzinfo=UTC)
+                    if (
+                        quota_obj.date_fin_premium
+                        and quota_obj.date_fin_premium.replace(tzinfo=UTC) > now
+                    )
                     else now
                 )
                 quota_obj.date_fin_premium = start_base + timedelta(hours=heures)
@@ -140,7 +148,11 @@ class PaymentService:
                 quota_obj.requetes_restantes_gratuites += info_pass["requetes"]
 
             await db.commit()
-            return {"status": "success", "message": "Pass débloqué avec succès", "user_id": str(txn.user_id)}
+            return {
+                "status": "success",
+                "message": "Pass débloqué avec succès",
+                "user_id": str(txn.user_id),
+            }
 
         await db.commit()
         return {"status": "declined", "message": "Paiement refusé ou annulé"}

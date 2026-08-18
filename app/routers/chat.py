@@ -7,9 +7,15 @@ Intercepte les requêtes avec le Rate Limiter & Gestionnaire de Quota (HTTP 402 
 from __future__ import annotations
 
 import uuid
-from typing import Any
 
-from fastapi import APIRouter, Depends, HTTPException, Query, WebSocket, WebSocketDisconnect, status
+from fastapi import (
+    APIRouter,
+    Depends,
+    HTTPException,
+    WebSocket,
+    WebSocketDisconnect,
+    status,
+)
 from pydantic import BaseModel
 from sqlalchemy.ext.asyncio import AsyncSession
 

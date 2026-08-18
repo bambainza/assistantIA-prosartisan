@@ -126,10 +126,11 @@ def run_ingestion(
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description="Pipeline d'ingestion ProsArtisan")
-    parser.add_argument("--docs-dir", default="./ingestion/documents", help="Dossier contenant les PDF")
+    parser.add_argument(
+        "--docs-dir", default="./ingestion/documents", help="Dossier contenant les PDF"
+    )
     parser.add_argument("--metier-id", type=int, default=1, help="ID du métier")
     args = parser.parse_args()
 
     res = run_ingestion(docs_dir=args.docs_dir, metier_id=args.metier_id)
     print(f"Ingestion terminée: {res}")
-

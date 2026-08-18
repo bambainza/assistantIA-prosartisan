@@ -3,6 +3,7 @@
 import hashlib
 import hmac
 import uuid
+
 import pytest
 from httpx import ASGITransport, AsyncClient
 
@@ -28,10 +29,7 @@ async def test_get_tarifs():
 async def test_init_payment_success():
     """POST /api/payment/init doit créer une transaction et renvoyer l'URL de checkout."""
     test_user_id = str(uuid.uuid4())
-    payload = {
-        "user_id": test_user_id,
-        "type_pass": "pass_24h"
-    }
+    payload = {"user_id": test_user_id, "type_pass": "pass_24h"}
     transport = ASGITransport(app=app)
     async with AsyncClient(transport=transport, base_url="http://test") as client:
         response = await client.post("/api/payment/init", json=payload)
@@ -48,9 +46,10 @@ async def test_webhook_hmac_validation():
     payload = {
         "transaction_id": "REF-TEST-123456",
         "status": "ACCEPTED",
-        "metadata": {}
+        "metadata": {},
     }
     import json
+
     raw_body = json.dumps(payload).encode("utf-8")
     secret = settings.mobile_money_secret_key.encode("utf-8")
     valid_sig = hmac.new(secret, raw_body, hashlib.sha256).hexdigest()
@@ -58,6 +57,11 @@ async def test_webhook_hmac_validation():
     transport = ASGITransport(app=app)
     async with AsyncClient(transport=transport, base_url="http://test") as client:
         # 1. Sans signature (devrait passer si facultatif ou tester avec signature)
-        response = await client.post("/api/payment/webhook", json=payload, headers={"X-Signature": valid_sig})
+        response = await client.post(
+            "/api/payment/webhook", json=payload, headers={"X-Signature": valid_sig}
+        )
 
-    assert response.status_code in [200, 404]  # 404 si la ref n'est pas en DB, mais la signature est valide
+    assert response.status_code in [
+        200,
+        404,
+    ]  # 404 si la ref n'est pas en DB, mais la signature est valide

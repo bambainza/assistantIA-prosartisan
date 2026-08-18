@@ -75,7 +75,15 @@ async def get_system_logs() -> dict[str, Any]:
     """Retourne les journaux d'activité récents."""
     return {
         "logs": [
-            {"timestamp": "2026-08-18T18:00:00Z", "level": "INFO", "event": "Pipeline RAG prêt"},
-            {"timestamp": "2026-08-18T18:15:00Z", "level": "INFO", "event": "Initialisation Qdrant OK"},
+            {
+                "timestamp": "2026-08-18T18:00:00Z",
+                "level": "INFO",
+                "event": "Pipeline RAG prêt",
+            },
+            {
+                "timestamp": "2026-08-18T18:15:00Z",
+                "level": "INFO",
+                "event": "Initialisation Qdrant OK",
+            },
         ]
     }

@@ -1,6 +1,7 @@
 """Tests pour la route POST /api/chat et multimodalité."""
 
 import uuid
+
 import pytest
 from httpx import ASGITransport, AsyncClient
 
@@ -13,7 +14,7 @@ async def test_chat_endpoint_success():
     payload = {
         "user_id": str(uuid.uuid4()),
         "question": "Comment vérifier l'égalisation d'un sol avant pose de dalles ?",
-        "metier_id": 1
+        "metier_id": 1,
     }
     transport = ASGITransport(app=app)
     async with AsyncClient(transport=transport, base_url="http://test") as client:
@@ -32,7 +33,7 @@ async def test_chat_endpoint_with_image():
         "user_id": str(uuid.uuid4()),
         "question": "Est-ce que la fissure sur ce poteau en béton est dangereuse ?",
         "metier_id": 1,
-        "image_url": "https://example.com/fissure_chantier.jpg"
+        "image_url": "https://example.com/fissure_chantier.jpg",
     }
     transport = ASGITransport(app=app)
     async with AsyncClient(transport=transport, base_url="http://test") as client:

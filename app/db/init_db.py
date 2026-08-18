@@ -20,7 +20,10 @@ async def seed_data() -> None:
                 "slug": "batiment-construction",
                 "description": "Travaux de gros œuvre, maçonnerie, béton armé et charpente.",
                 "sous_metiers": [
-                    {"nom": "Maçonnerie & Gros œuvre", "slug": "maconnerie-gros-oeuvre"},
+                    {
+                        "nom": "Maçonnerie & Gros œuvre",
+                        "slug": "maconnerie-gros-oeuvre",
+                    },
                     {"nom": "Charpente & Couverture", "slug": "charpente-couverture"},
                     {"nom": "Carrelage & Revêtement", "slug": "carrelage-revetement"},
                 ],
@@ -31,7 +34,10 @@ async def seed_data() -> None:
                 "description": "Installations électriques, domotique et solaires.",
                 "sous_metiers": [
                     {"nom": "Électricité Bâtiment", "slug": "electricite-batiment"},
-                    {"nom": "Installation Solaire & Photovoltaïque", "slug": "installation-solaire"},
+                    {
+                        "nom": "Installation Solaire & Photovoltaïque",
+                        "slug": "installation-solaire",
+                    },
                 ],
             },
             {
@@ -79,4 +85,3 @@ async def drop_db() -> None:
     """Supprime toutes les tables (usage test uniquement)."""
     async with engine.begin() as conn:
         await conn.run_sync(Base.metadata.drop_all)
-

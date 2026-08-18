@@ -8,7 +8,7 @@ et vérifie si un abonnement Pass 24H ou Pass Mensuel est actif.
 from __future__ import annotations
 
 import uuid
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from typing import Any
 
 from sqlalchemy import select
@@ -16,7 +16,6 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.config import settings
 from app.models.quota import QuotaUtilisateur
-from app.models.user import User
 
 
 class QuotaService:
@@ -42,16 +41,20 @@ class QuotaService:
                 db.add(quota_obj)
                 await db.commit()
 
-            now = datetime.now(timezone.utc)
+            now = datetime.now(UTC)
             is_premium = (
                 quota_obj.date_fin_premium is not None
-                and quota_obj.date_fin_premium.replace(tzinfo=timezone.utc) > now
+                and quota_obj.date_fin_premium.replace(tzinfo=UTC) > now
             )
 
             return {
                 "statut": "premium" if is_premium else "freemium",
-                "restantes": 999999 if is_premium else quota_obj.requetes_restantes_gratuites,
-                "date_fin_premium": quota_obj.date_fin_premium.isoformat() if quota_obj.date_fin_premium else None,
+                "restantes": 999999
+                if is_premium
+                else quota_obj.requetes_restantes_gratuites,
+                "date_fin_premium": quota_obj.date_fin_premium.isoformat()
+                if quota_obj.date_fin_premium
+                else None,
                 "is_allowed": is_premium or quota_obj.requetes_restantes_gratuites > 0,
             }
         except Exception:

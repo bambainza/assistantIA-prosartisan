@@ -1,16 +1,24 @@
 """Fixtures partagées pour pytest."""
 
+from unittest.mock import AsyncMock, MagicMock
+
 import pytest
 from httpx import ASGITransport, AsyncClient
 
-from unittest.mock import AsyncMock, MagicMock
 from app.db.session import get_db
 from app.main import app
 
 
 async def mock_get_db():
     session = MagicMock()
-    session.execute = AsyncMock(return_value=MagicMock(scalar_one_or_none=MagicMock(return_value=None), scalars=MagicMock(return_value=MagicMock(first=MagicMock(return_value=None)))))
+    session.execute = AsyncMock(
+        return_value=MagicMock(
+            scalar_one_or_none=MagicMock(return_value=None),
+            scalars=MagicMock(
+                return_value=MagicMock(first=MagicMock(return_value=None))
+            ),
+        )
+    )
     session.commit = AsyncMock()
     session.add = MagicMock()
     session.refresh = AsyncMock()

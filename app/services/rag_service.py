@@ -17,7 +17,9 @@ from qdrant_client.http.models import FieldCondition, Filter, MatchValue
 from app.config import settings
 
 # Charger le prompt système
-PROMPT_PATH = os.path.join(os.path.dirname(__file__), "..", "..", "prompts", "system_prompt.txt")
+PROMPT_PATH = os.path.join(
+    os.path.dirname(__file__), "..", "..", "prompts", "system_prompt.txt"
+)
 
 
 def load_system_prompt() -> str:
@@ -43,7 +45,10 @@ class RAGService:
 
     async def get_embedding(self, text: str) -> list[float]:
         """Génère un embedding vectoriel pour un texte donné."""
-        if settings.openai_api_key.startswith("sk-placeholder") or settings.openai_api_key == "sk-placeholder":
+        if (
+            settings.openai_api_key.startswith("sk-placeholder")
+            or settings.openai_api_key == "sk-placeholder"
+        ):
             # Mode mock pour développement/test local sans clé API valide
             return [0.0] * 1536
 
@@ -100,9 +105,11 @@ class RAGService:
         """Génère une réponse multimodale (texte + vision si image fournie)."""
         docs = await self.search_context(query=question, metier_id=metier_id)
 
-        context_text = "\n---\n".join(
-            [doc["content"] for doc in docs if doc.get("content")]
-        ) if docs else "Aucun document spécifique trouvé."
+        context_text = (
+            "\n---\n".join([doc["content"] for doc in docs if doc.get("content")])
+            if docs
+            else "Aucun document spécifique trouvé."
+        )
 
         system_prompt_template = load_system_prompt()
         prompt_formatted = system_prompt_template.format(
@@ -110,7 +117,10 @@ class RAGService:
             question=question,
         )
 
-        if settings.openai_api_key.startswith("sk-placeholder") or settings.openai_api_key == "sk-placeholder":
+        if (
+            settings.openai_api_key.startswith("sk-placeholder")
+            or settings.openai_api_key == "sk-placeholder"
+        ):
             # Mode mock / test
             mock_reply = (
                 f"Points clés techniques pour votre intervention :\n"
