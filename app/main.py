@@ -11,7 +11,7 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
 from app.db.init_db import init_db
-from app.routers import health
+from app.routers import admin, chat, health, payment, quota
 
 
 @asynccontextmanager
@@ -43,11 +43,10 @@ app.add_middleware(
 
 # ── Routers ──
 app.include_router(health.router)
-# Les routers suivants seront ajoutés en Phase 2+ :
-# app.include_router(auth.router, prefix="/api/auth", tags=["Auth"])
-# app.include_router(chat.router, prefix="/api", tags=["Chat IA"])
-# app.include_router(payment.router, prefix="/api/payment", tags=["Paiement"])
-# app.include_router(quota.router, prefix="/api/quota", tags=["Quotas"])
+app.include_router(chat.router)
+app.include_router(payment.router)
+app.include_router(quota.router)
+app.include_router(admin.router)
 
 
 @app.get("/", tags=["Root"])

@@ -48,14 +48,21 @@ class Settings(BaseSettings):
     qdrant_port: int = 6333
     qdrant_collection: str = "connaissances_prosartisan"
 
-    # ── LLM (OpenAI) ──
+    # ── LLM (OpenAI) & Vision / Audio ──
     openai_api_key: str = "sk-placeholder"
     llm_model: str = "gpt-4o-mini"
+    llm_vision_model: str = "gpt-4o"
+    whisper_model: str = "whisper-1"
     llm_temperature: float = 0.2
+    embedding_model: str = "text-embedding-3-small"
+
+    # ── Stockage Fichiers ──
+    upload_dir: str = "./uploads"
 
     # ── Paiement Mobile Money ──
     wave_api_key: str = "wave_sk_live_placeholder"
-    mobile_money_secret_key: str = "placeholder"
+    mobile_money_secret_key: str = "placeholder_hmac_secret"
+    webhook_secret: str = "placeholder_webhook_secret"
 
     # ── Quotas Freemium ──
     max_questions_gratuites_par_jour: int = 5
