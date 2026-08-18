@@ -32,4 +32,4 @@ class QuotaUtilisateur(Base):
     date_fin_premium: Mapped[datetime | None] = mapped_column(default=None)
 
     # Relations
-    user: Mapped["User"] = relationship(back_populates="quota")
+    user: Mapped[User] = relationship(back_populates="quota")

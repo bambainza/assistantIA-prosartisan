@@ -39,4 +39,4 @@ class TransactionMobileMoney(Base):
     created_at: Mapped[datetime] = mapped_column(server_default=func.now())
 
     # Relations
-    user: Mapped["User"] = relationship(back_populates="transactions")
+    user: Mapped[User] = relationship(back_populates="transactions")

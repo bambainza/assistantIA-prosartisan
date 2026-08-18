@@ -45,9 +45,9 @@ class User(Base):
     )
 
     # Relations
-    quota: Mapped["QuotaUtilisateur"] = relationship(
+    quota: Mapped[QuotaUtilisateur] = relationship(
         back_populates="user", uselist=False, cascade="all, delete-orphan"
     )
-    transactions: Mapped[list["TransactionMobileMoney"]] = relationship(
+    transactions: Mapped[list[TransactionMobileMoney]] = relationship(
         back_populates="user", cascade="all, delete-orphan"
     )

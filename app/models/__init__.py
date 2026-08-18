@@ -9,8 +9,8 @@ from app.models.user import User
 __all__ = [
     "Base",
     "Metier",
-    "SousMetier",
-    "User",
     "QuotaUtilisateur",
+    "SousMetier",
     "TransactionMobileMoney",
+    "User",
 ]
