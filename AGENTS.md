@@ -18,6 +18,7 @@ Ce document définit les normes d'ingénierie, les conventions de code et les ga
 - **Jamais de secrets en dur** : Ne jamais hardcoder de clés API, jetons JWT, mots de passe de base de données ou clés secrètes HMAC dans le code source.
 - **Variables d'environnement** : Toutes les configurations doivent passer par `app.config.settings` alimenté par le fichier `.env`.
 - **Validation HMAC SHA-256** : Tous les webhooks entrants (Wave, Orange Money) doivent valider la signature numérique transmise dans l'en-tête HTTP `X-Signature`.
+- **Nettoyage des ressources tierces (Push Protection)** : Lors de l'intégration de templates HTML/JS ou de bibliothèques tierces, s'assurer de purger et de remplacer tous les jetons d'accès ou clés API configurés par défaut par des placeholders (ex. `YOUR_MAPBOX_ACCESS_TOKEN`) afin de ne pas bloquer les pushes vers GitHub (GitHub Push Protection).
 
 ---
 

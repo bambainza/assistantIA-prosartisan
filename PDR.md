@@ -36,6 +36,8 @@ graph TD
 - **Intelligence Artificielle** : OpenAI GPT-4o (Vision) & GPT-4o-mini, Whisper API (Vocal).
 - **Paiements & Webhooks** : Wave Business API, Orange Money API, Signatures HMAC SHA-256.
 - **Découpage & Ingestion PDF** : PyPDF, Semantic Chunking (overlap 10-15%).
+- **Console d'Administration** : Interface statique HTML/JS/CSS (Template Dastone v2.1.0) montée sur `/admin` dans FastAPI.
+- **Résilience** : Mécanisme de démarrage dégradé (autonome local) si PostgreSQL ou Redis sont indisponibles.
 
 ---
 
@@ -51,6 +53,8 @@ AssistantIA-prosartisan/
 │   ├── schemas/              # Schémas Pydantic (Chat, Payment, Quota, User)
 │   ├── services/             # Logique Métier (RAG, Quota, Payment)
 │   └── routers/              # Endpoints API (chat, payment, quota, admin, health)
+├── admin_web/                # Fichiers statiques du Back-Office (HTML/JS/CSS)
+├── dastone-v2.1.0/           # Sources originales et documentation du template admin
 ├── ingestion/
 │   ├── pipeline.py           # Pipeline PDF → Chunks sémantiques → Qdrant
 │   └── documents/            # Guides et fiches techniques PDF par métier
