@@ -1,5 +1,6 @@
 // State Variables
 let selectedUserIdForGrant = null;
+let grantModal = null;
 
 document.addEventListener('DOMContentLoaded', () => {
     initTabs();
@@ -10,7 +11,7 @@ document.addEventListener('DOMContentLoaded', () => {
 
 // Tab Navigation
 function initTabs() {
-    const navItems = document.querySelectorAll('.nav-item');
+    const navItems = document.querySelectorAll('.nav-menu-item');
     const tabPages = document.querySelectorAll('.tab-page');
     const pageTitle = document.getElementById('page-title');
 
@@ -23,7 +24,7 @@ function initTabs() {
             const targetTab = item.getAttribute('data-tab');
             document.getElementById(targetTab).classList.add('active');
 
-            pageTitle.textContent = item.querySelector('span:last-child').textContent;
+            pageTitle.textContent = item.querySelector('span').textContent;
         });
     });
 }
@@ -55,13 +56,13 @@ async function fetchOverview() {
         data.metiers_top.forEach(m => {
             const pct = (m.requetes / maxReq) * 100;
             barChartList.innerHTML += `
-                <div class="bar-item">
-                    <div class="bar-info">
+                <div class="bar-item mb-3">
+                    <div class="bar-info d-flex justify-content-between mb-1" style="font-size: 13px;">
                         <span>${m.nom}</span>
                         <span><strong>${m.requetes.toLocaleString()}</strong> req</span>
                     </div>
-                    <div class="bar-track">
-                        <div class="bar-fill" style="width: ${pct}%;"></div>
+                    <div class="progress" style="height: 8px;">
+                        <div class="progress-bar bg-primary" role="progressbar" style="width: ${pct}%;" aria-valuenow="${pct}" aria-valuemin="0" aria-valuemax="100"></div>
                     </div>
                 </div>
             `;
@@ -80,8 +81,8 @@ async function fetchArtisans() {
         tbody.innerHTML = '';
 
         data.users.forEach(u => {
-            const badgeClass = u.type_abonnement === 'pass_mois' ? 'badge-success' :
-                               (u.type_abonnement === 'pass_24h' ? 'badge-warning' : 'badge-danger');
+            const badgeClass = u.type_abonnement === 'pass_mois' ? 'badge bg-success-subtle text-success' :
+                               (u.type_abonnement === 'pass_24h' ? 'badge bg-warning-subtle text-warning' : 'badge bg-danger-subtle text-danger');
             
             const reqLabel = u.questions_restantes > 9000 ? 'Illimité (Pro)' : `${u.questions_restantes} gratuites`;
 
@@ -90,11 +91,11 @@ async function fetchArtisans() {
                     <td><strong>${u.nom}</strong></td>
                     <td>${u.telephone}</td>
                     <td>${u.metier}</td>
-                    <td><span class="badge ${badgeClass}">${u.type_abonnement.toUpperCase()}</span></td>
+                    <td><span class="${badgeClass}">${u.type_abonnement.toUpperCase()}</span></td>
                     <td>${reqLabel}</td>
                     <td>
-                        <button class="btn btn-secondary" onclick="openGrantModal('${u.id}', '${u.nom}')">
-                            ➕ Prolonger Pass
+                        <button class="btn btn-sm btn-outline-primary" onclick="openGrantModal('${u.id}', '${u.nom}')">
+                            <i class="iconoir-plus-circle me-1"></i> Prolonger Pass
                         </button>
                     </td>
                 </tr>
@@ -109,11 +110,16 @@ async function fetchArtisans() {
 function openGrantModal(userId, userName) {
     selectedUserIdForGrant = userId;
     document.getElementById('modal-user-info').textContent = `Artisan : ${userName} (ID: ${userId})`;
-    document.getElementById('modal-grant').classList.add('active');
+    if (!grantModal) {
+        grantModal = new bootstrap.Modal(document.getElementById('modal-grant'));
+    }
+    grantModal.show();
 }
 
 function closeModal() {
-    document.getElementById('modal-grant').classList.remove('active');
+    if (grantModal) {
+        grantModal.hide();
+    }
 }
 
 async function submitGrantPass() {
@@ -143,17 +149,19 @@ async function fetchDocuments() {
 
         data.documents.forEach(d => {
             docList.innerHTML += `
-                <div class="kpi-card" style="margin-bottom: 12px;">
-                    <div class="kpi-header">
-                        <strong>📄 ${d.filename}</strong>
-                        <span class="badge badge-success">${d.metier}</span>
+                <div class="card mb-3 shadow-none border">
+                    <div class="card-body p-3">
+                        <div class="d-flex justify-content-between align-items-center mb-2">
+                            <span class="fw-semibold text-truncate" style="max-width: 70%;"><i class="iconoir-paste-clipboard me-1 text-primary"></i> ${d.filename}</span>
+                            <span class="badge bg-success-subtle text-success">${d.metier}</span>
+                        </div>
+                        <p class="text-muted mb-3" style="font-size: 11px;">
+                            ${d.chunks_count} chunks vectoriels • Ingéré le ${d.date_ingestion}
+                        </p>
+                        <button class="btn btn-sm btn-outline-danger" onclick="deleteDoc('${d.id}')">
+                            <i class="iconoir-trash me-1"></i> Supprimer de Qdrant
+                        </button>
                     </div>
-                    <div style="font-size: 12px; color: var(--text-secondary); margin-top: 8px;">
-                        ${d.chunks_count} chunks vectoriels • Ingéré le ${d.date_ingestion}
-                    </div>
-                    <button class="btn btn-secondary" style="margin-top: 10px; font-size: 11px; padding: 4px 8px;" onclick="deleteDoc('${d.id}')">
-                        🗑️ Supprimer de Qdrant
-                    </button>
                 </div>
             `;
         });
@@ -177,6 +185,7 @@ async function deleteDoc(docId) {
 // 4. Upload PDF Form Handler
 function initUploadForm() {
     const form = document.getElementById('upload-form');
+    if (!form) return;
     form.addEventListener('submit', async (e) => {
         e.preventDefault();
         const fileInput = document.getElementById('pdf-file-input');
@@ -218,7 +227,7 @@ async function fetchTransactions() {
         tbody.innerHTML = '';
 
         data.transactions.forEach(t => {
-            const badgeClass = t.statut === 'ACCEPTED' ? 'badge-success' : 'badge-danger';
+            const badgeClass = t.statut === 'ACCEPTED' ? 'badge bg-success-subtle text-success' : 'badge bg-danger-subtle text-danger';
             tbody.innerHTML += `
                 <tr>
                     <td><strong>${t.id}</strong></td>
@@ -226,7 +235,7 @@ async function fetchTransactions() {
                     <td>${t.artisan}</td>
                     <td><strong>${t.montant.toLocaleString()} ${t.devise}</strong></td>
                     <td>${t.operateur}</td>
-                    <td><span class="badge ${badgeClass}">${t.statut}</span></td>
+                    <td><span class="${badgeClass}">${t.statut}</span></td>
                     <td>${new Date(t.timestamp).toLocaleTimeString()}</td>
                 </tr>
             `;
@@ -262,7 +271,7 @@ async function sendSimulatedChat() {
         messages.innerHTML += `<div class="msg assistant">${data.reponse.replace(/\n/g, '<br>')}</div>`;
         messages.scrollTop = messages.scrollHeight;
     } catch (err) {
-        messages.innerHTML += `<div class="msg assistant" style="color: var(--danger)">Erreur de génération RAG</div>`;
+        messages.innerHTML += `<div class="msg assistant text-danger">Erreur de génération RAG</div>`;
     }
 }
 
@@ -276,7 +285,10 @@ Tu es l'Assistant Expert de ProsArtisan (maçons, électriciens, plombiers, menu
 3. COMPRÉHENSION MULTILINGUE : Français, Nouchi (argot de chantier), Dioula, Baoulé, Bété.
 4. SÉCURITÉ & FORMATAGE : Étapes numérotées, dosages précis.
     `;
-    document.getElementById('prompt-code-block').textContent = promptText;
+    const promptBlock = document.getElementById('prompt-code-block');
+    if (promptBlock) {
+        promptBlock.textContent = promptText;
+    }
 }
 
 // Fetch System Logs
@@ -285,7 +297,9 @@ async function fetchLogs() {
         const res = await fetch('/api/admin/logs');
         const data = await res.json();
         const logsConsole = document.getElementById('logs-console');
-        logsConsole.innerHTML = data.logs.map(l => `[${l.timestamp}] [${l.level}] ${l.event}`).join('<br>');
+        if (logsConsole) {
+            logsConsole.innerHTML = data.logs.map(l => `[${l.timestamp}] [${l.level}] ${l.event}`).join('<br>');
+        }
     } catch (err) {
         console.error('Erreur chargement logs:', err);
     }
