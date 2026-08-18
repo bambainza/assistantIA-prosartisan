@@ -5,10 +5,12 @@ Assistant IA conversationnel pour artisans professionnels.
 Architecture RAG + Freemium + Mobile Money.
 """
 
+import os
 from contextlib import asynccontextmanager
 
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.staticfiles import StaticFiles
 
 from app.db.init_db import init_db
 from app.routers import admin, chat, health, payment, quota
@@ -47,6 +49,11 @@ app.include_router(chat.router)
 app.include_router(payment.router)
 app.include_router(quota.router)
 app.include_router(admin.router)
+
+# ── Back-Office Admin Frontend ──
+admin_web_dir = os.path.join(os.path.dirname(__file__), "..", "admin_web")
+if os.path.exists(admin_web_dir):
+    app.mount("/admin", StaticFiles(directory=admin_web_dir, html=True), name="admin")
 
 
 @app.get("/", tags=["Root"])

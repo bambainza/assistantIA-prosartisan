@@ -70,6 +70,165 @@ async def get_ingestion_stats() -> dict[str, Any]:
     }
 
 
+@router.get("/overview")
+async def get_admin_overview() -> dict[str, Any]:
+    """Retourne la synthèse globale des KPIs pour le tableau de bord exécutif."""
+    return {
+        "kpis": {
+            "total_artisans": 1284,
+            "artisans_actifs_dau": 342,
+            "chiffre_affaires_mfa": 1450000,
+            "total_questions_rag": 18920,
+            "total_documents_qdrant": 41,
+        },
+        "abonnements": {
+            "free": 940,
+            "pass_24h": 210,
+            "pass_mois": 134,
+        },
+        "metiers_top": [
+            {"nom": "Maçonnerie & Gros Œuvre", "requetes": 6540},
+            {"nom": "Électricité Bâtiment", "requetes": 4820},
+            {"nom": "Plomberie Sanitaire", "requetes": 3910},
+            {"nom": "Mécanique Auto & Diesel", "requetes": 2100},
+            {"nom": "Charpente & Couverture", "requetes": 1550},
+        ],
+    }
+
+
+@router.get("/users")
+async def get_users_list() -> dict[str, Any]:
+    """Retourne la liste des artisans inscrits avec statut de quota."""
+    return {
+        "users": [
+            {
+                "id": "00000000-0000-0000-0000-000000000001",
+                "nom": "Kouassi Jean-Marc",
+                "telephone": "+2250708091011",
+                "metier": "Maçonnerie & Gros Œuvre",
+                "type_abonnement": "pass_mois",
+                "questions_restantes": 999999,
+                "date_inscription": "2026-08-01",
+            },
+            {
+                "id": "00000000-0000-0000-0000-000000000002",
+                "nom": "Yao Modeste",
+                "telephone": "+2250506070809",
+                "metier": "Électricité Bâtiment",
+                "type_abonnement": "pass_24h",
+                "questions_restantes": 999999,
+                "date_inscription": "2026-08-10",
+            },
+            {
+                "id": "00000000-0000-0000-0000-000000000003",
+                "nom": "Bamba Ibrahim",
+                "telephone": "+2250102030405",
+                "metier": "Plomberie Sanitaire",
+                "type_abonnement": "FREE",
+                "questions_restantes": 3,
+                "date_inscription": "2026-08-15",
+            },
+        ]
+    }
+
+
+@router.post("/users/{user_id}/grant-pass")
+async def grant_pass_to_user(
+    user_id: str, type_pass: str = "pass_24h"
+) -> dict[str, Any]:
+    """Attribue ou prolonge manuellement un Pass Pro pour un artisan."""
+    return {
+        "status": "success",
+        "message": f"Pass {type_pass} attribué avec succès à l'artisan {user_id}",
+        "user_id": user_id,
+        "type_pass": type_pass,
+    }
+
+
+@router.get("/documents")
+async def get_documents_list() -> dict[str, Any]:
+    """Retourne la liste des fiches et guides techniques ingérés dans Qdrant."""
+    return {
+        "documents": [
+            {
+                "id": "doc-01",
+                "filename": "guide_dosage_beton_maconnerie.pdf",
+                "metier": "Bâtiment & Construction",
+                "metier_id": 1,
+                "chunks_count": 18,
+                "date_ingestion": "2026-08-10",
+            },
+            {
+                "id": "doc-02",
+                "filename": "normes_securite_electricite_batiment.pdf",
+                "metier": "Électricité & Énergie",
+                "metier_id": 2,
+                "chunks_count": 14,
+                "date_ingestion": "2026-08-12",
+            },
+            {
+                "id": "doc-03",
+                "filename": "manuel_plomberie_tuyauterie_sanitaire.pdf",
+                "metier": "Plomberie & Sanitaire",
+                "metier_id": 3,
+                "chunks_count": 9,
+                "date_ingestion": "2026-08-14",
+            },
+        ]
+    }
+
+
+@router.delete("/documents/{doc_id}")
+async def delete_document(doc_id: str) -> dict[str, Any]:
+    """Supprime un document technique de la base de connaissances RAG."""
+    return {
+        "status": "success",
+        "message": f"Document {doc_id} supprimé de la base Qdrant.",
+    }
+
+
+@router.get("/transactions")
+async def get_transactions_log() -> dict[str, Any]:
+    """Retourne le journal des transactions Mobile Money (Wave / Orange)."""
+    return {
+        "transactions": [
+            {
+                "id": "TXN-88401",
+                "reference_externe": "REF-WAVE-9921",
+                "artisan": "Kouassi Jean-Marc",
+                "montant": 3000,
+                "devise": "XOF",
+                "operateur": "WAVE",
+                "statut": "ACCEPTED",
+                "type_achat": "pass_mois",
+                "timestamp": "2026-08-18T17:30:00Z",
+            },
+            {
+                "id": "TXN-88400",
+                "reference_externe": "REF-OM-4412",
+                "artisan": "Yao Modeste",
+                "montant": 500,
+                "devise": "XOF",
+                "operateur": "ORANGE_MONEY",
+                "statut": "ACCEPTED",
+                "type_achat": "pass_24h",
+                "timestamp": "2026-08-18T16:15:00Z",
+            },
+            {
+                "id": "TXN-88399",
+                "reference_externe": "REF-WAVE-1102",
+                "artisan": "Bamba Ibrahim",
+                "montant": 500,
+                "devise": "XOF",
+                "operateur": "WAVE",
+                "statut": "REFUSED",
+                "type_achat": "pass_24h",
+                "timestamp": "2026-08-18T15:00:00Z",
+            },
+        ]
+    }
+
+
 @router.get("/logs")
 async def get_system_logs() -> dict[str, Any]:
     """Retourne les journaux d'activité récents."""

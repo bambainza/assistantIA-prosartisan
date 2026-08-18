@@ -1,0 +1,310 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>ProsArtisan IA — Console d'Administration</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="/admin/styles.css">
+</head>
+<body>
+    <div class="app-layout">
+        <!-- Sidebar Navigation -->
+        <aside class="sidebar">
+            <div class="brand">
+                <div class="logo-icon">👷‍♂️</div>
+                <div class="brand-text">
+                    <span class="title">ProsArtisan</span>
+                    <span class="badge-tag">ADMIN PRO</span>
+                </div>
+            </div>
+
+            <nav class="nav-menu">
+                <button class="nav-item active" data-tab="tab-overview">
+                    <span class="icon">📊</span>
+                    <span>Tableau de bord</span>
+                </button>
+                <button class="nav-item" data-tab="tab-artisans">
+                    <span class="icon">🛠️</span>
+                    <span>Artisans & Quotas</span>
+                </button>
+                <button class="nav-item" data-tab="tab-ingestion">
+                    <span class="icon">📄</span>
+                    <span>Ingestion RAG PDF</span>
+                </button>
+                <button class="nav-item" data-tab="tab-payments">
+                    <span class="icon">💳</span>
+                    <span>Paiements Mobile Money</span>
+                </button>
+                <button class="nav-item" data-tab="tab-playground">
+                    <span class="icon">🧪</span>
+                    <span>RAG & Vision Studio</span>
+                </button>
+                <button class="nav-item" data-tab="tab-logs">
+                    <span class="icon">📋</span>
+                    <span>Journaux System</span>
+                </button>
+            </nav>
+
+            <div class="sidebar-footer">
+                <div class="status-indicator">
+                    <span class="dot green"></span>
+                    <span>API v0.1.0 • En ligne</span>
+                </div>
+            </div>
+        </aside>
+
+        <!-- Main Content Area -->
+        <main class="main-content">
+            <!-- Header Bar -->
+            <header class="top-header">
+                <h1 id="page-title">Tableau de bord exécutif</h1>
+                <div class="header-actions">
+                    <button class="btn btn-secondary" onclick="refreshDashboard()">
+                        <span class="icon">🔄</span> Actualiser
+                    </button>
+                    <div class="user-profile">
+                        <span class="avatar">A</span>
+                        <span class="name">Administrateur</span>
+                    </div>
+                </div>
+            </header>
+
+            <!-- Tab 1: Overview -->
+            <section id="tab-overview" class="tab-page active">
+                <div class="kpi-grid">
+                    <div class="kpi-card">
+                        <div class="kpi-header">
+                            <span class="kpi-title">Artisans Inscrits</span>
+                            <span class="kpi-icon">👥</span>
+                        </div>
+                        <div class="kpi-value" id="kpi-artisans">1,284</div>
+                        <div class="kpi-sub positive">+12% cette semaine</div>
+                    </div>
+                    <div class="kpi-card">
+                        <div class="kpi-header">
+                            <span class="kpi-title">Actifs Aujourd'hui (DAU)</span>
+                            <span class="kpi-icon">⚡</span>
+                        </div>
+                        <div class="kpi-value" id="kpi-dau">342</div>
+                        <div class="kpi-sub positive">26.6% d'engagement</div>
+                    </div>
+                    <div class="kpi-card">
+                        <div class="kpi-header">
+                            <span class="kpi-title">Chiffre d'Affaires</span>
+                            <span class="kpi-icon">💰</span>
+                        </div>
+                        <div class="kpi-value" id="kpi-ca">1,450,000 F</div>
+                        <div class="kpi-sub">Mobile Money XOF</div>
+                    </div>
+                    <div class="kpi-card">
+                        <div class="kpi-header">
+                            <span class="kpi-title">Questions RAG Traitées</span>
+                            <span class="kpi-icon">🤖</span>
+                        </div>
+                        <div class="kpi-value" id="kpi-questions">18,920</div>
+                        <div class="kpi-sub positive">99.4% Zéro Hallucination</div>
+                    </div>
+                </div>
+
+                <div class="dashboard-grid">
+                    <div class="panel">
+                        <h3>Volume de requêtes par Métier Top</h3>
+                        <div class="bar-chart-list" id="top-metiers-list">
+                            <!-- Injected via JS -->
+                        </div>
+                    </div>
+
+                    <div class="panel">
+                        <h3>Répartition des Abonnements</h3>
+                        <div class="sub-distribution">
+                            <div class="dist-item">
+                                <span class="dist-label">Pass Mensuel Pro (3000 F)</span>
+                                <div class="progress-bar"><div class="fill" style="width: 45%;"></div></div>
+                                <span class="dist-val">134</span>
+                            </div>
+                            <div class="dist-item">
+                                <span class="dist-label">Pass 24H Urgence (500 F)</span>
+                                <div class="progress-bar"><div class="fill accent" style="width: 65%;"></div></div>
+                                <span class="dist-val">210</span>
+                            </div>
+                            <div class="dist-item">
+                                <span class="dist-label">Pass Gratuit (5 q/jour)</span>
+                                <div class="progress-bar"><div class="fill muted" style="width: 85%;"></div></div>
+                                <span class="dist-val">940</span>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </section>
+
+            <!-- Tab 2: Artisans & Quotas -->
+            <section id="tab-artisans" class="tab-page">
+                <div class="panel-header">
+                    <h2>Gestion des Artisans et Crédits</h2>
+                    <input type="text" class="search-input" placeholder="Rechercher par nom, téléphone, métier..." id="search-artisan">
+                </div>
+
+                <div class="table-container">
+                    <table class="data-table">
+                        <thead>
+                            <tr>
+                                <th>Artisan</th>
+                                <th>Téléphone</th>
+                                <th>Métier</th>
+                                <th>Abonnement</th>
+                                <th>Questions Restantes</th>
+                                <th>Actions</th>
+                            </tr>
+                        </thead>
+                        <tbody id="artisans-table-body">
+                            <!-- Injected via JS -->
+                        </tbody>
+                    </table>
+                </div>
+            </section>
+
+            <!-- Tab 3: Ingestion RAG PDF -->
+            <section id="tab-ingestion" class="tab-page">
+                <div class="ingestion-layout">
+                    <div class="panel upload-panel">
+                        <h3>Ingérer une nouvelle fiche technique</h3>
+                        <form id="upload-form" class="upload-form">
+                            <div class="drop-zone" id="drop-zone">
+                                <span class="drop-icon">📁</span>
+                                <p>Glissez-déposez votre document <strong>PDF</strong> ici</p>
+                                <span class="drop-sub">ou cliquez pour sélectionner un fichier</span>
+                                <input type="file" id="pdf-file-input" accept=".pdf" required>
+                            </div>
+
+                            <div class="form-grid">
+                                <div class="form-group">
+                                    <label for="metier_id">Métier Cible</label>
+                                    <select id="metier_id" required>
+                                        <option value="1">Bâtiment & Construction (Gros œuvre)</option>
+                                        <option value="2">Électricité & Énergie</option>
+                                        <option value="3">Plomberie & Sanitaire</option>
+                                        <option value="4">Mécanique & Automobile</option>
+                                    </select>
+                                </div>
+
+                                <div class="form-group">
+                                    <label for="type_document">Type de Document</label>
+                                    <select id="type_document" required>
+                                        <option value="guide_technique">Guide / Fiche Technique</option>
+                                        <option value="norme_securite">Norme de Sécurité</option>
+                                        <option value="manuel_maintenance">Manuel de Maintenance</option>
+                                    </select>
+                                </div>
+                            </div>
+
+                            <button type="submit" class="btn btn-primary" id="btn-submit-upload">
+                                🚀 Lancer l'ingestion vectorielle (Qdrant)
+                            </button>
+                        </form>
+                    </div>
+
+                    <div class="panel docs-panel">
+                        <h3>Base de Connaissances Actuelle (Qdrant)</h3>
+                        <div class="doc-list" id="documents-list">
+                            <!-- Injected via JS -->
+                        </div>
+                    </div>
+                </div>
+            </section>
+
+            <!-- Tab 4: Payments Mobile Money -->
+            <section id="tab-payments" class="tab-page">
+                <div class="panel">
+                    <div class="panel-header">
+                        <h2>Journal des Transactions Mobile Money (Wave / Orange)</h2>
+                        <span class="badge badge-success">Signatures HMAC SHA-256 Actives</span>
+                    </div>
+
+                    <div class="table-container">
+                        <table class="data-table">
+                            <thead>
+                                <tr>
+                                    <th>ID Transaction</th>
+                                    <th>Référence Ext.</th>
+                                    <th>Artisan</th>
+                                    <th>Montant</th>
+                                    <th>Opérateur</th>
+                                    <th>Statut</th>
+                                    <th>Horodatage</th>
+                                </tr>
+                            </thead>
+                            <tbody id="payments-table-body">
+                                <!-- Injected via JS -->
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+            </section>
+
+            <!-- Tab 5: RAG & Vision Studio Playground -->
+            <section id="tab-playground" class="tab-page">
+                <div class="playground-layout">
+                    <div class="panel chat-simulator">
+                        <h3>Simulateur Chat & Vision (Artisan)</h3>
+                        <div class="chat-messages" id="chat-messages">
+                            <div class="msg assistant">
+                                Bonjour chef ! Posez votre question technique ou envoyez une photo de chantier.
+                            </div>
+                        </div>
+
+                        <div class="chat-controls">
+                            <input type="text" id="chat-input-q" placeholder="Ex: Comment bien réussir un mortier de pose ?">
+                            <input type="text" id="chat-input-img" placeholder="URL photo optionnelle (GPT-4o Vision)">
+                            <button class="btn btn-primary" onclick="sendSimulatedChat()">Envoyer</button>
+                        </div>
+                    </div>
+
+                    <div class="panel prompt-inspector">
+                        <h3>Prompt Système & Directives Nouchi</h3>
+                        <div class="code-block" id="prompt-code-block">
+                            <!-- Injected via JS -->
+                        </div>
+                    </div>
+                </div>
+            </section>
+
+            <!-- Tab 6: System Logs -->
+            <section id="tab-logs" class="tab-page">
+                <div class="panel">
+                    <h3>Journaux d'activité récents</h3>
+                    <div class="logs-console" id="logs-console">
+                        <!-- Injected via JS -->
+                    </div>
+                </div>
+            </section>
+        </main>
+    </div>
+
+    <!-- Modal Grant Pass -->
+    <div class="modal-overlay" id="modal-grant">
+        <div class="modal-content">
+            <h3>Attribuer un Pass Pro</h3>
+            <p id="modal-user-info">Artisan : ...</p>
+            
+            <div class="form-group">
+                <label for="select-type-pass">Choisir le Type de Pass</label>
+                <select id="select-type-pass">
+                    <option value="pass_24h">Pass 24H Urgence (500 F)</option>
+                    <option value="pass_mois">Pass Mensuel Pro (3000 F)</option>
+                    <option value="pack_50_requetes">Pack 50 Requêtes (1500 F)</option>
+                </select>
+            </div>
+
+            <div class="modal-actions">
+                <button class="btn btn-secondary" onclick="closeModal()">Annuler</button>
+                <button class="btn btn-primary" onclick="submitGrantPass()">Confirmer l'attribution</button>
+            </div>
+        </div>
+    </div>
+
+    <script src="/admin/app.js"></script>
+</body>
+</html>
