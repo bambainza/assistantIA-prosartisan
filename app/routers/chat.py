@@ -22,6 +22,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.db.session import get_db
 from app.schemas.chat import ChatResponse, WebSocketMessage
 from app.schemas.quota import QuotaEpuiseResponse
+from app.services.chat_history_service import chat_history_service
 from app.services.quota_service import quota_service
 from app.services.rag_service import rag_service
 
@@ -30,6 +31,7 @@ router = APIRouter(prefix="/api", tags=["Chat IA Multimodal"])
 
 class ExtendedChatRequest(BaseModel):
     user_id: uuid.UUID | None = None
+    conversation_id: uuid.UUID | None = None
     question: str
     metier_id: int | None = None
     image_url: str | None = None  # Photo de chantier (URL ou Base64)
@@ -60,11 +62,56 @@ async def chat_endpoint(
         image_url=payload.image_url,
     )
 
+    # 3. Enregistrement de l'historique (avec fallback gracieux en cas d'erreur DB/autonome)
+    active_conv_id = payload.conversation_id
+    try:
+        if not active_conv_id:
+            title_preview = (
+                payload.question[:30] + "..."
+                if len(payload.question) > 30
+                else payload.question
+            )
+            new_conv = await chat_history_service.create_conversation(
+                db=db, user_id=user_id, title=title_preview
+            )
+            active_conv_id = new_conv.id
+        else:
+            conv = await chat_history_service.get_conversation_with_messages(
+                db=db, conversation_id=active_conv_id
+            )
+            if not conv:
+                raise HTTPException(
+                    status_code=status.HTTP_404_NOT_FOUND,
+                    detail="Discussion non trouvée.",
+                )
+
+        # Enregistrer le message de l'artisan
+        await chat_history_service.add_message_to_conversation(
+            db=db,
+            conversation_id=active_conv_id,
+            role="user",
+            content=payload.question,
+            image_url=payload.image_url,
+        )
+
+        # Enregistrer la réponse de l'assistant
+        await chat_history_service.add_message_to_conversation(
+            db=db,
+            conversation_id=active_conv_id,
+            role="assistant",
+            content=rag_result["reponse"],
+        )
+    except HTTPException:
+        raise
+    except Exception:
+        pass
+
     quota_info = await quota_service.get_user_quota_info(db=db, user_id=user_id)
 
     return ChatResponse(
         reponse=rag_result["reponse"],
         quota_info=quota_info,
+        conversation_id=active_conv_id,
     )
 
 
