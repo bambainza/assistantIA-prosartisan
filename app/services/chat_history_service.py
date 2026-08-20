@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 import uuid
-from typing import Sequence
+from collections.abc import Sequence
 
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -27,14 +27,14 @@ class ChatHistoryService:
         title: str | None = None,
     ) -> Conversation:
         """Crée une nouvelle discussion pour un artisan."""
-        from datetime import datetime
+        from datetime import UTC, datetime
         title_val = title or "Nouvelle discussion"
         conversation = Conversation(
             id=uuid.uuid4(),
             user_id=user_id,
             title=title_val,
-            created_at=datetime.now(),
-            updated_at=datetime.now(),
+            created_at=datetime.now(UTC),
+            updated_at=datetime.now(UTC),
             messages=[],
         )
         try:
@@ -69,20 +69,57 @@ class ChatHistoryService:
         self,
         db: AsyncSession,
         user_id: uuid.UUID,
+        q: str | None = None,
     ) -> Sequence[Conversation]:
-        """Récupère toutes les discussions d'un artisan (triées par mise à jour récente)."""
+        """Récupère toutes les discussions d'un artisan (triées par mise à jour récente), filtrées si q est fourni."""
         try:
-            stmt = (
-                select(Conversation)
-                .where(Conversation.user_id == user_id)
-                .order_by(Conversation.updated_at.desc())
-            )
+            if q:
+                from sqlalchemy import or_
+
+                from app.models.message import Message
+                stmt = (
+                    select(Conversation)
+                    .outerjoin(Message)
+                    .where(Conversation.user_id == user_id)
+                    .where(
+                        or_(
+                            Conversation.title.ilike(f"%{q}%"),
+                            Message.content.ilike(f"%{q}%")
+                        )
+                    )
+                    .distinct()
+                    .order_by(Conversation.updated_at.desc())
+                )
+            else:
+                stmt = (
+                    select(Conversation)
+                    .where(Conversation.user_id == user_id)
+                    .order_by(Conversation.updated_at.desc())
+                )
             res = await db.execute(stmt)
             return res.scalars().all()
         except Exception:
             # Fallback list from in-memory DB
+            results = [c for c in self._fallback_db.values() if c.user_id == user_id]
+            if q:
+                q_lower = q.lower()
+                filtered = []
+                for c in results:
+                    if q_lower in c.title.lower():
+                        filtered.append(c)
+                        continue
+                    has_msg = False
+                    if hasattr(c, "messages") and c.messages:
+                        for m in c.messages:
+                            if q_lower in m.content.lower():
+                                has_msg = True
+                                break
+                    if has_msg:
+                        filtered.append(c)
+                results = filtered
+
             return sorted(
-                [c for c in self._fallback_db.values() if c.user_id == user_id],
+                results,
                 key=lambda x: x.updated_at,
                 reverse=True,
             )
@@ -118,14 +155,14 @@ class ChatHistoryService:
         image_url: str | None = None,
     ) -> Message:
         """Ajoute un message (utilisateur ou assistant) à une discussion existante."""
-        from datetime import datetime
+        from datetime import UTC, datetime
         message = Message(
             id=uuid.uuid4(),
             conversation_id=conversation_id,
             role=role,
             content=content,
             image_url=image_url,
-            created_at=datetime.now(),
+            created_at=datetime.now(UTC),
         )
         try:
             db.add(message)
@@ -134,7 +171,7 @@ class ChatHistoryService:
             res = await db.execute(select_stmt)
             conversation = res.scalar_one_or_none()
             if conversation:
-                conversation.updated_at = datetime.now()
+                conversation.updated_at = datetime.now(UTC)
             await db.commit()
             try:
                 await db.refresh(message)
@@ -147,8 +184,40 @@ class ChatHistoryService:
                 if not hasattr(conv, 'messages') or conv.messages is None:
                     conv.messages = []
                 conv.messages.append(message)
-                conv.updated_at = datetime.now()
+                conv.updated_at = datetime.now(UTC)
         return message
+
+    async def rename_conversation(
+        self,
+        db: AsyncSession,
+        conversation_id: uuid.UUID,
+        new_title: str,
+    ) -> Conversation | None:
+        """Modifie le titre d'une discussion."""
+        try:
+            stmt = select(Conversation).where(Conversation.id == conversation_id)
+            res = await db.execute(stmt)
+            conversation = res.scalar_one_or_none()
+            if conversation:
+                conversation.title = new_title
+                from datetime import UTC, datetime
+                conversation.updated_at = datetime.now(UTC)
+                await db.commit()
+                try:
+                    await db.refresh(conversation)
+                except Exception:
+                    pass
+                return conversation
+        except Exception:
+            pass
+
+        if conversation_id in self._fallback_db:
+            conv = self._fallback_db[conversation_id]
+            conv.title = new_title
+            from datetime import UTC, datetime
+            conv.updated_at = datetime.now(UTC)
+            return conv
+        return None
 
 
 chat_history_service = ChatHistoryService()

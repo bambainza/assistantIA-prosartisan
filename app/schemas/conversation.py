@@ -43,3 +43,9 @@ class ConversationCreate(BaseModel):
     """Corps de requête pour initialiser une discussion."""
 
     title: str | None = None
+
+
+class ConversationUpdate(BaseModel):
+    """Corps de requête pour modifier le titre d'une discussion."""
+
+    title: str

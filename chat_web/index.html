@@ -9,6 +9,13 @@
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=Outfit:wght@400;500;600;700&display=swap" rel="stylesheet">
     <link rel="stylesheet" href="/chat/styles.css">
+    <!-- Google Identity Services client library -->
+    <script src="https://accounts.google.com/gsi/client" async defer></script>
+    <!-- Marked Markdown Parser -->
+    <script src="https://cdn.jsdelivr.net/npm/marked/marked.min.js"></script>
+    <!-- Highlight.js Syntax Highlighter -->
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/styles/github-dark.min.css">
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/highlight.min.js"></script>
 </head>
 <body>
 
@@ -30,6 +37,13 @@
             <!-- Conversations History List -->
             <div class="sidebar-history-container">
                 <div class="history-label">Discussions récentes</div>
+                <!-- Search bar -->
+                <div class="sidebar-search-container" id="sidebar-search-container" style="padding: 0 12px 12px 12px; display: none;">
+                    <div style="position: relative;">
+                        <input type="text" id="sidebar-search-input" placeholder="Rechercher un chat..." oninput="handleSidebarSearch()" style="width: 100%; padding: 8px 12px 8px 32px; border: 1px solid rgba(255,255,255,0.1); border-radius: 20px; background: rgba(255,255,255,0.05); color: var(--text-main); font-size: 13px; outline: none; transition: border-color 0.2s; box-sizing: border-box;">
+                        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="position: absolute; left: 10px; top: 11px; color: var(--text-muted);"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
+                    </div>
+                </div>
                 <div class="history-empty-state" id="history-empty">
                     Connectez-vous pour enregistrer vos discussions.
                 </div>
@@ -55,19 +69,30 @@
                     </a>
                 </div>
 
+                <!-- Quota status indicator -->
+                <div class="quota-sidebar-card" id="quota-sidebar-card" style="background: rgba(255, 255, 255, 0.05); padding: 12px; border-radius: 12px; margin-bottom: 12px; font-size: 13px;">
+                    <div style="display: flex; justify-content: space-between; margin-bottom: 6px; font-weight: 500;">
+                        <span>Crédits restants :</span>
+                        <span id="quota-text-lbl" style="color: var(--primary); font-weight: bold;">5 / 5</span>
+                    </div>
+                    <div style="background: rgba(255, 255, 255, 0.1); height: 6px; border-radius: 3px; overflow: hidden;">
+                        <div id="quota-progress-bar" style="background: var(--primary); height: 100%; width: 100%; transition: width 0.3s ease;"></div>
+                    </div>
+                </div>
+ 
                 <!-- Call to action block for unlogged users -->
                 <div class="cta-sidebar-login" id="cta-sidebar-login">
                     <h6>Obtenez des réponses personnalisées</h6>
                     <p>Connectez-vous pour obtenir des réponses sur la base des chats enregistrés, créer des images et charger des fichiers.</p>
                     <button class="btn btn-primary btn-sm btn-block" onclick="openLoginModal()">Se connecter</button>
                 </div>
-
+ 
                 <!-- User profile item in footer (when logged in) -->
                 <div class="logged-user-profile hidden" id="user-profile-footer">
                     <div class="user-avatar" id="user-avatar-lbl">U</div>
                     <div class="user-info">
                         <span class="user-name" id="user-email-lbl">artisan@email.com</span>
-                        <span class="user-badge">Artisan Pro</span>
+                        <span class="user-badge" id="user-plan-badge" style="background: var(--primary); color: #000; padding: 2px 6px; border-radius: 10px; font-size: 10px; font-weight: bold; margin-top: 2px; display: inline-block;">Artisan Pro</span>
                     </div>
                     <button class="logout-btn" onclick="logout()" title="Se déconnecter">
                         <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"/><polyline points="16 17 21 12 16 7"/><line x1="21" y1="12" x2="9" y2="12"/></svg>
@@ -75,7 +100,7 @@
                 </div>
             </div>
         </aside>
-
+ 
         <!-- Main Chat Panel (Right Panel) -->
         <main class="main-panel">
             
@@ -87,13 +112,21 @@
                     </button>
                     <div class="brand-title">ProsArtisan IA <span class="model-badge">GPT-4o / RAG</span></div>
                 </div>
-
-                <div class="header-right" id="auth-buttons-header">
-                    <button class="btn btn-link text-white" onclick="openLoginModal()">Se connecter</button>
-                    <button class="btn btn-primary" onclick="openLoginModal()">Inscription gratuite</button>
-                </div>
-                <div class="header-right hidden" id="user-avatar-header">
-                    <div class="header-avatar" onclick="toggleProfileDropdown()">A</div>
+ 
+                <div class="header-right" style="display: flex; align-items: center; gap: 12px;">
+                    <!-- Theme Toggle Button -->
+                    <button class="theme-toggle-btn" onclick="toggleTheme()" title="Changer de thème" style="background: none; border: none; color: var(--text-main); cursor: pointer; display: flex; align-items: center; justify-content: center; padding: 6px; border-radius: 50%; transition: background 0.2s;">
+                        <svg class="sun-icon" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="5"/><line x1="12" y1="1" x2="12" y2="3"/><line x1="12" y1="21" x2="12" y2="23"/><line x1="4.22" y1="4.22" x2="5.64" y2="5.64"/><line x1="18.36" y1="18.36" x2="19.78" y2="19.78"/><line x1="1" y1="12" x2="3" y2="12"/><line x1="21" y1="12" x2="23" y2="12"/><line x1="4.22" y1="19.78" x2="5.64" y2="18.36"/><line x1="18.36" y1="5.64" x2="19.78" y2="4.22"/></svg>
+                        <svg class="moon-icon hidden" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z"/></svg>
+                    </button>
+ 
+                    <div id="auth-buttons-header" style="display: flex; gap: 10px;">
+                        <button class="btn btn-link text-white" onclick="openLoginModal()">Se connecter</button>
+                        <button class="btn btn-primary" onclick="openLoginModal()">Inscription gratuite</button>
+                    </div>
+                    <div id="user-avatar-header" class="hidden">
+                        <div class="header-avatar">A</div>
+                    </div>
                 </div>
             </header>
 
@@ -169,26 +202,44 @@
             </div>
             
             <div class="modal-body">
-                <button class="oauth-btn" onclick="simulateOAuth('Google')">
+                <!-- Google Sign-In Native Button -->
+                <div id="google-signin-btn-container" style="margin-bottom: 12px; display: flex; justify-content: center;">
+                    <div id="google-signin-btn"></div>
+                </div>
+                
+                <button class="oauth-btn" onclick="simulateGoogleOAuth()">
                     <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><path d="M8 12h8"/></svg>
-                    Continuer avec Google
-                </button>
-                <button class="oauth-btn" onclick="simulateOAuth('Apple')">
-                    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 2a10 10 0 0 1 10 10c0 5.523-4.477 10-10 10S2 17.523 2 12A10 10 0 0 1 12 2z"/></svg>
-                    Continuer avec Apple
-                </button>
-                <button class="oauth-btn" onclick="showInputForm('phone')">
-                    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M22 16.92v3a2 2 0 0 1-2.18 2 19.79 19.79 0 0 1-8.63-3.07 19.5 19.5 0 0 1-6-6 19.79 19.79 0 0 1-3.07-8.67A2 2 0 0 1 4.11 2h3a2 2 0 0 1 2 1.72 12.84 12.84 0 0 0 .7 2.81 2 2 0 0 1-.45 2.11L8.09 9.91a16 16 0 0 0 6 6l1.27-1.27a2 2 0 0 1 2.11-.45 12.84 12.84 0 0 0 2.81.7A2 2 0 0 1 22 16.92z"/></svg>
-                    Continuer avec un numéro de téléphone
+                    Continuer avec Google (Démo)
                 </button>
                 
                 <div class="divider">
                     <span>OU</span>
                 </div>
 
-                <div class="modal-form-group">
-                    <input type="email" id="modal-email-input" placeholder="Adresse e-mail" required>
-                    <button class="btn btn-primary btn-block btn-lg" onclick="submitEmailLogin()">Continuer</button>
+                <!-- Login Form -->
+                <div id="auth-form-login" class="auth-form">
+                    <div class="modal-form-group" style="display: flex; flex-direction: column; gap: 10px;">
+                        <input type="email" id="login-email-input" placeholder="Adresse e-mail" required style="width: 100%; padding: 12px; border-radius: 8px; border: 1px solid var(--border-color); background: var(--bg-main); color: var(--text-main);">
+                        <input type="password" id="login-password-input" placeholder="Mot de passe" required style="width: 100%; padding: 12px; border-radius: 8px; border: 1px solid var(--border-color); background: var(--bg-main); color: var(--text-main);">
+                        <button class="btn btn-primary btn-block btn-lg" onclick="submitLogin()" style="width: 100%; padding: 14px; font-weight: bold; border-radius: 8px; font-size: 15px; margin-top: 10px;">Se connecter</button>
+                    </div>
+                    <p class="auth-switch-text" style="text-align: center; margin-top: 16px; font-size: 13px; color: var(--text-muted);">
+                        Pas encore de compte ? <a href="javascript:void(0);" onclick="switchAuthView('register')" style="color: var(--primary); text-decoration: none; font-weight: 600;">S'inscrire gratuitement</a>
+                    </p>
+                </div>
+
+                <!-- Registration Form -->
+                <div id="auth-form-register" class="auth-form hidden">
+                    <div class="modal-form-group" style="display: flex; flex-direction: column; gap: 10px;">
+                        <input type="text" id="register-nom-input" placeholder="Nom complet" style="width: 100%; padding: 12px; border-radius: 8px; border: 1px solid var(--border-color); background: var(--bg-main); color: var(--text-main);">
+                        <input type="email" id="register-email-input" placeholder="Adresse e-mail" required style="width: 100%; padding: 12px; border-radius: 8px; border: 1px solid var(--border-color); background: var(--bg-main); color: var(--text-main);">
+                        <input type="tel" id="register-phone-input" placeholder="Numéro de téléphone (+225...)" style="width: 100%; padding: 12px; border-radius: 8px; border: 1px solid var(--border-color); background: var(--bg-main); color: var(--text-main);">
+                        <input type="password" id="register-password-input" placeholder="Mot de passe (min. 6 caractères)" required style="width: 100%; padding: 12px; border-radius: 8px; border: 1px solid var(--border-color); background: var(--bg-main); color: var(--text-main);">
+                        <button class="btn btn-primary btn-block btn-lg" onclick="submitRegister()" style="width: 100%; padding: 14px; font-weight: bold; border-radius: 8px; font-size: 15px; margin-top: 10px;">Créer mon compte</button>
+                    </div>
+                    <p class="auth-switch-text" style="text-align: center; margin-top: 16px; font-size: 13px; color: var(--text-muted);">
+                        Déjà inscrit ? <a href="javascript:void(0);" onclick="switchAuthView('login')" style="color: var(--primary); text-decoration: none; font-weight: 600;">Se connecter</a>
+                    </p>
                 </div>
             </div>
         </div>

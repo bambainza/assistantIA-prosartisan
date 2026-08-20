@@ -12,6 +12,8 @@ class Settings(BaseSettings):
     app_env: str = "development"
     app_debug: bool = True
     app_secret_key: str = "changeme"
+    cors_allowed_origins: str = "*"
+    rate_limit_requests_per_minute: int = 60
 
     # ── JWT ──
     jwt_secret_key: str = "changeme"

@@ -6,6 +6,7 @@ Intercepte les requêtes avec le Rate Limiter & Gestionnaire de Quota (HTTP 402 
 
 from __future__ import annotations
 
+import json
 import uuid
 
 from fastapi import (
@@ -16,10 +17,12 @@ from fastapi import (
     WebSocketDisconnect,
     status,
 )
+from fastapi.responses import StreamingResponse
 from pydantic import BaseModel
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.db.session import get_db
+from app.middleware.auth import get_optional_user_id
 from app.schemas.chat import ChatResponse, WebSocketMessage
 from app.schemas.quota import QuotaEpuiseResponse
 from app.services.chat_history_service import chat_history_service
@@ -40,11 +43,11 @@ class ExtendedChatRequest(BaseModel):
 @router.post("/chat", response_model=ChatResponse)
 async def chat_endpoint(
     payload: ExtendedChatRequest,
+    current_user_id: uuid.UUID | None = Depends(get_optional_user_id),
     db: AsyncSession = Depends(get_db),
 ) -> ChatResponse:
     """Pose une question technique à l'assistant RAG (avec photo optionnelle)."""
-    # Si aucun user_id n'est fourni, on utilise un ID temporaire/demo
-    user_id = payload.user_id or uuid.UUID("00000000-0000-0000-0000-000000000001")
+    user_id = current_user_id or payload.user_id or uuid.UUID("00000000-0000-0000-0000-000000000001")
 
     # 1. Vérification et décrémentation des quotas
     allowed = await quota_service.consume_quota(db=db, user_id=user_id)
@@ -55,14 +58,26 @@ async def chat_endpoint(
             detail=epuise_detail,
         )
 
-    # 2. Génération RAG / Vision via OpenAI
+    # 2. Récupérer l'historique si la discussion existe
+    history_messages = []
+    if payload.conversation_id:
+        conv = await chat_history_service.get_conversation_with_messages(
+            db=db, conversation_id=payload.conversation_id
+        )
+        if conv and conv.messages:
+            sorted_msgs = sorted(conv.messages, key=lambda m: m.created_at)
+            for m in sorted_msgs[-10:]:
+                history_messages.append({"role": m.role, "content": m.content})
+
+    # 3. Génération RAG / Vision via OpenAI avec historique
     rag_result = await rag_service.generate_response(
         question=payload.question,
         metier_id=payload.metier_id,
         image_url=payload.image_url,
+        history=history_messages,
     )
 
-    # 3. Enregistrement de l'historique (avec fallback gracieux en cas d'erreur DB/autonome)
+    # 4. Enregistrement de l'historique (avec fallback gracieux en cas d'erreur DB/autonome)
     active_conv_id = payload.conversation_id
     try:
         if not active_conv_id:
@@ -112,7 +127,96 @@ async def chat_endpoint(
         reponse=rag_result["reponse"],
         quota_info=quota_info,
         conversation_id=active_conv_id,
+        sources=rag_result["sources"],
     )
+
+
+@router.post("/chat/stream")
+async def chat_stream_endpoint(
+    payload: ExtendedChatRequest,
+    current_user_id: uuid.UUID | None = Depends(get_optional_user_id),
+    db: AsyncSession = Depends(get_db),
+) -> StreamingResponse:
+    """Pose une question technique et retourne la réponse en streaming SSE."""
+    user_id = current_user_id or payload.user_id or uuid.UUID("00000000-0000-0000-0000-000000000001")
+
+    # 1. Vérification et décrémentation des quotas
+    allowed = await quota_service.consume_quota(db=db, user_id=user_id)
+    if not allowed:
+        raise HTTPException(
+            status_code=status.HTTP_402_PAYMENT_REQUIRED,
+            detail="Quota suffisant.",
+        )
+
+    # 2. Récupérer l'historique si la discussion existe
+    history_messages = []
+    if payload.conversation_id:
+        conv = await chat_history_service.get_conversation_with_messages(
+            db=db, conversation_id=payload.conversation_id
+        )
+        if conv and conv.messages:
+            sorted_msgs = sorted(conv.messages, key=lambda m: m.created_at)
+            for m in sorted_msgs[-10:]:
+                history_messages.append({"role": m.role, "content": m.content})
+
+    # 3. Résoudre/Créer la conversation
+    active_conv_id = payload.conversation_id
+    if not active_conv_id:
+        title_preview = (
+            payload.question[:30] + "..."
+            if len(payload.question) > 30
+            else payload.question
+        )
+        new_conv = await chat_history_service.create_conversation(
+            db=db, user_id=user_id, title=title_preview
+        )
+        active_conv_id = new_conv.id
+
+    # 4. Récupérer les sources et le générateur du RAG
+    sources, stream_generator = await rag_service.generate_response_stream(
+        question=payload.question,
+        metier_id=payload.metier_id,
+        image_url=payload.image_url,
+        history=history_messages,
+    )
+
+    async def event_generator():
+        # Yield conversation_id and sources first
+        info_data = {
+            "conversation_id": str(active_conv_id),
+            "sources": sources,
+        }
+        yield f"event: info\ndata: {json.dumps(info_data)}\n\n"
+
+        full_response = ""
+        # Récupérer le flux RAG
+        async for chunk in stream_generator:
+            full_response += chunk
+            yield f"event: chunk\ndata: {json.dumps(chunk)}\n\n"
+
+        # Enregistrer dans l'historique une fois terminé
+        try:
+            # Enregistrer le message de l'artisan
+            await chat_history_service.add_message_to_conversation(
+                db=db,
+                conversation_id=active_conv_id,
+                role="user",
+                content=payload.question,
+                image_url=payload.image_url,
+            )
+            # Enregistrer la réponse de l'assistant
+            await chat_history_service.add_message_to_conversation(
+                db=db,
+                conversation_id=active_conv_id,
+                role="assistant",
+                content=full_response,
+            )
+        except Exception:
+            pass
+
+        yield "event: end\ndata: [DONE]\n\n"
+
+    return StreamingResponse(event_generator(), media_type="text/event-stream")
 
 
 @router.websocket("/chat/ws")

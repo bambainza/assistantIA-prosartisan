@@ -29,3 +29,30 @@ async def test_rag_generate_response_mock():
     assert "reponse" in res
     assert isinstance(res["reponse"], str)
     assert len(res["reponse"]) > 0
+
+
+@pytest.mark.asyncio
+async def test_rag_generate_response_with_history():
+    """Vérifie la génération RAG avec un historique conversationnel."""
+    history = [
+        {"role": "user", "content": "J'ai besoin de conseils pour poser des dalles."},
+        {"role": "assistant", "content": "Il faut d'abord égaliser le sol."}
+    ]
+    res = await rag_service.generate_response(
+        question="Quelles dalles choisir ?",
+        metier_id=1,
+        history=history,
+    )
+    assert "reponse" in res
+    assert isinstance(res["reponse"], str)
+    assert len(res["reponse"]) > 0
+    assert "sources" in res
+
+    # Vérifier que le mode stream retourne aussi sources et générateur
+    sources, _gen = await rag_service.generate_response_stream(
+        question="Quelles dalles choisir ?",
+        metier_id=1,
+        history=history,
+    )
+    assert isinstance(sources, list)
+

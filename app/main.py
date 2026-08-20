@@ -12,8 +12,11 @@ from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
 
+from app.config import settings
 from app.db.init_db import init_db
-from app.routers import admin, chat, conversation, health, payment, quota
+from app.middleware.logging import LoggingAndRequestIdMiddleware
+from app.middleware.rate_limiter import RateLimitMiddleware
+from app.routers import admin, auth, chat, conversation, health, payment, quota
 
 
 @asynccontextmanager
@@ -34,10 +37,22 @@ app = FastAPI(
     lifespan=lifespan,
 )
 
-# ── CORS (autoriser l'app mobile Flutter) ──
+# ── Logging et Request ID Middleware ──
+app.add_middleware(LoggingAndRequestIdMiddleware)
+
+# ── Rate Limiting Middleware ──
+app.add_middleware(RateLimitMiddleware)
+
+# ── CORS Restreint ──
+cors_origins = (
+    [origin.strip() for origin in settings.cors_allowed_origins.split(",") if origin.strip()]
+    if settings.cors_allowed_origins != "*"
+    else ["*"]
+)
+
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],  # À restreindre en production
+    allow_origins=cors_origins,
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
@@ -45,6 +60,7 @@ app.add_middleware(
 
 # ── Routers ──
 app.include_router(health.router)
+app.include_router(auth.router)
 app.include_router(chat.router)
 app.include_router(conversation.router)
 app.include_router(payment.router)

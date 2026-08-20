@@ -42,3 +42,23 @@ async def test_chat_endpoint_with_image():
     assert response.status_code == 200
     data = response.json()
     assert "reponse" in data
+
+
+@pytest.mark.asyncio
+async def test_chat_stream_endpoint_success():
+    """POST /api/chat/stream retourne une réponse SSE en streaming."""
+    payload = {
+        "user_id": str(uuid.uuid4()),
+        "question": "Comment doser le mortier ?",
+        "metier_id": 1,
+    }
+    transport = ASGITransport(app=app)
+    async with AsyncClient(transport=transport, base_url="http://test") as client:
+        response = await client.post("/api/chat/stream", json=payload)
+
+    assert response.status_code == 200
+    assert "text/event-stream" in response.headers["content-type"]
+    body = response.text
+    assert "event: info" in body
+    assert "event: chunk" in body
+    assert "event: end" in body

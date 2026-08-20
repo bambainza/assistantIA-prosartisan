@@ -11,10 +11,12 @@ from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.db.session import get_db
+from app.middleware.auth import get_optional_user_id
 from app.schemas.conversation import (
     ConversationCreate,
     ConversationDetailResponse,
     ConversationResponse,
+    ConversationUpdate,
 )
 from app.services.chat_history_service import chat_history_service
 
@@ -29,10 +31,11 @@ router = APIRouter(prefix="/api/conversations", tags=["Historique Discussions"])
 async def create_conversation_endpoint(
     payload: ConversationCreate,
     user_id: uuid.UUID | None = None,
+    current_user_id: uuid.UUID | None = Depends(get_optional_user_id),
     db: AsyncSession = Depends(get_db),
 ) -> Any:
     """Crée une nouvelle discussion vide pour un artisan."""
-    uid = user_id or uuid.UUID("00000000-0000-0000-0000-000000000001")
+    uid = current_user_id or user_id or uuid.UUID("00000000-0000-0000-0000-000000000001")
     return await chat_history_service.create_conversation(
         db=db,
         user_id=uid,
@@ -42,12 +45,14 @@ async def create_conversation_endpoint(
 
 @router.get("", response_model=list[ConversationResponse])
 async def list_conversations_endpoint(
+    q: str | None = None,
     user_id: uuid.UUID | None = None,
+    current_user_id: uuid.UUID | None = Depends(get_optional_user_id),
     db: AsyncSession = Depends(get_db),
 ) -> Any:
     """Liste toutes les discussions d'un artisan (triées par la plus récente)."""
-    uid = user_id or uuid.UUID("00000000-0000-0000-0000-000000000001")
-    return await chat_history_service.list_conversations_for_user(db=db, user_id=uid)
+    uid = current_user_id or user_id or uuid.UUID("00000000-0000-0000-0000-000000000001")
+    return await chat_history_service.list_conversations_for_user(db=db, user_id=uid, q=q)
 
 
 @router.get("/{conversation_id}", response_model=ConversationDetailResponse)
@@ -87,3 +92,23 @@ async def delete_conversation_endpoint(
         "status": "success",
         "message": f"La discussion {conversation_id} a été supprimée.",
     }
+
+
+@router.patch("/{conversation_id}", response_model=ConversationResponse)
+async def rename_conversation_endpoint(
+    conversation_id: uuid.UUID,
+    payload: ConversationUpdate,
+    db: AsyncSession = Depends(get_db),
+) -> Any:
+    """Modifie le titre d'une discussion."""
+    conversation = await chat_history_service.rename_conversation(
+        db=db,
+        conversation_id=conversation_id,
+        new_title=payload.title,
+    )
+    if not conversation:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Discussion non trouvée.",
+        )
+    return conversation

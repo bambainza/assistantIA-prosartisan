@@ -101,6 +101,7 @@ class RAGService:
         question: str,
         metier_id: int | None = None,
         image_url: str | None = None,
+        history: list[dict[str, str]] | None = None,
     ) -> dict[str, Any]:
         """Génère une réponse multimodale (texte + vision si image fournie)."""
         docs = await self.search_context(query=question, metier_id=metier_id)
@@ -139,6 +140,10 @@ class RAGService:
             {"role": "system", "content": prompt_formatted}
         ]
 
+        if history:
+            for item in history:
+                messages.append({"role": item["role"], "content": item["content"]})
+
         if image_url:
             messages.append(
                 {
@@ -165,6 +170,85 @@ class RAGService:
             "reponse": answer,
             "sources": [doc["metadata"] for doc in docs if "metadata" in doc],
         }
+
+    async def generate_response_stream(
+        self,
+        question: str,
+        metier_id: int | None = None,
+        image_url: str | None = None,
+        history: list[dict[str, str]] | None = None,
+    ) -> tuple[list[dict[str, Any]], Any]:
+        """Recherche le contexte de connaissances puis retourne les fiches sources et le générateur du flux."""
+        docs = await self.search_context(query=question, metier_id=metier_id)
+        sources = [doc["metadata"] for doc in docs if "metadata" in doc]
+
+        async def _generator():
+            context_text = (
+                "\n---\n".join([doc["content"] for doc in docs if doc.get("content")])
+                if docs
+                else "Aucun document spécifique trouvé."
+            )
+
+            system_prompt_template = load_system_prompt()
+            prompt_formatted = system_prompt_template.format(
+                context=context_text,
+                question=question,
+            )
+
+            if (
+                settings.openai_api_key.startswith("sk-placeholder")
+                or settings.openai_api_key == "sk-placeholder"
+            ):
+                # Mode mock / test streaming
+                mock_reply = (
+                    f"Points clés techniques pour votre intervention :\n"
+                    f"1. Vérifiez la planéité et le niveau de la surface.\n"
+                    f"2. Respectez le dosage approprié (350 kg/m³ pour le mortier de pose).\n"
+                    f"3. Appliquez les consignes de sécurité sur le chantier.\n\n"
+                    f"(Réponse basée sur les fiches métier {metier_id if metier_id else 'général'})"
+                )
+                import asyncio
+                for word in mock_reply.split(" "):
+                    yield word + " "
+                    await asyncio.sleep(0.04)
+                return
+
+            # Construction du message utilisateur (avec support vision GPT-4o si image)
+            messages: list[dict[str, Any]] = [
+                {"role": "system", "content": prompt_formatted}
+            ]
+
+            if history:
+                for item in history:
+                    messages.append({"role": item["role"], "content": item["content"]})
+
+            if image_url:
+                messages.append(
+                    {
+                        "role": "user",
+                        "content": [
+                            {"type": "text", "text": f"Question de l'artisan: {question}"},
+                            {"type": "image_url", "image_url": {"url": image_url}},
+                        ],
+                    }
+                )
+                model_to_use = settings.llm_vision_model
+            else:
+                messages.append({"role": "user", "content": question})
+                model_to_use = settings.llm_model
+
+            completion = await self.openai_client.chat.completions.create(
+                model=model_to_use,
+                messages=messages,
+                temperature=settings.llm_temperature,
+                stream=True,
+            )
+            async for chunk in completion:
+                content = chunk.choices[0].delta.content
+                if content:
+                    yield content
+
+        return sources, _generator()
 
 
 rag_service = RAGService()
