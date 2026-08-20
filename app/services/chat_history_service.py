@@ -28,6 +28,7 @@ class ChatHistoryService:
     ) -> Conversation:
         """Crée une nouvelle discussion pour un artisan."""
         from datetime import UTC, datetime
+
         title_val = title or "Nouvelle discussion"
         conversation = Conversation(
             id=uuid.uuid4(),
@@ -77,6 +78,7 @@ class ChatHistoryService:
                 from sqlalchemy import or_
 
                 from app.models.message import Message
+
                 stmt = (
                     select(Conversation)
                     .outerjoin(Message)
@@ -84,7 +86,7 @@ class ChatHistoryService:
                     .where(
                         or_(
                             Conversation.title.ilike(f"%{q}%"),
-                            Message.content.ilike(f"%{q}%")
+                            Message.content.ilike(f"%{q}%"),
                         )
                     )
                     .distinct()
@@ -156,6 +158,7 @@ class ChatHistoryService:
     ) -> Message:
         """Ajoute un message (utilisateur ou assistant) à une discussion existante."""
         from datetime import UTC, datetime
+
         message = Message(
             id=uuid.uuid4(),
             conversation_id=conversation_id,
@@ -181,7 +184,7 @@ class ChatHistoryService:
             # Fallback local in-memory
             if conversation_id in self._fallback_db:
                 conv = self._fallback_db[conversation_id]
-                if not hasattr(conv, 'messages') or conv.messages is None:
+                if not hasattr(conv, "messages") or conv.messages is None:
                     conv.messages = []
                 conv.messages.append(message)
                 conv.updated_at = datetime.now(UTC)
@@ -201,6 +204,7 @@ class ChatHistoryService:
             if conversation:
                 conversation.title = new_title
                 from datetime import UTC, datetime
+
                 conversation.updated_at = datetime.now(UTC)
                 await db.commit()
                 try:
@@ -215,6 +219,7 @@ class ChatHistoryService:
             conv = self._fallback_db[conversation_id]
             conv.title = new_title
             from datetime import UTC, datetime
+
             conv.updated_at = datetime.now(UTC)
             return conv
         return None

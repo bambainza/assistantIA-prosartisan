@@ -208,6 +208,7 @@ class RAGService:
                     f"(Réponse basée sur les fiches métier {metier_id if metier_id else 'général'})"
                 )
                 import asyncio
+
                 for word in mock_reply.split(" "):
                     yield word + " "
                     await asyncio.sleep(0.04)
@@ -227,7 +228,10 @@ class RAGService:
                     {
                         "role": "user",
                         "content": [
-                            {"type": "text", "text": f"Question de l'artisan: {question}"},
+                            {
+                                "type": "text",
+                                "text": f"Question de l'artisan: {question}",
+                            },
                             {"type": "image_url", "image_url": {"url": image_url}},
                         ],
                     }

@@ -38,8 +38,7 @@ def verify_password(plain_password: str, hashed_password: str) -> bool:
     """Vérifie un mot de passe contre son hash bcrypt."""
     try:
         return bcrypt.checkpw(
-            plain_password.encode("utf-8"),
-            hashed_password.encode("utf-8")
+            plain_password.encode("utf-8"), hashed_password.encode("utf-8")
         )
     except Exception:
         return False
@@ -69,9 +68,7 @@ def create_refresh_token(data: dict[str, Any]) -> str:
 def decode_token(token: str) -> dict[str, Any]:
     """Décode et valide un token JWT. Lève une exception si invalide."""
     try:
-        payload = jwt.decode(
-            token, settings.jwt_secret_key, algorithms=[ALGORITHM]
-        )
+        payload = jwt.decode(token, settings.jwt_secret_key, algorithms=[ALGORITHM])
         return payload
     except JWTError as exc:
         raise HTTPException(
@@ -97,7 +94,7 @@ async def get_current_user_id(
     credentials: HTTPAuthorizationCredentials | None = Depends(bearer_scheme),
 ) -> uuid.UUID:
     """Dépendance FastAPI : extrait et valide le user_id depuis le JWT.
-    
+
     Retourne le UUID de l'utilisateur authentifié.
     Lève HTTP 401 si le token est absent ou invalide.
     """
@@ -114,7 +111,7 @@ async def get_optional_user_id(
     credentials: HTTPAuthorizationCredentials | None = Depends(bearer_scheme),
 ) -> uuid.UUID | None:
     """Dépendance FastAPI : extrait le user_id si un JWT valide est fourni.
-    
+
     Retourne None si pas de token (mode anonyme).
     Utile pour les routes accessibles en mode connecté ET déconnecté.
     """

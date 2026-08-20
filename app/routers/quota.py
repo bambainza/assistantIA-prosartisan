@@ -25,5 +25,7 @@ async def get_user_quota(
     db: AsyncSession = Depends(get_db),
 ) -> dict[str, Any]:
     """Consulte le solde de questions et le statut Premium de l'artisan."""
-    uid = current_user_id or user_id or uuid.UUID("00000000-0000-0000-0000-000000000001")
+    uid = (
+        current_user_id or user_id or uuid.UUID("00000000-0000-0000-0000-000000000001")
+    )
     return await quota_service.get_user_quota_info(db=db, user_id=uid)

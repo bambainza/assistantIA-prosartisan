@@ -52,8 +52,7 @@ async def verify_google_token(token: str) -> dict[str, Any] | None:
     try:
         async with httpx.AsyncClient() as client:
             response = await client.get(
-                f"https://oauth2.googleapis.com/tokeninfo?id_token={token}",
-                timeout=5.0
+                f"https://oauth2.googleapis.com/tokeninfo?id_token={token}", timeout=5.0
             )
             if response.status_code == 200:
                 return response.json()
@@ -62,7 +61,9 @@ async def verify_google_token(token: str) -> dict[str, Any] | None:
     return None
 
 
-@router.post("/register", response_model=RegisterResponse, status_code=status.HTTP_201_CREATED)
+@router.post(
+    "/register", response_model=RegisterResponse, status_code=status.HTTP_201_CREATED
+)
 async def register(
     payload: RegisterRequest,
     db: AsyncSession = Depends(get_db),
@@ -99,17 +100,17 @@ async def register(
         type_abonnement="FREE",
     )
     db.add(new_user)
-    
+
     # Créer le quota par défaut
     new_quota = QuotaUtilisateur(
         user_id=new_user.id,
         requetes_restantes_gratuites=settings.max_questions_gratuites_par_jour,
     )
     db.add(new_quota)
-    
+
     await db.commit()
     await db.refresh(new_user)
-    
+
     return new_user
 
 
@@ -122,22 +123,22 @@ async def login(
     stmt = select(User).where(User.email == payload.email)
     res = await db.execute(stmt)
     user = res.scalar_one_or_none()
-    
+
     if not user or not user.password_hash or user.auth_provider != "local":
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail="Identifiants incorrects.",
         )
-        
+
     if not verify_password(payload.password, user.password_hash):
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail="Identifiants incorrects.",
         )
-        
+
     access_token = create_access_token(data={"sub": str(user.id)})
     refresh_token = create_refresh_token(data={"sub": str(user.id)})
-    
+
     return {
         "access_token": access_token,
         "refresh_token": refresh_token,
@@ -200,7 +201,7 @@ async def google_auth(
                 type_abonnement="FREE",
             )
             db.add(user)
-            
+
             # Créer le quota
             quota = QuotaUtilisateur(
                 user_id=user.id,
@@ -276,7 +277,7 @@ async def get_me(
     stmt = select(User).where(User.id == current_user_id)
     res = await db.execute(stmt)
     user = res.scalar_one_or_none()
-    
+
     if not user:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,

@@ -23,6 +23,7 @@ async def test_request_id_injected():
 async def test_rate_limiter_blocks_abuse():
     """Vérifie que le Rate Limiter bloque les requêtes trop fréquentes sur les routes sensibles."""
     from app.middleware.rate_limiter import RateLimitMiddleware
+
     RateLimitMiddleware.history.clear()
 
     # Configurer temporairement un quota très bas (ex: 2 requêtes max par minute)

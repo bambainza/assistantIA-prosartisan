@@ -35,7 +35,9 @@ async def create_conversation_endpoint(
     db: AsyncSession = Depends(get_db),
 ) -> Any:
     """Crée une nouvelle discussion vide pour un artisan."""
-    uid = current_user_id or user_id or uuid.UUID("00000000-0000-0000-0000-000000000001")
+    uid = (
+        current_user_id or user_id or uuid.UUID("00000000-0000-0000-0000-000000000001")
+    )
     return await chat_history_service.create_conversation(
         db=db,
         user_id=uid,
@@ -51,8 +53,12 @@ async def list_conversations_endpoint(
     db: AsyncSession = Depends(get_db),
 ) -> Any:
     """Liste toutes les discussions d'un artisan (triées par la plus récente)."""
-    uid = current_user_id or user_id or uuid.UUID("00000000-0000-0000-0000-000000000001")
-    return await chat_history_service.list_conversations_for_user(db=db, user_id=uid, q=q)
+    uid = (
+        current_user_id or user_id or uuid.UUID("00000000-0000-0000-0000-000000000001")
+    )
+    return await chat_history_service.list_conversations_for_user(
+        db=db, user_id=uid, q=q
+    )
 
 
 @router.get("/{conversation_id}", response_model=ConversationDetailResponse)

@@ -30,7 +30,9 @@ class Message(Base):
         nullable=False,
         index=True,
     )
-    role: Mapped[str] = mapped_column(String(20), nullable=False)  # "user" ou "assistant"
+    role: Mapped[str] = mapped_column(
+        String(20), nullable=False
+    )  # "user" ou "assistant"
     content: Mapped[str] = mapped_column(Text, nullable=False)
     image_url: Mapped[str | None] = mapped_column(Text, default=None, nullable=True)
 

@@ -64,9 +64,7 @@ async def test_get_conversation_success():
     async def custom_mock_db():
         session = MagicMock()
         session.execute = AsyncMock(
-            return_value=MagicMock(
-                scalar_one_or_none=MagicMock(return_value=mock_conv)
-            )
+            return_value=MagicMock(scalar_one_or_none=MagicMock(return_value=mock_conv))
         )
         yield session
 
@@ -111,9 +109,7 @@ async def test_delete_conversation_success():
     async def custom_mock_db():
         session = MagicMock()
         session.execute = AsyncMock(
-            return_value=MagicMock(
-                scalar_one_or_none=MagicMock(return_value=mock_conv)
-            )
+            return_value=MagicMock(scalar_one_or_none=MagicMock(return_value=mock_conv))
         )
         session.commit = AsyncMock()
         session.delete = MagicMock()
@@ -166,9 +162,7 @@ async def test_patch_rename_conversation():
     async def custom_mock_db():
         session = MagicMock()
         session.execute = AsyncMock(
-            return_value=MagicMock(
-                scalar_one_or_none=MagicMock(return_value=mock_conv)
-            )
+            return_value=MagicMock(scalar_one_or_none=MagicMock(return_value=mock_conv))
         )
         session.commit = AsyncMock()
         yield session
@@ -177,12 +171,15 @@ async def test_patch_rename_conversation():
     try:
         transport = ASGITransport(app=app)
         async with AsyncClient(transport=transport, base_url="http://test") as client:
-            patch_res = await client.patch(f"/api/conversations/{mock_conv.id}", json={"title": "New Title"})
+            patch_res = await client.patch(
+                f"/api/conversations/{mock_conv.id}", json={"title": "New Title"}
+            )
             assert patch_res.status_code == 200
             data = patch_res.json()
             assert data["title"] == "New Title"
     finally:
         from tests.conftest import mock_get_db
+
         app.dependency_overrides[get_db] = mock_get_db
 
 
@@ -202,9 +199,7 @@ async def test_search_conversations():
         session.execute = AsyncMock(
             return_value=MagicMock(
                 scalars=MagicMock(
-                    return_value=MagicMock(
-                        all=MagicMock(return_value=[conv1])
-                    )
+                    return_value=MagicMock(all=MagicMock(return_value=[conv1]))
                 )
             )
         )
@@ -221,4 +216,5 @@ async def test_search_conversations():
             assert "Plomberie" in data[0]["title"]
     finally:
         from tests.conftest import mock_get_db
+
         app.dependency_overrides[get_db] = mock_get_db

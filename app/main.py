@@ -45,7 +45,11 @@ app.add_middleware(RateLimitMiddleware)
 
 # ── CORS Restreint ──
 cors_origins = (
-    [origin.strip() for origin in settings.cors_allowed_origins.split(",") if origin.strip()]
+    [
+        origin.strip()
+        for origin in settings.cors_allowed_origins.split(",")
+        if origin.strip()
+    ]
     if settings.cors_allowed_origins != "*"
     else ["*"]
 )
@@ -84,6 +88,7 @@ async def root(request: Request):
     accept = request.headers.get("accept")
     if accept and "text/html" in accept:
         from fastapi.responses import RedirectResponse
+
         return RedirectResponse(url="/chat/")
     return {
         "message": "Bienvenue sur l'API ProsArtisan IA Expert 🚀",

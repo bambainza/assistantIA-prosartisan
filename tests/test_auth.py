@@ -20,16 +20,14 @@ async def test_register_user_success():
         "email": "test_artisan@example.com",
         "password": "strongpassword123",
         "nom": "Koffi Justin",
-        "telephone": "+22501020304"
+        "telephone": "+22501020304",
     }
 
     async def custom_mock_db():
         session = MagicMock()
         # Simuler qu'aucun utilisateur n'existe avec cet email
         session.execute = AsyncMock(
-            return_value=MagicMock(
-                scalar_one_or_none=MagicMock(return_value=None)
-            )
+            return_value=MagicMock(scalar_one_or_none=MagicMock(return_value=None))
         )
         session.commit = AsyncMock()
         session.add = MagicMock()
@@ -49,6 +47,7 @@ async def test_register_user_success():
         assert "id" in data
     finally:
         from tests.conftest import mock_get_db
+
         app.dependency_overrides[get_db] = mock_get_db
 
 
@@ -59,19 +58,14 @@ async def test_register_user_already_exists():
         "email": "existing@example.com",
         "password": "password123",
     }
-    
-    mock_user = User(
-        id=uuid.uuid4(),
-        email="existing@example.com"
-    )
+
+    mock_user = User(id=uuid.uuid4(), email="existing@example.com")
 
     async def custom_mock_db():
         session = MagicMock()
         # Simuler qu'un utilisateur existe
         session.execute = AsyncMock(
-            return_value=MagicMock(
-                scalar_one_or_none=MagicMock(return_value=mock_user)
-            )
+            return_value=MagicMock(scalar_one_or_none=MagicMock(return_value=mock_user))
         )
         yield session
 
@@ -85,16 +79,14 @@ async def test_register_user_already_exists():
         assert "existe déjà" in response.json()["detail"]
     finally:
         from tests.conftest import mock_get_db
+
         app.dependency_overrides[get_db] = mock_get_db
 
 
 @pytest.mark.asyncio
 async def test_login_success():
     """POST /api/auth/login connecte l'utilisateur et retourne un token JWT."""
-    payload = {
-        "email": "test@example.com",
-        "password": "mypassword"
-    }
+    payload = {"email": "test@example.com", "password": "mypassword"}
 
     mock_user = User(
         id=uuid.uuid4(),
@@ -103,15 +95,13 @@ async def test_login_success():
         password_hash=hash_password("mypassword"),
         auth_provider="local",
         type_abonnement="FREE",
-        created_at=datetime.now(UTC)
+        created_at=datetime.now(UTC),
     )
 
     async def custom_mock_db():
         session = MagicMock()
         session.execute = AsyncMock(
-            return_value=MagicMock(
-                scalar_one_or_none=MagicMock(return_value=mock_user)
-            )
+            return_value=MagicMock(scalar_one_or_none=MagicMock(return_value=mock_user))
         )
         yield session
 
@@ -128,30 +118,26 @@ async def test_login_success():
         assert data["user"]["email"] == "test@example.com"
     finally:
         from tests.conftest import mock_get_db
+
         app.dependency_overrides[get_db] = mock_get_db
 
 
 @pytest.mark.asyncio
 async def test_login_incorrect_password():
     """POST /api/auth/login échoue si le mot de passe est faux."""
-    payload = {
-        "email": "test@example.com",
-        "password": "wrongpassword"
-    }
+    payload = {"email": "test@example.com", "password": "wrongpassword"}
 
     mock_user = User(
         id=uuid.uuid4(),
         email="test@example.com",
         password_hash=hash_password("mypassword"),
-        auth_provider="local"
+        auth_provider="local",
     )
 
     async def custom_mock_db():
         session = MagicMock()
         session.execute = AsyncMock(
-            return_value=MagicMock(
-                scalar_one_or_none=MagicMock(return_value=mock_user)
-            )
+            return_value=MagicMock(scalar_one_or_none=MagicMock(return_value=mock_user))
         )
         yield session
 
@@ -165,23 +151,20 @@ async def test_login_incorrect_password():
         assert "incorrects" in response.json()["detail"]
     finally:
         from tests.conftest import mock_get_db
+
         app.dependency_overrides[get_db] = mock_get_db
 
 
 @pytest.mark.asyncio
 async def test_google_auth_new_user():
     """POST /api/auth/google crée un nouvel utilisateur si l'email n'existe pas."""
-    payload = {
-        "credential": "mock_google_google_user@example.com"
-    }
+    payload = {"credential": "mock_google_google_user@example.com"}
 
     async def custom_mock_db():
         session = MagicMock()
         # Simuler qu'aucun utilisateur n'est trouvé
         session.execute = AsyncMock(
-            return_value=MagicMock(
-                scalar_one_or_none=MagicMock(return_value=None)
-            )
+            return_value=MagicMock(scalar_one_or_none=MagicMock(return_value=None))
         )
         session.commit = AsyncMock()
         session.add = MagicMock()
@@ -201,6 +184,7 @@ async def test_google_auth_new_user():
         assert data["user"]["auth_provider"] == "google"
     finally:
         from tests.conftest import mock_get_db
+
         app.dependency_overrides[get_db] = mock_get_db
 
 
@@ -216,15 +200,13 @@ async def test_get_me_protected():
         nom="Me",
         auth_provider="local",
         type_abonnement="premium",
-        created_at=datetime.now(UTC)
+        created_at=datetime.now(UTC),
     )
 
     async def custom_mock_db():
         session = MagicMock()
         session.execute = AsyncMock(
-            return_value=MagicMock(
-                scalar_one_or_none=MagicMock(return_value=mock_user)
-            )
+            return_value=MagicMock(scalar_one_or_none=MagicMock(return_value=mock_user))
         )
         yield session
 
@@ -241,4 +223,5 @@ async def test_get_me_protected():
         assert data["type_abonnement"] == "premium"
     finally:
         from tests.conftest import mock_get_db
+
         app.dependency_overrides[get_db] = mock_get_db

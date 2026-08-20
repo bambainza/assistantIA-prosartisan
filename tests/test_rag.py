@@ -36,7 +36,7 @@ async def test_rag_generate_response_with_history():
     """Vérifie la génération RAG avec un historique conversationnel."""
     history = [
         {"role": "user", "content": "J'ai besoin de conseils pour poser des dalles."},
-        {"role": "assistant", "content": "Il faut d'abord égaliser le sol."}
+        {"role": "assistant", "content": "Il faut d'abord égaliser le sol."},
     ]
     res = await rag_service.generate_response(
         question="Quelles dalles choisir ?",
@@ -55,4 +55,3 @@ async def test_rag_generate_response_with_history():
         history=history,
     )
     assert isinstance(sources, list)
-

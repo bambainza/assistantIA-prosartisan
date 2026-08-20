@@ -25,21 +25,23 @@ class RateLimitMiddleware(BaseHTTPMiddleware):
         if path.startswith(("/api/chat", "/api/auth")):
             client_ip = request.client.host if request.client else "unknown"
             now = time.time()
-            
+
             # Nettoyer l'historique des requêtes datant de plus d'une minute
-            self.history[client_ip] = [t for t in self.history[client_ip] if now - t < 60]
-            
+            self.history[client_ip] = [
+                t for t in self.history[client_ip] if now - t < 60
+            ]
+
             # Évaluation dynamique de la limite
             limit = self.requests_per_minute or settings.rate_limit_requests_per_minute
-            
+
             if len(self.history[client_ip]) >= limit:
                 return JSONResponse(
                     status_code=status.HTTP_429_TOO_MANY_REQUESTS,
                     content={
                         "detail": "Trop de requêtes. Veuillez patienter une minute avant de réessayer."
-                    }
+                    },
                 )
-            
+
             self.history[client_ip].append(now)
 
         return await call_next(request)
