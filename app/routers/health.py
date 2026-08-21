@@ -14,9 +14,17 @@ async def health_check(db: AsyncSession = Depends(get_db)) -> dict:
     """Vérifie que le serveur et la base de données sont opérationnels."""
     db_status = "ok"
     db_version = "inaccessible"
+    sgbd_name = "PostgreSQL"
 
     try:
-        result = await db.execute(text("SELECT version()"))
+        # Check dialect and use appropriate version function
+        if db.bind and db.bind.dialect.name == "sqlite":
+            sgbd_name = "SQLite"
+            query = "SELECT sqlite_version()"
+        else:
+            query = "SELECT version()"
+            
+        result = await db.execute(text(query))
         version_row = result.scalar()
         if version_row:
             db_version = version_row
@@ -29,7 +37,7 @@ async def health_check(db: AsyncSession = Depends(get_db)) -> dict:
         "version": "0.1.0",
         "database": {
             "status": db_status,
-            "sgbd": "PostgreSQL",
+            "sgbd": sgbd_name,
             "version_detail": db_version,
         },
     }

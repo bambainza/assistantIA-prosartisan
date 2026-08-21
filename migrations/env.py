@@ -9,16 +9,21 @@ from sqlalchemy.ext.asyncio import create_async_engine
 from app.config import settings
 from app.models import Base
 
+import os
+
 config = context.config
 if config.config_file_name is not None:
     fileConfig(config.config_file_name)
 
 target_metadata = Base.metadata
 
+# Use environment variable to override DB URL for migrations if needed (e.g. SQLite for local generation)
+db_url = os.getenv("MIGRATION_DATABASE_URL", settings.database_url)
+
 
 def run_migrations_offline() -> None:
     """Migrations en mode 'offline' (génère le SQL sans connexion)."""
-    url = settings.database_url
+    url = db_url
     context.configure(
         url=url,
         target_metadata=target_metadata,
@@ -37,7 +42,7 @@ def do_run_migrations(connection):
 
 async def run_async_migrations() -> None:
     """Migrations en mode 'online' avec connexion async."""
-    connectable = create_async_engine(settings.database_url)
+    connectable = create_async_engine(db_url)
     async with connectable.connect() as connection:
         await connection.run_sync(do_run_migrations)
     await connectable.dispose()

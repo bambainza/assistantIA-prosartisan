@@ -43,6 +43,7 @@ class RegisterResponse(BaseModel):
     id: uuid.UUID
     email: str
     nom: str | None = None
+    type_abonnement: str = "FREE"
     message: str = "Inscription réussie"
 
 
