@@ -73,11 +73,14 @@ async def get_ingestion_stats(
     total_chunks = 0
     try:
         from qdrant_client import AsyncQdrantClient
+
         qdrant_client = AsyncQdrantClient(
             host=settings.qdrant_host,
             port=settings.qdrant_port,
         )
-        info = await qdrant_client.get_collection(collection_name=settings.qdrant_collection)
+        info = await qdrant_client.get_collection(
+            collection_name=settings.qdrant_collection
+        )
         total_chunks = info.points_count
     except Exception:
         pass
@@ -119,6 +122,7 @@ async def get_admin_overview(
 
     # Total questions
     from app.models.message import Message
+
     stmt_questions = select(func.count(Message.id)).where(Message.role == "user")
     res_questions = await db.execute(stmt_questions)
     total_questions = res_questions.scalar() or 0
@@ -127,25 +131,34 @@ async def get_admin_overview(
     total_chunks = 0
     try:
         from qdrant_client import AsyncQdrantClient
+
         qdrant_client = AsyncQdrantClient(
             host=settings.qdrant_host,
             port=settings.qdrant_port,
         )
-        info = await qdrant_client.get_collection(collection_name=settings.qdrant_collection)
+        info = await qdrant_client.get_collection(
+            collection_name=settings.qdrant_collection
+        )
         total_chunks = info.points_count
     except Exception:
         pass
 
     # Synthèse abonnements
-    stmt_free = select(func.count(User.id)).where(User.is_admin == False, User.type_abonnement == "FREE")
+    stmt_free = select(func.count(User.id)).where(
+        User.is_admin == False, User.type_abonnement == "FREE"
+    )
     res_free = await db.execute(stmt_free)
     free_count = res_free.scalar() or 0
 
-    stmt_24h = select(func.count(User.id)).where(User.is_admin == False, User.type_abonnement == "pass_24h")
+    stmt_24h = select(func.count(User.id)).where(
+        User.is_admin == False, User.type_abonnement == "pass_24h"
+    )
     res_24h = await db.execute(stmt_24h)
     pass_24h_count = res_24h.scalar() or 0
 
-    stmt_mois = select(func.count(User.id)).where(User.is_admin == False, User.type_abonnement == "pass_mois")
+    stmt_mois = select(func.count(User.id)).where(
+        User.is_admin == False, User.type_abonnement == "pass_mois"
+    )
     res_mois = await db.execute(stmt_mois)
     pass_mois_count = res_mois.scalar() or 0
 
@@ -175,6 +188,7 @@ async def get_users_list(
 ) -> dict[str, Any]:
     """Retourne la liste des artisans inscrits avec statut de quota."""
     from app.models.metier import Metier
+
     stmt = (
         select(
             User.id,
@@ -194,15 +208,21 @@ async def get_users_list(
     res = await db.execute(stmt)
     users_data = []
     for row in res.all():
-        users_data.append({
-            "id": str(row.id),
-            "nom": row.nom or "Artisan Anonyme",
-            "telephone": row.telephone or "Non renseigné",
-            "metier": row.metier_nom or "Généraliste",
-            "type_abonnement": row.type_abonnement,
-            "questions_restantes": row.requetes_restantes_gratuites if row.type_abonnement == "FREE" else 999999,
-            "date_inscription": row.created_at.strftime("%Y-%m-%d") if row.created_at else "Non renseigné",
-        })
+        users_data.append(
+            {
+                "id": str(row.id),
+                "nom": row.nom or "Artisan Anonyme",
+                "telephone": row.telephone or "Non renseigné",
+                "metier": row.metier_nom or "Généraliste",
+                "type_abonnement": row.type_abonnement,
+                "questions_restantes": row.requetes_restantes_gratuites
+                if row.type_abonnement == "FREE"
+                else 999999,
+                "date_inscription": row.created_at.strftime("%Y-%m-%d")
+                if row.created_at
+                else "Non renseigné",
+            }
+        )
 
     # Si aucun artisan en base, retourner un fallback de démo
     if not users_data:
@@ -236,7 +256,7 @@ async def grant_pass_to_user(
     except ValueError:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
-            detail="Format de user_id invalide (UUID requis)."
+            detail="Format de user_id invalide (UUID requis).",
         )
 
     stmt = select(User).where(User.id == user_uuid)
@@ -244,8 +264,7 @@ async def grant_pass_to_user(
     user = res.scalar_one_or_none()
     if not user:
         raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail="Utilisateur non trouvé."
+            status_code=status.HTTP_404_NOT_FOUND, detail="Utilisateur non trouvé."
         )
 
     quota_stmt = select(QuotaUtilisateur).where(QuotaUtilisateur.user_id == user_uuid)
@@ -284,11 +303,12 @@ async def get_documents_list(
     documents_map = {}
     try:
         from qdrant_client import AsyncQdrantClient
+
         qdrant_client = AsyncQdrantClient(
             host=settings.qdrant_host,
             port=settings.qdrant_port,
         )
-        
+
         # Récupérer les 1000 premiers points pour extraire les noms de fichiers uniques
         scroll_results = await qdrant_client.scroll(
             collection_name=settings.qdrant_collection,
@@ -302,12 +322,14 @@ async def get_documents_list(
             doc_name = payload.get("document_name")
             if doc_name:
                 metier_id = payload.get("metier_id", 1)
-                
+
                 if doc_name not in documents_map:
                     documents_map[doc_name] = {
-                        "id": doc_name, # Identifier par son nom de fichier
+                        "id": doc_name,  # Identifier par son nom de fichier
                         "filename": doc_name,
-                        "metier": "Bâtiment & Construction" if metier_id == 1 else ("Électricité" if metier_id == 2 else "Autre"),
+                        "metier": "Bâtiment & Construction"
+                        if metier_id == 1
+                        else ("Électricité" if metier_id == 2 else "Autre"),
                         "metier_id": metier_id,
                         "chunks_count": 0,
                         "date_ingestion": datetime.now(UTC).strftime("%Y-%m-%d"),
@@ -343,11 +365,12 @@ async def delete_document(
     try:
         from qdrant_client import AsyncQdrantClient
         from qdrant_client.http.models import FieldCondition, Filter, MatchValue
+
         qdrant_client = AsyncQdrantClient(
             host=settings.qdrant_host,
             port=settings.qdrant_port,
         )
-        
+
         # Supprimer par filtre document_name ou par point ID
         await qdrant_client.delete(
             collection_name=settings.qdrant_collection,
@@ -394,21 +417,25 @@ async def get_transactions_log(
         .outerjoin(User, TransactionMobileMoney.user_id == User.id)
         .order_by(TransactionMobileMoney.created_at.desc())
     )
-    
+
     res = await db.execute(stmt)
     txns_data = []
     for row in res.all():
-        txns_data.append({
-            "id": str(row.id),
-            "reference_externe": row.reference_externe or "Non spécifiée",
-            "artisan": row.user_nom or "Artisan Anonyme",
-            "montant": row.montant,
-            "devise": row.devise,
-            "operateur": row.operateur,
-            "statut": row.statut_paiement,
-            "type_achat": row.type_achat,
-            "timestamp": row.created_at.isoformat() if row.created_at else "Non spécifié",
-        })
+        txns_data.append(
+            {
+                "id": str(row.id),
+                "reference_externe": row.reference_externe or "Non spécifiée",
+                "artisan": row.user_nom or "Artisan Anonyme",
+                "montant": row.montant,
+                "devise": row.devise,
+                "operateur": row.operateur,
+                "statut": row.statut_paiement,
+                "type_achat": row.type_achat,
+                "timestamp": row.created_at.isoformat()
+                if row.created_at
+                else "Non spécifié",
+            }
+        )
 
     if not txns_data:
         return {

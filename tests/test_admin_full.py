@@ -26,18 +26,19 @@ def admin_user():
 def mock_db_with_admin(admin_user):
     async def custom_mock_db():
         session = MagicMock()
-        
+
         # Simuler les retours des requêtes ORM dans le routeur admin
         # (ex. get_user pour grant-pass, count pour overview)
         session.execute = AsyncMock(
             return_value=MagicMock(
                 scalar=MagicMock(return_value=1),
                 scalar_one_or_none=MagicMock(return_value=admin_user),
-                all=MagicMock(return_value=[])
+                all=MagicMock(return_value=[]),
             )
         )
         session.commit = AsyncMock()
         yield session
+
     return custom_mock_db
 
 
@@ -47,12 +48,12 @@ async def test_admin_get_overview(mock_db_with_admin, admin_user):
     app.dependency_overrides[get_db] = mock_db_with_admin
     token = create_access_token(data={"sub": str(admin_user.id)})
     headers = {"Authorization": f"Bearer {token}"}
-    
+
     try:
         transport = ASGITransport(app=app)
         async with AsyncClient(transport=transport, base_url="http://test") as client:
             response = await client.get("/api/admin/overview", headers=headers)
-        
+
         assert response.status_code == 200
         data = response.json()
         assert "kpis" in data
@@ -67,12 +68,12 @@ async def test_admin_get_users(mock_db_with_admin, admin_user):
     app.dependency_overrides[get_db] = mock_db_with_admin
     token = create_access_token(data={"sub": str(admin_user.id)})
     headers = {"Authorization": f"Bearer {token}"}
-    
+
     try:
         transport = ASGITransport(app=app)
         async with AsyncClient(transport=transport, base_url="http://test") as client:
             response = await client.get("/api/admin/users", headers=headers)
-        
+
         assert response.status_code == 200
         data = response.json()
         assert "users" in data
@@ -87,15 +88,15 @@ async def test_admin_grant_pass(mock_db_with_admin, admin_user):
     token = create_access_token(data={"sub": str(admin_user.id)})
     headers = {"Authorization": f"Bearer {token}"}
     target_user_id = str(uuid.uuid4())
-    
+
     try:
         transport = ASGITransport(app=app)
         async with AsyncClient(transport=transport, base_url="http://test") as client:
             response = await client.post(
                 f"/api/admin/users/{target_user_id}/grant-pass?type_pass=pass_mois",
-                headers=headers
+                headers=headers,
             )
-        
+
         assert response.status_code == 200
         data = response.json()
         assert data["status"] == "success"
@@ -109,12 +110,12 @@ async def test_admin_get_documents(mock_db_with_admin, admin_user):
     app.dependency_overrides[get_db] = mock_db_with_admin
     token = create_access_token(data={"sub": str(admin_user.id)})
     headers = {"Authorization": f"Bearer {token}"}
-    
+
     try:
         transport = ASGITransport(app=app)
         async with AsyncClient(transport=transport, base_url="http://test") as client:
             response = await client.get("/api/admin/documents", headers=headers)
-        
+
         assert response.status_code == 200
         data = response.json()
         assert "documents" in data
@@ -128,12 +129,12 @@ async def test_admin_get_transactions(mock_db_with_admin, admin_user):
     app.dependency_overrides[get_db] = mock_db_with_admin
     token = create_access_token(data={"sub": str(admin_user.id)})
     headers = {"Authorization": f"Bearer {token}"}
-    
+
     try:
         transport = ASGITransport(app=app)
         async with AsyncClient(transport=transport, base_url="http://test") as client:
             response = await client.get("/api/admin/transactions", headers=headers)
-        
+
         assert response.status_code == 200
         data = response.json()
         assert "transactions" in data

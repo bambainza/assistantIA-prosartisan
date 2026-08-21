@@ -1,6 +1,7 @@
 """Alembic env.py — configuration des migrations async."""
 
 import asyncio
+import os
 from logging.config import fileConfig
 
 from alembic import context
@@ -8,8 +9,6 @@ from sqlalchemy.ext.asyncio import create_async_engine
 
 from app.config import settings
 from app.models import Base
-
-import os
 
 config = context.config
 if config.config_file_name is not None:

@@ -24,8 +24,14 @@ async def seed_data() -> None:
                             "nom": "Maçonnerie & Gros œuvre",
                             "slug": "maconnerie-gros-oeuvre",
                         },
-                        {"nom": "Charpente & Couverture", "slug": "charpente-couverture"},
-                        {"nom": "Carrelage & Revêtement", "slug": "carrelage-revetement"},
+                        {
+                            "nom": "Charpente & Couverture",
+                            "slug": "charpente-couverture",
+                        },
+                        {
+                            "nom": "Carrelage & Revêtement",
+                            "slug": "carrelage-revetement",
+                        },
                     ],
                 },
                 {
@@ -45,7 +51,10 @@ async def seed_data() -> None:
                     "slug": "plomberie-sanitaire",
                     "description": "Tuyauterie, installations sanitaires et climatisation.",
                     "sous_metiers": [
-                        {"nom": "Plomberie Sanitaire", "slug": "plomberie-sanitaire-spec"},
+                        {
+                            "nom": "Plomberie Sanitaire",
+                            "slug": "plomberie-sanitaire-spec",
+                        },
                         {"nom": "Climatisation & Froid", "slug": "climatisation-froid"},
                     ],
                 },
@@ -55,7 +64,10 @@ async def seed_data() -> None:
                     "description": "Entretien, réparation mécanique et tôlerie.",
                     "sous_metiers": [
                         {"nom": "Mécanique Auto & Diesel", "slug": "mecanique-auto"},
-                        {"nom": "Tôlerie & Peinture Auto", "slug": "tolerie-peinture-auto"},
+                        {
+                            "nom": "Tôlerie & Peinture Auto",
+                            "slug": "tolerie-peinture-auto",
+                        },
                     ],
                 },
             ]
@@ -76,6 +88,7 @@ async def seed_data() -> None:
             import uuid
 
             from app.middleware.auth import hash_password
+
             admin_user = User(
                 id=uuid.uuid4(),
                 email=admin_email,
@@ -84,7 +97,7 @@ async def seed_data() -> None:
                 password_hash=hash_password("admin_secret_pass_2026"),
                 is_admin=True,
                 auth_provider="local",
-                type_abonnement="FREE"
+                type_abonnement="FREE",
             )
             session.add(admin_user)
 

@@ -28,9 +28,12 @@ def mock_db_with_admin(admin_user):
     async def custom_mock_db():
         session = MagicMock()
         session.execute = AsyncMock(
-            return_value=MagicMock(scalar_one_or_none=MagicMock(return_value=admin_user))
+            return_value=MagicMock(
+                scalar_one_or_none=MagicMock(return_value=admin_user)
+            )
         )
         yield session
+
     return custom_mock_db
 
 
@@ -49,12 +52,12 @@ async def test_admin_get_stats_success(mock_db_with_admin, admin_user):
     app.dependency_overrides[get_db] = mock_db_with_admin
     token = create_access_token(data={"sub": str(admin_user.id)})
     headers = {"Authorization": f"Bearer {token}"}
-    
+
     try:
         transport = ASGITransport(app=app)
         async with AsyncClient(transport=transport, base_url="http://test") as client:
             response = await client.get("/api/admin/stats", headers=headers)
-        
+
         assert response.status_code == 200
         data = response.json()
         assert "collection" in data
@@ -69,12 +72,12 @@ async def test_admin_get_logs_success(mock_db_with_admin, admin_user):
     app.dependency_overrides[get_db] = mock_db_with_admin
     token = create_access_token(data={"sub": str(admin_user.id)})
     headers = {"Authorization": f"Bearer {token}"}
-    
+
     try:
         transport = ASGITransport(app=app)
         async with AsyncClient(transport=transport, base_url="http://test") as client:
             response = await client.get("/api/admin/logs", headers=headers)
-        
+
         assert response.status_code == 200
         data = response.json()
         assert "logs" in data
