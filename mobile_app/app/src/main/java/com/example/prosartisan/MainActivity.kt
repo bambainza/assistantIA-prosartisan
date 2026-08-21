@@ -128,11 +128,14 @@ fun ServerConfigScreen(state: ChatUiState.Config, viewModel: ChatViewModel, isDa
             onValueChange = { urlText = it },
             label = { Text("URL de l'API", color = Color.Gray) },
             singleLine = true,
+            textStyle = androidx.compose.ui.text.TextStyle(color = textColor, fontSize = 16.sp),
             colors = OutlinedTextFieldDefaults.colors(
                 focusedBorderColor = Color(0xFFE2A000),
                 unfocusedBorderColor = Color.DarkGray,
                 focusedTextColor = textColor,
-                unfocusedTextColor = textColor
+                unfocusedTextColor = textColor,
+                focusedContainerColor = if (isDarkTheme) Color(0xFF222232) else Color(0xFFF2F2F7),
+                unfocusedContainerColor = if (isDarkTheme) Color(0xFF222232) else Color(0xFFF2F2F7)
             ),
             modifier = Modifier.fillMaxWidth()
         )
@@ -210,10 +213,13 @@ fun LoginRegisterScreen(state: ChatUiState.Auth, viewModel: ChatViewModel, isDar
                 onValueChange = { nom = it },
                 label = { Text("Nom complet", color = Color.Gray) },
                 singleLine = true,
+                textStyle = androidx.compose.ui.text.TextStyle(color = textColor, fontSize = 16.sp),
                 colors = OutlinedTextFieldDefaults.colors(
                     focusedBorderColor = Color(0xFFE2A000),
                     focusedTextColor = textColor,
-                    unfocusedTextColor = textColor
+                    unfocusedTextColor = textColor,
+                    focusedContainerColor = if (isDarkTheme) Color(0xFF222232) else Color(0xFFF2F2F7),
+                    unfocusedContainerColor = if (isDarkTheme) Color(0xFF222232) else Color(0xFFF2F2F7)
                 ),
                 modifier = Modifier.fillMaxWidth()
             )
@@ -224,10 +230,13 @@ fun LoginRegisterScreen(state: ChatUiState.Auth, viewModel: ChatViewModel, isDar
                 label = { Text("Téléphone (ex: +225...)", color = Color.Gray) },
                 singleLine = true,
                 keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Phone),
+                textStyle = androidx.compose.ui.text.TextStyle(color = textColor, fontSize = 16.sp),
                 colors = OutlinedTextFieldDefaults.colors(
                     focusedBorderColor = Color(0xFFE2A000),
                     focusedTextColor = textColor,
-                    unfocusedTextColor = textColor
+                    unfocusedTextColor = textColor,
+                    focusedContainerColor = if (isDarkTheme) Color(0xFF222232) else Color(0xFFF2F2F7),
+                    unfocusedContainerColor = if (isDarkTheme) Color(0xFF222232) else Color(0xFFF2F2F7)
                 ),
                 modifier = Modifier.fillMaxWidth()
             )
@@ -240,10 +249,13 @@ fun LoginRegisterScreen(state: ChatUiState.Auth, viewModel: ChatViewModel, isDar
             label = { Text("Adresse email", color = Color.Gray) },
             singleLine = true,
             keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Email),
+            textStyle = androidx.compose.ui.text.TextStyle(color = textColor, fontSize = 16.sp),
             colors = OutlinedTextFieldDefaults.colors(
                 focusedBorderColor = Color(0xFFE2A000),
                 focusedTextColor = textColor,
-                unfocusedTextColor = textColor
+                unfocusedTextColor = textColor,
+                focusedContainerColor = if (isDarkTheme) Color(0xFF222232) else Color(0xFFF2F2F7),
+                unfocusedContainerColor = if (isDarkTheme) Color(0xFF222232) else Color(0xFFF2F2F7)
             ),
             modifier = Modifier.fillMaxWidth()
         )
@@ -256,10 +268,13 @@ fun LoginRegisterScreen(state: ChatUiState.Auth, viewModel: ChatViewModel, isDar
             singleLine = true,
             visualTransformation = PasswordVisualTransformation(),
             keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Password),
+            textStyle = androidx.compose.ui.text.TextStyle(color = textColor, fontSize = 16.sp),
             colors = OutlinedTextFieldDefaults.colors(
                 focusedBorderColor = Color(0xFFE2A000),
                 focusedTextColor = textColor,
-                unfocusedTextColor = textColor
+                unfocusedTextColor = textColor,
+                focusedContainerColor = if (isDarkTheme) Color(0xFF222232) else Color(0xFFF2F2F7),
+                unfocusedContainerColor = if (isDarkTheme) Color(0xFF222232) else Color(0xFFF2F2F7)
             ),
             modifier = Modifier.fillMaxWidth()
         )
@@ -581,11 +596,16 @@ fun ChatInputArea(
             onValueChange = onTextChange,
             placeholder = { Text("Posez votre question chantier...", color = Color.Gray) },
             maxLines = 4,
+            textStyle = androidx.compose.ui.text.TextStyle(color = textColor, fontSize = 16.sp),
             colors = OutlinedTextFieldDefaults.colors(
                 focusedBorderColor = Color(0xFFE2A000),
                 unfocusedBorderColor = Color.DarkGray,
                 focusedTextColor = textColor,
-                unfocusedTextColor = textColor
+                unfocusedTextColor = textColor,
+                focusedContainerColor = if (isDarkTheme) Color(0xFF222232) else Color(0xFFF2F2F7),
+                unfocusedContainerColor = if (isDarkTheme) Color(0xFF222232) else Color(0xFFF2F2F7),
+                focusedPlaceholderColor = Color.Gray,
+                unfocusedPlaceholderColor = Color.Gray
             ),
             modifier = Modifier
                 .weight(1f)
