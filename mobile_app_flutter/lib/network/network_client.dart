@@ -181,15 +181,17 @@ class NetworkClient {
 
     return completer.future;
   }
-  // --- Authentification ---
   Future<Map<String, dynamic>> login(String email, String password) async {
     final client = HttpClient();
     try {
-      final uri = Uri.parse('$_baseUrl/api/auth/token');
+      final uri = Uri.parse('$_baseUrl/api/auth/login');
       final request = await client.postUrl(uri);
-      request.headers.set('content-type', 'application/x-www-form-urlencoded');
+      request.headers.set('content-type', 'application/json');
 
-      final body = 'username=${Uri.encodeComponent(email)}&password=${Uri.encodeComponent(password)}';
+      final body = jsonEncode({
+        'email': email,
+        'password': password,
+      });
       request.write(body);
 
       final response = await request.close();
