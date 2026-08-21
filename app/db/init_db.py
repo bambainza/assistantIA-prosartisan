@@ -82,9 +82,7 @@ async def init_db() -> None:
 
         await seed_data()
     except Exception as e:
-        print(
-            f"[AVERTISSEMENT] Base de données non initialisée ({e})."
-        )
+        print(f"[AVERTISSEMENT] Base de données non initialisée ({e}).")
 
 
 async def drop_db() -> None:
