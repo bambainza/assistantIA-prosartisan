@@ -196,7 +196,16 @@ class NetworkClient {
 
       final response = await request.close();
       final responseBody = await response.transform(utf8.decoder).join();
-      final data = jsonDecode(responseBody);
+      
+      dynamic data;
+      try {
+        data = json.decode(responseBody);
+      } catch (_) {
+        return {
+          'success': false,
+          'error': 'Le serveur a renvoyé une réponse invalide (HTTP ${response.statusCode} Not Found).\n[Serveur ciblé : $_baseUrl]'
+        };
+      }
 
       if (response.statusCode == 200) {
         final token = data['access_token'];
@@ -206,7 +215,7 @@ class NetworkClient {
         return {'success': false, 'error': data['detail'] ?? 'Identifiants invalides'};
       }
     } catch (e) {
-      return {'success': false, 'error': 'Impossible de se connecter au serveur : $e'};
+      return {'success': false, 'error': 'Impossible de se connecter au serveur : $e\n[Serveur ciblé : $_baseUrl]'};
     } finally {
       client.close();
     }
@@ -229,7 +238,16 @@ class NetworkClient {
 
       final response = await request.close();
       final responseBody = await response.transform(utf8.decoder).join();
-      final data = jsonDecode(responseBody);
+      
+      dynamic data;
+      try {
+        data = json.decode(responseBody);
+      } catch (_) {
+        return {
+          'success': false,
+          'error': 'Le serveur a renvoyé une réponse invalide (HTTP ${response.statusCode} Not Found).\n[Serveur ciblé : $_baseUrl]'
+        };
+      }
 
       if (response.statusCode == 200 || response.statusCode == 201) {
         return {'success': true, 'data': data};
@@ -237,7 +255,7 @@ class NetworkClient {
         return {'success': false, 'error': data['detail'] ?? 'Échec de l\'inscription'};
       }
     } catch (e) {
-      return {'success': false, 'error': 'Impossible de joindre le serveur : $e'};
+      return {'success': false, 'error': 'Impossible de joindre le serveur : $e\n[Serveur ciblé : $_baseUrl]'};
     } finally {
       client.close();
     }
