@@ -8,19 +8,19 @@ from __future__ import annotations
 
 import os
 import uuid
+from datetime import UTC, datetime, timedelta
 from typing import Any
-from datetime import datetime, timedelta
 
-from fastapi import APIRouter, File, Form, HTTPException, UploadFile, status, Depends
-from sqlalchemy import select, func
+from fastapi import APIRouter, Depends, File, Form, HTTPException, UploadFile, status
+from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.config import settings
 from app.db.session import get_db
 from app.middleware.auth import get_current_admin_user_id
-from app.models.user import User
 from app.models.quota import QuotaUtilisateur
 from app.models.transaction import TransactionMobileMoney
+from app.models.user import User
 from ingestion.pipeline import run_ingestion
 
 router = APIRouter(prefix="/api/admin", tags=["Back-Office Admin"])
@@ -257,10 +257,10 @@ async def grant_pass_to_user(
 
     if type_pass == "pass_24h":
         user.type_abonnement = "pass_24h"
-        quota.date_fin_premium = datetime.utcnow() + timedelta(days=1)
+        quota.date_fin_premium = datetime.now(UTC) + timedelta(days=1)
     elif type_pass == "pass_mois":
         user.type_abonnement = "pass_mois"
-        quota.date_fin_premium = datetime.utcnow() + timedelta(days=30)
+        quota.date_fin_premium = datetime.now(UTC) + timedelta(days=30)
     else:
         user.type_abonnement = "FREE"
         quota.date_fin_premium = None
@@ -310,7 +310,7 @@ async def get_documents_list(
                         "metier": "Bâtiment & Construction" if metier_id == 1 else ("Électricité" if metier_id == 2 else "Autre"),
                         "metier_id": metier_id,
                         "chunks_count": 0,
-                        "date_ingestion": datetime.now().strftime("%Y-%m-%d"),
+                        "date_ingestion": datetime.now(UTC).strftime("%Y-%m-%d"),
                     }
                 documents_map[doc_name]["chunks_count"] += 1
     except Exception:
@@ -442,12 +442,12 @@ async def get_system_logs(
     return {
         "logs": [
             {
-                "timestamp": datetime.now().isoformat(),
+                "timestamp": datetime.now(UTC).isoformat(),
                 "level": "INFO",
                 "event": f"Accès backoffice par l'administrateur {admin_id}",
             },
             {
-                "timestamp": datetime.now().isoformat(),
+                "timestamp": datetime.now(UTC).isoformat(),
                 "level": "INFO",
                 "event": f"Vérification DB : OK ({num_users} artisans enregistrés)",
             },

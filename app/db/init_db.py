@@ -74,6 +74,7 @@ async def seed_data() -> None:
         admin_result = await session.execute(admin_stmt)
         if admin_result.scalar_one_or_none() is None:
             import uuid
+
             from app.middleware.auth import hash_password
             admin_user = User(
                 id=uuid.uuid4(),
