@@ -23,7 +23,7 @@ async def health_check(db: AsyncSession = Depends(get_db)) -> dict:
             query = "SELECT sqlite_version()"
         else:
             query = "SELECT version()"
-            
+
         result = await db.execute(text(query))
         version_row = result.scalar()
         if version_row:
