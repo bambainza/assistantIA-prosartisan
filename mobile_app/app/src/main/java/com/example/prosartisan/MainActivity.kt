@@ -602,14 +602,15 @@ fun ChatInputArea(
                 unfocusedBorderColor = Color.DarkGray,
                 focusedTextColor = textColor,
                 unfocusedTextColor = textColor,
-                focusedContainerColor = if (isDarkTheme) Color(0xFF222232) else Color(0xFFF2F2F7),
-                unfocusedContainerColor = if (isDarkTheme) Color(0xFF222232) else Color(0xFFF2F2F7),
+                focusedContainerColor = if (isDarkTheme) Color(0xFF222232) else Color.White,
+                unfocusedContainerColor = if (isDarkTheme) Color(0xFF222232) else Color.White,
                 focusedPlaceholderColor = Color.Gray,
-                unfocusedPlaceholderColor = Color.Gray
+                unfocusedPlaceholderColor = Color.Gray,
+                cursorColor = Color(0xFFE2A000)
             ),
             modifier = Modifier
                 .weight(1f)
-                .heightIn(min = 48.dp)
+                .height(56.dp)
         )
         Spacer(modifier = Modifier.width(12.dp))
         IconButton(
