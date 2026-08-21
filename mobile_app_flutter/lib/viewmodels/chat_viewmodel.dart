@@ -80,7 +80,8 @@ class ChatViewModel extends ChangeNotifier {
 
   // --- Actions Réseau & Config ---
   Future<void> autoDetectServer() async {
-    await client.autoDetectBaseUrl();
+    final url = await client.autoDetectBaseUrl();
+    client.baseUrl = url;
   }
 
   // --- Actions Authentification ---

@@ -4,7 +4,7 @@ import 'dart:io';
 import 'package:shared_preferences/shared_preferences.dart';
 
 class NetworkClient {
-  String _baseUrl = 'http://localhost:8000';
+  String _baseUrl = 'https://assistantia-prosartisan.onrender.com';
   String? _token;
   String? _userEmail;
 
@@ -23,7 +23,7 @@ class NetworkClient {
 
   Future<void> _loadSettings() async {
     final prefs = await SharedPreferences.getInstance();
-    _baseUrl = prefs.getString('baseUrl') ?? 'http://localhost:8000';
+    _baseUrl = prefs.getString('baseUrl') ?? 'https://assistantia-prosartisan.onrender.com';
     _token = prefs.getString('token');
     _userEmail = prefs.getString('userEmail');
   }
