@@ -86,6 +86,11 @@ fun AppContent(viewModel: ChatViewModel) {
 fun ServerConfigScreen(state: ChatUiState.Config, viewModel: ChatViewModel) {
     var urlText by remember { mutableStateOf(state.baseUrl) }
 
+    // Mettre à jour le champ texte lorsque l'URL est auto-détectée
+    LaunchedEffect(state.baseUrl) {
+        urlText = state.baseUrl
+    }
+
     Column(
         modifier = Modifier
             .fillMaxSize()
@@ -131,7 +136,12 @@ fun ServerConfigScreen(state: ChatUiState.Config, viewModel: ChatViewModel) {
 
         state.error?.let {
             Spacer(modifier = Modifier.height(8.dp))
-            Text(text = it, color = Color.Red, fontSize = 12.sp)
+            val isSuccess = it.startsWith("Serveur détecté")
+            Text(
+                text = it,
+                color = if (isSuccess) Color(0xFF4CAF50) else if (it.contains("cours")) Color(0xFFE2A000) else Color.Red,
+                fontSize = 13.sp
+            )
         }
 
         Spacer(modifier = Modifier.height(24.dp))
@@ -143,6 +153,18 @@ fun ServerConfigScreen(state: ChatUiState.Config, viewModel: ChatViewModel) {
                 .height(50.dp)
         ) {
             Text("Enregistrer et Continuer", color = Color.Black, fontWeight = FontWeight.Bold)
+        }
+
+        Spacer(modifier = Modifier.height(12.dp))
+        OutlinedButton(
+            onClick = { viewModel.detectServerUrl() },
+            colors = ButtonDefaults.outlinedButtonColors(contentColor = Color(0xFFE2A000)),
+            border = androidx.compose.foundation.BorderStroke(1.dp, Color(0xFFE2A000)),
+            modifier = Modifier
+                .fillMaxWidth()
+                .height(50.dp)
+        ) {
+            Text("Auto-détecter le serveur", fontWeight = FontWeight.SemiBold)
         }
     }
 }

@@ -42,13 +42,17 @@ class ChatViewModel(private val client: NetworkClient) : ViewModel() {
     val uiState: StateFlow<ChatUiState> = _uiState.asStateFlow()
 
     init {
-        // Si le token est déjà présent, passer directement à Main
-        val savedToken = client.token
-        val savedEmail = client.userEmail
-        if (savedToken != null && savedEmail != null) {
-            loadMainState(savedEmail)
-        } else {
-            _uiState.value = ChatUiState.Auth(isLogin = true)
+        viewModelScope.launch {
+            // Détection automatique de l'URL du serveur en arrière-plan au démarrage
+            client.autoDetectBaseUrl()
+            
+            val savedToken = client.token
+            val savedEmail = client.userEmail
+            if (savedToken != null && savedEmail != null) {
+                loadMainState(savedEmail)
+            } else {
+                _uiState.value = ChatUiState.Auth(isLogin = true)
+            }
         }
     }
 
@@ -132,6 +136,16 @@ class ChatViewModel(private val client: NetworkClient) : ViewModel() {
 
     fun showConfigScreen() {
         _uiState.value = ChatUiState.Config(client.baseUrl)
+    }
+
+    fun detectServerUrl() {
+        viewModelScope.launch {
+            _uiState.update {
+                if (it is ChatUiState.Config) it.copy(error = "Détection en cours...") else it
+            }
+            val detected = client.autoDetectBaseUrl()
+            _uiState.value = ChatUiState.Config(detected, error = "Serveur détecté : $detected")
+        }
     }
 
     fun setSidebarOpen(open: Boolean) {

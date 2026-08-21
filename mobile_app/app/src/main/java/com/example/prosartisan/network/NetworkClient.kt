@@ -78,6 +78,38 @@ class NetworkClient(private val context: Context) {
             prefs.edit().putString("base_url", value).apply()
         }
 
+    suspend fun autoDetectBaseUrl(): String = kotlinx.coroutines.withContext(Dispatchers.IO) {
+        val currentConfigured = baseUrl
+        val candidates = listOf(
+            currentConfigured,
+            "http://10.0.2.2:8000",
+            "http://localhost:8000",
+            "http://127.0.0.1:8000"
+        ).distinct()
+
+        for (candidate in candidates) {
+            try {
+                val tempClient = OkHttpClient.Builder()
+                    .connectTimeout(1200, TimeUnit.MILLISECONDS)
+                    .readTimeout(1200, TimeUnit.MILLISECONDS)
+                    .build()
+                val request = Request.Builder()
+                    .url("$candidate/health")
+                    .get()
+                    .build()
+                tempClient.newCall(request).execute().use { response ->
+                    if (response.isSuccessful) {
+                        baseUrl = candidate
+                        return@withContext candidate
+                    }
+                }
+            } catch (e: Exception) {
+                // Ignorer et passer au candidat suivant
+            }
+        }
+        return@withContext baseUrl
+    }
+
     var token: String?
         get() = prefs.getString("jwt_token", null)
         set(value) {
