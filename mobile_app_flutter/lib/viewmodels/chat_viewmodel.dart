@@ -3,13 +3,13 @@ import 'dart:convert';
 import 'package:flutter/material.dart';
 import '../network/network_client.dart';
 
-enum AppScreen { config, auth, main }
+enum AppScreen { auth, main }
 
 class ChatViewModel extends ChangeNotifier {
   final NetworkClient client;
 
   // --- Écrans et Navigation ---
-  AppScreen _currentScreen = AppScreen.config;
+  AppScreen _currentScreen = AppScreen.auth;
   AppScreen get currentScreen => _currentScreen;
 
   // --- Thème ---
@@ -63,10 +63,8 @@ class ChatViewModel extends ChangeNotifier {
     // Petit délai pour laisser SharedPreferences se charger dans client
     await Future.delayed(const Duration(milliseconds: 300));
     
-    // Détection auto au démarrage si aucune URL configurée
-    if (client.baseUrl == 'http://localhost:8000') {
-      await autoDetectServer();
-    }
+    // Lancer la détection auto du serveur en tâche de fond au démarrage
+    autoDetectServer();
 
     if (client.token != null && client.userEmail != null) {
       _loadMainState(client.userEmail!);
@@ -78,29 +76,7 @@ class ChatViewModel extends ChangeNotifier {
 
   // --- Actions Réseau & Config ---
   Future<void> autoDetectServer() async {
-    _chatError = "Détection du serveur en cours...";
-    notifyListeners();
-    final url = await client.autoDetectBaseUrl();
-    _chatError = "Serveur détecté : $url";
-    notifyListeners();
-  }
-
-  void saveBaseUrl(String url) {
-    if (url.trim().isEmpty) {
-      _chatError = "L'adresse URL ne peut pas être vide";
-      notifyListeners();
-      return;
-    }
-    client.baseUrl = url.trim();
-    _currentScreen = AppScreen.auth;
-    _chatError = null;
-    notifyListeners();
-  }
-
-  void showConfigScreen() {
-    _currentScreen = AppScreen.config;
-    _chatError = null;
-    notifyListeners();
+    await client.autoDetectBaseUrl();
   }
 
   // --- Actions Authentification ---

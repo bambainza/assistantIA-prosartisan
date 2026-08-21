@@ -140,13 +140,6 @@ class _AuthViewState extends State<AuthView> {
                     style: TextStyle(color: textSecColor, fontSize: 14),
                   ),
                 ),
-                TextButton(
-                  onPressed: () => viewModel.showConfigScreen(),
-                  child: const Text(
-                    "Modifier l'adresse serveur",
-                    style: TextStyle(color: Color(0xFFE2A000), fontSize: 13, fontWeight: FontWeight.w600),
-                  ),
-                ),
               ],
             ],
           ),

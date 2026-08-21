@@ -54,16 +54,74 @@ class NetworkClient {
     _userEmail = null;
     await _saveSettings();
   }
+  // URL du serveur de production par défaut
+  static const String productionUrl = 'https://assistantia-prosartisan.onrender.com';
 
   // --- Auto-détection de l'IP Serveur ---
   Future<String> autoDetectBaseUrl() async {
+    // 1. Tester la production en priorité avec un timeout très court si on a une connexion
+    try {
+      final client = HttpClient();
+      client.connectionTimeout = const Duration(milliseconds: 1500);
+      final uri = Uri.parse('$productionUrl/api/health');
+      final request = await client.getUrl(uri);
+      final response = await request.close();
+      if (response.statusCode == 200) {
+        baseUrl = productionUrl;
+        return productionUrl;
+      }
+    } catch (_) {
+      // Échec de la production ou pas d'internet, on cherche le serveur local
+    }
+
+    // 2. Chercher l'IP locale pour déduire le sous-réseau
+    String? localIp;
+    try {
+      for (var interface in await NetworkInterface.list()) {
+        for (var addr in interface.addresses) {
+          if (addr.type == InternetAddressType.IPv4 && !addr.isLoopback) {
+            localIp = addr.address;
+            break;
+          }
+        }
+        if (localIp != null) break;
+      }
+    } catch (_) {}
+
     final List<String> candidates = [
       'http://10.0.2.2:8000', // Émulateur Android
       'http://localhost:8000',
       'http://127.0.0.1:8000',
-      'http://192.168.100.2:8000', // IP locale du PC de dev
-      'http://192.168.1.100:8000',
     ];
+
+    // Si on a trouvé une IP locale de type 192.168.A.B, on scanne tout le sous-réseau 192.168.A.X
+    if (localIp != null && localIp.startsWith('192.168.')) {
+      final parts = localIp.split('.');
+      if (parts.length == 4) {
+        final subnet = '${parts[0]}.${parts[1]}.${parts[2]}';
+        // Ajouter les IP du sous-réseau en favorisant les plus probables en premier (.1, .2, .3, .100, .101, .102)
+        final List<int> preferredIps = [1, 2, 3, 4, 5, 100, 101, 102, int.parse(parts[3])];
+        for (final ip in preferredIps) {
+          candidates.add('http://$subnet.$ip:8000');
+        }
+        // Ajouter toutes les autres IP du sous-réseau en repli
+        for (int i = 1; i <= 254; i++) {
+          final ipStr = 'http://$subnet.$i:8000';
+          if (!candidates.contains(ipStr)) {
+            candidates.add(ipStr);
+          }
+        }
+      }
+    } else {
+      // Hôtes locaux par défaut au cas où
+      candidates.addAll([
+        'http://192.168.1.100:8000',
+        'http://192.168.1.2:8000',
+        'http://192.168.1.3:8000',
+        'http://192.168.100.2:8000',
+        'http://192.168.0.100:8000',
+      ]);
+    }
 
     final completer = Completer<String>();
     int completedCount = 0;
@@ -72,7 +130,8 @@ class NetworkClient {
     void checkUrl(String url) async {
       try {
         final client = HttpClient();
-        client.connectionTimeout = const Duration(milliseconds: 1200);
+        // Timeout très agressif pour scanner en parallèle sans lenteur
+        client.connectionTimeout = const Duration(milliseconds: 900);
         final uri = Uri.parse('$url/api/health');
         final request = await client.getUrl(uri);
         final response = await request.close();
@@ -80,14 +139,17 @@ class NetworkClient {
         if (response.statusCode == 200 && !successFound) {
           successFound = true;
           baseUrl = url;
-          completer.complete(url);
+          if (!completer.isCompleted) {
+            completer.complete(url);
+          }
         }
       } catch (_) {
-        // Ignorer l'erreur, l'URL est juste injoignable
+        // Injoignable
       } finally {
         completedCount++;
         if (completedCount == candidates.length && !successFound && !completer.isCompleted) {
-          completer.complete(_baseUrl); // Retourne la dernière connue par défaut
+          // Si rien n'est trouvé, on tente de se connecter à la production par défaut (ou la dernière connue)
+          completer.complete(productionUrl);
         }
       }
     }
@@ -96,9 +158,15 @@ class NetworkClient {
       checkUrl(url);
     }
 
+    // Sécurité : timeout global pour ne pas bloquer l'appli indéfiniment si le scan est lent
+    Future.delayed(const Duration(seconds: 4), () {
+      if (!completer.isCompleted) {
+        completer.complete(successFound ? _baseUrl : productionUrl);
+      }
+    });
+
     return completer.future;
   }
-
   // --- Authentification ---
   Future<Map<String, dynamic>> login(String email, String password) async {
     final client = HttpClient();

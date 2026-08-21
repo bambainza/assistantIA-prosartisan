@@ -2,7 +2,6 @@ import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import 'network/network_client.dart';
 import 'viewmodels/chat_viewmodel.dart';
-import 'views/server_config_view.dart';
 import 'views/auth_view.dart';
 import 'views/chat_view.dart';
 
@@ -70,9 +69,6 @@ class MainLayoutWrapper extends StatelessWidget {
 
     Widget activeScreen;
     switch (viewModel.currentScreen) {
-      case AppScreen.config:
-        activeScreen = const ServerConfigView();
-        break;
       case AppScreen.auth:
         activeScreen = const AuthView();
         break;
