@@ -595,7 +595,7 @@ fun ChatInputArea(
             value = textState,
             onValueChange = { textState = it },
             placeholder = { Text("Posez votre question chantier...", color = Color.Gray, fontSize = 16.sp) },
-            maxLines = 4,
+            singleLine = true,
             textStyle = androidx.compose.ui.text.TextStyle(color = textColor, fontSize = 16.sp),
             colors = TextFieldDefaults.colors(
                 focusedTextColor = textColor,
