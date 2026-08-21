@@ -550,9 +550,8 @@ fun ChatInputArea(
         modifier = Modifier
             .fillMaxWidth()
             .background(Color(0xFF171721))
-            .padding(12.dp)
-            .navigationBarsPadding()
-            .imePadding(),
+            .padding(horizontal = 12.dp, vertical = 8.dp)
+            .heightIn(min = 60.dp),
         verticalAlignment = Alignment.CenterVertically
     ) {
         OutlinedTextField(
@@ -566,7 +565,9 @@ fun ChatInputArea(
                 focusedTextColor = Color.White,
                 unfocusedTextColor = Color.White
             ),
-            modifier = Modifier.weight(1f)
+            modifier = Modifier
+                .weight(1f)
+                .heightIn(min = 48.dp)
         )
         Spacer(modifier = Modifier.width(12.dp))
         IconButton(
@@ -577,10 +578,10 @@ fun ChatInputArea(
                     color = if (text.isNotBlank() && !isStreaming) Color(0xFFE2A000) else Color.DarkGray,
                     shape = RoundedCornerShape(50)
                 )
-                .size(48.dp)
+                .requiredSize(48.dp)
         ) {
             if (isStreaming) {
-                CircularProgressIndicator(modifier = Modifier.size(24.dp), color = Color.Black)
+                CircularProgressIndicator(modifier = Modifier.requiredSize(24.dp), color = Color.Black)
             } else {
                 Icon(
                     imageVector = Icons.Default.Send,
