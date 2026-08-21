@@ -137,7 +137,7 @@ class ChatHistoryService:
             res = await db.execute(stmt)
             conversation = res.scalar_one_or_none()
             if conversation:
-                db.delete(conversation)
+                await db.delete(conversation)
                 await db.commit()
                 return True
         except Exception:

@@ -112,7 +112,7 @@ async def test_delete_conversation_success():
             return_value=MagicMock(scalar_one_or_none=MagicMock(return_value=mock_conv))
         )
         session.commit = AsyncMock()
-        session.delete = MagicMock()
+        session.delete = AsyncMock()
         yield session
 
     app.dependency_overrides[get_db] = custom_mock_db

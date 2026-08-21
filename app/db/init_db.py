@@ -61,7 +61,7 @@ async def seed_data() -> None:
         ]
 
         for item in metiers_data:
-            sous_items = item.pop("sous_metiers")
+            sous_items: list[dict] = item.pop("sous_metiers")
             metier = Metier(**item)
             session.add(metier)
             await session.flush()
