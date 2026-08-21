@@ -63,7 +63,7 @@ class NetworkClient {
     try {
       final client = HttpClient();
       client.connectionTimeout = const Duration(milliseconds: 1500);
-      final uri = Uri.parse('$productionUrl/api/health');
+      final uri = Uri.parse('$productionUrl/health');
       final request = await client.getUrl(uri);
       final response = await request.close();
       if (response.statusCode == 200) {
@@ -146,7 +146,7 @@ class NetworkClient {
         final client = HttpClient();
         // Timeout très agressif pour scanner en parallèle sans lenteur
         client.connectionTimeout = const Duration(milliseconds: 900);
-        final uri = Uri.parse('$url/api/health');
+        final uri = Uri.parse('$url/health');
         final request = await client.getUrl(uri);
         final response = await request.close();
         
