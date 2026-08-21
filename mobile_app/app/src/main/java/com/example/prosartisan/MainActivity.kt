@@ -45,13 +45,15 @@ class MainActivity : ComponentActivity() {
         val client = NetworkClient(applicationContext)
 
         setContent {
-            ProsArtisanTheme {
+            val chatViewModel: ChatViewModel = viewModel { ChatViewModel(client) }
+            val isDarkTheme by chatViewModel.isDarkTheme.collectAsStateWithLifecycle()
+
+            ProsArtisanTheme(darkTheme = isDarkTheme) {
                 Surface(
                     modifier = Modifier.fillMaxSize(),
                     color = MaterialTheme.colorScheme.background
                 ) {
-                    val chatViewModel: ChatViewModel = viewModel { ChatViewModel(client) }
-                    AppContent(chatViewModel)
+                    AppContent(chatViewModel, isDarkTheme)
                 }
             }
         }
@@ -59,32 +61,33 @@ class MainActivity : ComponentActivity() {
 }
 
 @Composable
-fun AppContent(viewModel: ChatViewModel) {
+fun AppContent(viewModel: ChatViewModel, isDarkTheme: Boolean) {
     val state by viewModel.uiState.collectAsStateWithLifecycle()
+
+    val backgroundColors = if (isDarkTheme) {
+        listOf(Color(0xFF1E1E2C), Color(0xFF0F0F17))
+    } else {
+        listOf(Color(0xFFF5F5F7), Color(0xFFE5E5EA))
+    }
 
     Box(
         modifier = Modifier
             .fillMaxSize()
-            .background(
-                Brush.verticalGradient(
-                    colors = listOf(
-                        Color(0xFF1E1E2C),
-                        Color(0xFF0F0F17)
-                    )
-                )
-            )
+            .background(Brush.verticalGradient(colors = backgroundColors))
     ) {
         when (val uiState = state) {
-            is ChatUiState.Config -> ServerConfigScreen(uiState, viewModel)
-            is ChatUiState.Auth -> LoginRegisterScreen(uiState, viewModel)
-            is ChatUiState.Main -> MainChatScreen(uiState, viewModel)
+            is ChatUiState.Config -> ServerConfigScreen(uiState, viewModel, isDarkTheme)
+            is ChatUiState.Auth -> LoginRegisterScreen(uiState, viewModel, isDarkTheme)
+            is ChatUiState.Main -> MainChatScreen(uiState, viewModel, isDarkTheme)
         }
     }
 }
 
 @Composable
-fun ServerConfigScreen(state: ChatUiState.Config, viewModel: ChatViewModel) {
+fun ServerConfigScreen(state: ChatUiState.Config, viewModel: ChatViewModel, isDarkTheme: Boolean) {
     var urlText by remember { mutableStateOf(state.baseUrl) }
+    val textColor = if (isDarkTheme) Color.White else Color.Black
+    val textSecondaryColor = if (isDarkTheme) Color.LightGray else Color.DarkGray
 
     // Mettre à jour le champ texte lorsque l'URL est auto-détectée
     LaunchedEffect(state.baseUrl) {
@@ -110,13 +113,13 @@ fun ServerConfigScreen(state: ChatUiState.Config, viewModel: ChatViewModel) {
             text = "Configuration du Serveur",
             fontSize = 24.sp,
             fontWeight = FontWeight.Bold,
-            color = Color.White
+            color = textColor
         )
         Spacer(modifier = Modifier.height(8.dp))
         Text(
             text = "Entrez l'URL de l'API backend de ProsArtisan",
             fontSize = 14.sp,
-            color = Color.LightGray
+            color = textSecondaryColor
         )
         Spacer(modifier = Modifier.height(24.dp))
 
@@ -128,8 +131,8 @@ fun ServerConfigScreen(state: ChatUiState.Config, viewModel: ChatViewModel) {
             colors = OutlinedTextFieldDefaults.colors(
                 focusedBorderColor = Color(0xFFE2A000),
                 unfocusedBorderColor = Color.DarkGray,
-                focusedTextColor = Color.White,
-                unfocusedTextColor = Color.White
+                focusedTextColor = textColor,
+                unfocusedTextColor = textColor
             ),
             modifier = Modifier.fillMaxWidth()
         )
@@ -170,11 +173,13 @@ fun ServerConfigScreen(state: ChatUiState.Config, viewModel: ChatViewModel) {
 }
 
 @Composable
-fun LoginRegisterScreen(state: ChatUiState.Auth, viewModel: ChatViewModel) {
+fun LoginRegisterScreen(state: ChatUiState.Auth, viewModel: ChatViewModel, isDarkTheme: Boolean) {
     var email by remember { mutableStateOf("") }
     var password by remember { mutableStateOf("") }
     var nom by remember { mutableStateOf("") }
     var phone by remember { mutableStateOf("") }
+    val textColor = if (isDarkTheme) Color.White else Color.Black
+    val textSecondaryColor = if (isDarkTheme) Color.LightGray else Color.DarkGray
 
     Column(
         modifier = Modifier
@@ -195,7 +200,7 @@ fun LoginRegisterScreen(state: ChatUiState.Auth, viewModel: ChatViewModel) {
             text = if (state.isLogin) "Connexion ProsArtisan" else "Créer un Compte",
             fontSize = 26.sp,
             fontWeight = FontWeight.Bold,
-            color = Color.White
+            color = textColor
         )
         Spacer(modifier = Modifier.height(24.dp))
 
@@ -207,8 +212,8 @@ fun LoginRegisterScreen(state: ChatUiState.Auth, viewModel: ChatViewModel) {
                 singleLine = true,
                 colors = OutlinedTextFieldDefaults.colors(
                     focusedBorderColor = Color(0xFFE2A000),
-                    focusedTextColor = Color.White,
-                    unfocusedTextColor = Color.White
+                    focusedTextColor = textColor,
+                    unfocusedTextColor = textColor
                 ),
                 modifier = Modifier.fillMaxWidth()
             )
@@ -221,8 +226,8 @@ fun LoginRegisterScreen(state: ChatUiState.Auth, viewModel: ChatViewModel) {
                 keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Phone),
                 colors = OutlinedTextFieldDefaults.colors(
                     focusedBorderColor = Color(0xFFE2A000),
-                    focusedTextColor = Color.White,
-                    unfocusedTextColor = Color.White
+                    focusedTextColor = textColor,
+                    unfocusedTextColor = textColor
                 ),
                 modifier = Modifier.fillMaxWidth()
             )
@@ -237,8 +242,8 @@ fun LoginRegisterScreen(state: ChatUiState.Auth, viewModel: ChatViewModel) {
             keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Email),
             colors = OutlinedTextFieldDefaults.colors(
                 focusedBorderColor = Color(0xFFE2A000),
-                focusedTextColor = Color.White,
-                unfocusedTextColor = Color.White
+                focusedTextColor = textColor,
+                unfocusedTextColor = textColor
             ),
             modifier = Modifier.fillMaxWidth()
         )
@@ -253,8 +258,8 @@ fun LoginRegisterScreen(state: ChatUiState.Auth, viewModel: ChatViewModel) {
             keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Password),
             colors = OutlinedTextFieldDefaults.colors(
                 focusedBorderColor = Color(0xFFE2A000),
-                focusedTextColor = Color.White,
-                unfocusedTextColor = Color.White
+                focusedTextColor = textColor,
+                unfocusedTextColor = textColor
             ),
             modifier = Modifier.fillMaxWidth()
         )
@@ -292,7 +297,7 @@ fun LoginRegisterScreen(state: ChatUiState.Auth, viewModel: ChatViewModel) {
             Spacer(modifier = Modifier.height(16.dp))
             Text(
                 text = if (state.isLogin) "Pas de compte ? Inscrivez-vous" else "Déjà inscrit ? Connectez-vous",
-                color = Color.LightGray,
+                color = textSecondaryColor,
                 fontSize = 14.sp,
                 modifier = Modifier
                     .clickable { viewModel.toggleAuthMode() }
@@ -313,18 +318,12 @@ fun LoginRegisterScreen(state: ChatUiState.Auth, viewModel: ChatViewModel) {
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-fun MainChatScreen(state: ChatUiState.Main, viewModel: ChatViewModel) {
+fun MainChatScreen(state: ChatUiState.Main, viewModel: ChatViewModel, isDarkTheme: Boolean) {
     val coroutineScope = rememberCoroutineScope()
     val scrollState = rememberLazyListState()
-
-    // Effet pour faire défiler vers le bas lors de la réception de nouveaux messages/chunks
-    LaunchedEffect(state.messages.size, state.currentStreamText) {
-        if (state.messages.isNotEmpty() || state.currentStreamText.isNotEmpty()) {
-            scrollState.animateScrollToItem(
-                if (state.currentStreamText.isNotEmpty()) state.messages.size else state.messages.size - 1
-            )
-        }
-    }
+    val textColor = if (isDarkTheme) Color.White else Color.Black
+    val textSecondaryColor = if (isDarkTheme) Color.LightGray else Color.DarkGray
+    val barColor = if (isDarkTheme) Color(0xFF171721) else Color(0xFFE5E5EA)
 
     Scaffold(
         topBar = {
@@ -334,30 +333,37 @@ fun MainChatScreen(state: ChatUiState.Main, viewModel: ChatViewModel) {
                         Text(
                             "ProsArtisan IA",
                             fontWeight = FontWeight.Bold,
-                            color = Color.White,
+                            color = textColor,
                             fontSize = 18.sp
                         )
                         Text(
                             text = "Abonnement: ${if (state.quotaRestant != null && state.quotaRestant > 10) "Pro Illimité" else "Gratuit"}",
                             fontSize = 12.sp,
-                            color = Color.LightGray
+                            color = textSecondaryColor
                         )
                     }
                 },
                 navigationIcon = {
                     IconButton(onClick = { viewModel.setSidebarOpen(true) }) {
-                        Icon(Icons.Default.Menu, contentDescription = "Menu", tint = Color.White)
+                        Icon(Icons.Default.Menu, contentDescription = "Menu", tint = textColor)
                     }
                 },
                 actions = {
+                    IconButton(onClick = { viewModel.toggleTheme() }) {
+                        Icon(
+                            imageVector = if (isDarkTheme) Icons.Default.Brightness7 else Icons.Default.Brightness4,
+                            contentDescription = "Theme",
+                            tint = Color(0xFFE2A000)
+                        )
+                    }
                     IconButton(onClick = { viewModel.createConversation() }) {
                         Icon(Icons.Default.Add, contentDescription = "New", tint = Color(0xFFE2A000))
                     }
                     IconButton(onClick = { viewModel.logout() }) {
-                        Icon(Icons.Default.ExitToApp, contentDescription = "Logout", tint = Color.LightGray)
+                        Icon(Icons.Default.ExitToApp, contentDescription = "Logout", tint = textSecondaryColor)
                     }
                 },
-                colors = TopAppBarDefaults.topAppBarColors(containerColor = Color(0xFF171721))
+                colors = TopAppBarDefaults.topAppBarColors(containerColor = barColor)
             )
         },
         containerColor = Color.Transparent
@@ -367,11 +373,16 @@ fun MainChatScreen(state: ChatUiState.Main, viewModel: ChatViewModel) {
                 .fillMaxSize()
                 .padding(paddingValues)
         ) {
-            Column(modifier = Modifier.fillMaxSize()) {
+            Column(
+                modifier = Modifier
+                    .fillMaxSize()
+                    .imePadding()
+            ) {
                 // Barre de Sélection de Métier (Horizontal choice chips)
                 MetierSelectorRow(
                     selectedId = state.activeMetierId,
-                    onSelect = { viewModel.selectMetier(it) }
+                    onSelect = { viewModel.selectMetier(it) },
+                    isDarkTheme = isDarkTheme
                 )
 
                 // Fenêtre principale de messages
@@ -383,11 +394,11 @@ fun MainChatScreen(state: ChatUiState.Main, viewModel: ChatViewModel) {
                         .padding(horizontal = 12.dp)
                 ) {
                     items(state.messages) { msg ->
-                        MessageBubble(msg)
+                        MessageBubble(msg, isDarkTheme)
                     }
                     if (state.isStreaming && state.currentStreamText.isNotEmpty()) {
                         item {
-                            StreamingBubble(state.currentStreamText)
+                            StreamingBubble(state.currentStreamText, isDarkTheme)
                         }
                     }
                 }
@@ -397,7 +408,8 @@ fun MainChatScreen(state: ChatUiState.Main, viewModel: ChatViewModel) {
                     text = state.inputMessage,
                     isStreaming = state.isStreaming,
                     onTextChange = { viewModel.updateInput(it) },
-                    onSend = { viewModel.sendMessage() }
+                    onSend = { viewModel.sendMessage() },
+                    isDarkTheme = isDarkTheme
                 )
             }
 
@@ -407,7 +419,8 @@ fun MainChatScreen(state: ChatUiState.Main, viewModel: ChatViewModel) {
                     conversations = state.conversations,
                     activeConvId = state.activeConversationId,
                     onSelectConv = { viewModel.selectConversation(it) },
-                    onClose = { viewModel.setSidebarOpen(false) }
+                    onClose = { viewModel.setSidebarOpen(false) },
+                    isDarkTheme = isDarkTheme
                 )
             }
 
@@ -439,18 +452,20 @@ fun MainChatScreen(state: ChatUiState.Main, viewModel: ChatViewModel) {
 }
 
 @Composable
-fun MetierSelectorRow(selectedId: Int?, onSelect: (Int?) -> Unit) {
+fun MetierSelectorRow(selectedId: Int?, onSelect: (Int?) -> Unit, isDarkTheme: Boolean) {
     val metiers = listOf(
         1 to "🧱 Maçonnerie",
         2 to "⚡ Électricité",
         3 to "🚰 Plomberie",
         4 to "🪵 Menuiserie"
     )
+    val barColor = if (isDarkTheme) Color(0xFF171721) else Color(0xFFE5E5EA)
+    val chipUnselectedColor = if (isDarkTheme) Color(0xFF232333) else Color(0xFFD1D1D6)
 
     Row(
         modifier = Modifier
             .fillMaxWidth()
-            .background(Color(0xFF171721))
+            .background(barColor)
             .padding(horizontal = 8.dp, vertical = 6.dp),
         horizontalArrangement = Arrangement.spacedBy(8.dp)
     ) {
@@ -459,7 +474,7 @@ fun MetierSelectorRow(selectedId: Int?, onSelect: (Int?) -> Unit) {
             Box(
                 modifier = Modifier
                     .background(
-                        color = if (isSelected) Color(0xFFE2A000) else Color(0xFF232333),
+                        color = if (isSelected) Color(0xFFE2A000) else chipUnselectedColor,
                         shape = RoundedCornerShape(16.dp)
                     )
                     .clickable { onSelect(id) }
@@ -467,7 +482,7 @@ fun MetierSelectorRow(selectedId: Int?, onSelect: (Int?) -> Unit) {
             ) {
                 Text(
                     text = label,
-                    color = if (isSelected) Color.Black else Color.White,
+                    color = if (isSelected) Color.Black else (if (isDarkTheme) Color.White else Color.Black),
                     fontWeight = FontWeight.Bold,
                     fontSize = 12.sp
                 )
@@ -477,8 +492,10 @@ fun MetierSelectorRow(selectedId: Int?, onSelect: (Int?) -> Unit) {
 }
 
 @Composable
-fun MessageBubble(msg: MessageDto) {
+fun MessageBubble(msg: MessageDto, isDarkTheme: Boolean) {
     val isUser = msg.role == "user"
+    val assistantBubbleColor = if (isDarkTheme) Color(0xFF2C2C3C) else Color(0xFFE5E5EA)
+    val assistantTextColor = if (isDarkTheme) Color.White else Color.Black
     Row(
         modifier = Modifier
             .fillMaxWidth()
@@ -493,14 +510,14 @@ fun MessageBubble(msg: MessageDto) {
                 bottomEnd = if (isUser) 2.dp else 16.dp
             ),
             colors = CardDefaults.cardColors(
-                containerColor = if (isUser) Color(0xFF0F5A47) else Color(0xFF2C2C3C)
+                containerColor = if (isUser) Color(0xFF0F5A47) else assistantBubbleColor
             ),
             modifier = Modifier.widthIn(max = 280.dp)
         ) {
             Column(modifier = Modifier.padding(12.dp)) {
                 Text(
                     text = msg.content,
-                    color = Color.White,
+                    color = if (isUser) Color.White else assistantTextColor,
                     fontSize = 15.sp
                 )
             }
@@ -509,7 +526,9 @@ fun MessageBubble(msg: MessageDto) {
 }
 
 @Composable
-fun StreamingBubble(text: String) {
+fun StreamingBubble(text: String, isDarkTheme: Boolean) {
+    val bubbleColor = if (isDarkTheme) Color(0xFF232333) else Color(0xFFE5E5EA)
+    val textColor = if (isDarkTheme) Color.LightGray else Color.DarkGray
     Row(
         modifier = Modifier
             .fillMaxWidth()
@@ -524,14 +543,14 @@ fun StreamingBubble(text: String) {
                 bottomEnd = 16.dp
             ),
             colors = CardDefaults.cardColors(
-                containerColor = Color(0xFF232333)
+                containerColor = bubbleColor
             ),
             modifier = Modifier.widthIn(max = 280.dp)
         ) {
             Column(modifier = Modifier.padding(12.dp)) {
                 Text(
                     text = text,
-                    color = Color.LightGray,
+                    color = textColor,
                     fontSize = 15.sp
                 )
             }
@@ -544,12 +563,15 @@ fun ChatInputArea(
     text: String,
     isStreaming: Boolean,
     onTextChange: (String) -> Unit,
-    onSend: () -> Unit
+    onSend: () -> Unit,
+    isDarkTheme: Boolean
 ) {
+    val barColor = if (isDarkTheme) Color(0xFF171721) else Color(0xFFE5E5EA)
+    val textColor = if (isDarkTheme) Color.White else Color.Black
     Row(
         modifier = Modifier
             .fillMaxWidth()
-            .background(Color(0xFF171721))
+            .background(barColor)
             .padding(horizontal = 12.dp, vertical = 8.dp)
             .heightIn(min = 60.dp),
         verticalAlignment = Alignment.CenterVertically
@@ -562,8 +584,8 @@ fun ChatInputArea(
             colors = OutlinedTextFieldDefaults.colors(
                 focusedBorderColor = Color(0xFFE2A000),
                 unfocusedBorderColor = Color.DarkGray,
-                focusedTextColor = Color.White,
-                unfocusedTextColor = Color.White
+                focusedTextColor = textColor,
+                unfocusedTextColor = textColor
             ),
             modifier = Modifier
                 .weight(1f)
@@ -598,8 +620,12 @@ fun CustomSidebar(
     conversations: List<ConversationDto>,
     activeConvId: String?,
     onSelectConv: (String) -> Unit,
-    onClose: () -> Unit
+    onClose: () -> Unit,
+    isDarkTheme: Boolean
 ) {
+    val barColor = if (isDarkTheme) Color(0xFF171721) else Color(0xFFFFFFFF)
+    val textColor = if (isDarkTheme) Color.White else Color.Black
+    val cardBgUnselected = if (isDarkTheme) Color(0xFF232333) else Color(0xFFE5E5EA)
     Box(
         modifier = Modifier
             .fillMaxSize()
@@ -610,7 +636,7 @@ fun CustomSidebar(
             modifier = Modifier
                 .fillMaxHeight()
                 .width(280.dp)
-                .background(Color(0xFF171721))
+                .background(barColor)
                 .clickable(enabled = false) {}
                 .padding(16.dp)
                 .safeContentPadding()
@@ -624,10 +650,10 @@ fun CustomSidebar(
                     text = "Discussions",
                     fontSize = 20.sp,
                     fontWeight = FontWeight.Bold,
-                    color = Color.White
+                    color = textColor
                 )
                 IconButton(onClick = onClose) {
-                    Icon(Icons.Default.Close, contentDescription = "Close", tint = Color.White)
+                    Icon(Icons.Default.Close, contentDescription = "Close", tint = textColor)
                 }
             }
             Spacer(modifier = Modifier.height(16.dp))
@@ -640,7 +666,7 @@ fun CustomSidebar(
                     val isActive = conv.id == activeConvId
                     Card(
                         colors = CardDefaults.cardColors(
-                            containerColor = if (isActive) Color(0xFFE2A000) else Color(0xFF232333)
+                            containerColor = if (isActive) Color(0xFFE2A000) else cardBgUnselected
                         ),
                         modifier = Modifier
                             .fillMaxWidth()
@@ -648,7 +674,7 @@ fun CustomSidebar(
                     ) {
                         Text(
                             text = conv.title,
-                            color = if (isActive) Color.Black else Color.White,
+                            color = if (isActive) Color.Black else textColor,
                             fontSize = 14.sp,
                             maxLines = 1,
                             modifier = Modifier.padding(12.dp)

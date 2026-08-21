@@ -41,6 +41,13 @@ class ChatViewModel(private val client: NetworkClient) : ViewModel() {
     private val _uiState = MutableStateFlow<ChatUiState>(ChatUiState.Config(client.baseUrl))
     val uiState: StateFlow<ChatUiState> = _uiState.asStateFlow()
 
+    private val _isDarkTheme = MutableStateFlow(true)
+    val isDarkTheme: StateFlow<Boolean> = _isDarkTheme.asStateFlow()
+
+    fun toggleTheme() {
+        _isDarkTheme.value = !_isDarkTheme.value
+    }
+
     init {
         viewModelScope.launch {
             // Détection automatique de l'URL du serveur en arrière-plan au démarrage
