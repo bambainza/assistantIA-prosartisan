@@ -420,10 +420,11 @@ fun MainChatScreen(state: ChatUiState.Main, viewModel: ChatViewModel, isDarkThem
 
                 // Pied de page / Zone de saisie
                 ChatInputArea(
-                    text = state.inputMessage,
                     isStreaming = state.isStreaming,
-                    onTextChange = { viewModel.updateInput(it) },
-                    onSend = { viewModel.sendMessage() },
+                    onSend = { text ->
+                        viewModel.updateInput(text)
+                        viewModel.sendMessage()
+                    },
                     isDarkTheme = isDarkTheme
                 )
             }
@@ -575,12 +576,11 @@ fun StreamingBubble(text: String, isDarkTheme: Boolean) {
 
 @Composable
 fun ChatInputArea(
-    text: String,
     isStreaming: Boolean,
-    onTextChange: (String) -> Unit,
-    onSend: () -> Unit,
+    onSend: (String) -> Unit,
     isDarkTheme: Boolean
 ) {
+    var textState by remember { mutableStateOf("") }
     val barColor = if (isDarkTheme) Color(0xFF171721) else Color(0xFFE5E5EA)
     val textColor = if (isDarkTheme) Color.White else Color.Black
     Row(
@@ -592,8 +592,8 @@ fun ChatInputArea(
         verticalAlignment = Alignment.CenterVertically
     ) {
         TextField(
-            value = text,
-            onValueChange = onTextChange,
+            value = textState,
+            onValueChange = { textState = it },
             placeholder = { Text("Posez votre question chantier...", color = Color.Gray, fontSize = 16.sp) },
             maxLines = 4,
             textStyle = androidx.compose.ui.text.TextStyle(color = textColor, fontSize = 16.sp),
@@ -614,11 +614,16 @@ fun ChatInputArea(
         )
         Spacer(modifier = Modifier.width(12.dp))
         IconButton(
-            onClick = onSend,
-            enabled = !isStreaming && text.isNotBlank(),
+            onClick = {
+                if (textState.isNotBlank()) {
+                    onSend(textState)
+                    textState = ""
+                }
+            },
+            enabled = !isStreaming && textState.isNotBlank(),
             modifier = Modifier
                 .background(
-                    color = if (text.isNotBlank() && !isStreaming) Color(0xFFE2A000) else Color.DarkGray,
+                    color = if (textState.isNotBlank() && !isStreaming) Color(0xFFE2A000) else Color.DarkGray,
                     shape = RoundedCornerShape(50)
                 )
                 .requiredSize(48.dp)
