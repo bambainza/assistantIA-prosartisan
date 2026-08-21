@@ -15,8 +15,12 @@ import bcrypt
 from fastapi import Depends, HTTPException, status
 from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
 from jose import JWTError, jwt
+from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy import select
 
 from app.config import settings
+from app.db.session import get_db
+from app.models.user import User
 
 # ── JWT token management ──
 ALGORITHM = settings.jwt_algorithm
@@ -121,3 +125,23 @@ async def get_optional_user_id(
         return get_user_id_from_token(credentials.credentials)
     except HTTPException:
         return None
+
+
+async def get_current_admin_user_id(
+    user_id: uuid.UUID = Depends(get_current_user_id),
+    db: AsyncSession = Depends(get_db),
+) -> uuid.UUID:
+    """Dépendance FastAPI : extrait et valide le user_id de l'admin depuis le JWT.
+
+    Retourne le UUID de l'admin.
+    Lève HTTP 403 si l'utilisateur n'a pas les privilèges admin.
+    """
+    stmt = select(User).where(User.id == user_id, User.is_admin == True)
+    res = await db.execute(stmt)
+    admin = res.scalar_one_or_none()
+    if not admin:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Accès interdit : privilèges administrateur requis.",
+        )
+    return user_id

@@ -51,6 +51,7 @@ class User(Base):
         ForeignKey("sous_metiers.id"), default=None
     )
     type_abonnement: Mapped[str] = mapped_column(String(20), default="FREE")
+    is_admin: Mapped[bool] = mapped_column(default=False)
 
     created_at: Mapped[datetime] = mapped_column(server_default=func.now())
     updated_at: Mapped[datetime] = mapped_column(

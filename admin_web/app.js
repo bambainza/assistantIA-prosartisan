@@ -2,12 +2,93 @@
 let selectedUserIdForGrant = null;
 let grantModal = null;
 
+// Unified Admin Fetch Wrapper
+async function adminFetch(url, options = {}) {
+    const token = localStorage.getItem('prosartisan_admin_token');
+    if (!token) {
+        logoutAdmin();
+        throw new Error('Not authenticated');
+    }
+    
+    options.headers = options.headers || {};
+    options.headers['Authorization'] = `Bearer ${token}`;
+    
+    const res = await fetch(url, options);
+    if (res.status === 401 || res.status === 403) {
+        logoutAdmin();
+        throw new Error('Session expired or unauthorized');
+    }
+    return res;
+}
+
+function logoutAdmin() {
+    localStorage.removeItem('prosartisan_admin_token');
+    document.getElementById('login-container').classList.remove('d-none');
+}
+
 document.addEventListener('DOMContentLoaded', () => {
     initTabs();
-    refreshDashboard();
+    initLoginForm();
     initUploadForm();
     loadPromptInspector();
+    
+    // Check if already authenticated
+    const token = localStorage.getItem('prosartisan_admin_token');
+    if (token) {
+        document.getElementById('login-container').classList.add('d-none');
+        refreshDashboard();
+    } else {
+        document.getElementById('login-container').classList.remove('d-none');
+    }
 });
+
+// Login Form handler
+function initLoginForm() {
+    const form = document.getElementById('admin-login-form');
+    if (!form) return;
+
+    form.addEventListener('submit', async (e) => {
+        e.preventDefault();
+        const email = document.getElementById('admin-email').value;
+        const password = document.getElementById('admin-password').value;
+        const errMsg = document.getElementById('login-error-msg');
+        const submitBtn = document.getElementById('btn-login-submit');
+
+        submitBtn.disabled = true;
+        submitBtn.textContent = 'Connexion...';
+        errMsg.classList.add('d-none');
+
+        try {
+            const res = await fetch('/api/auth/login', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ email, password })
+            });
+
+            if (res.status === 200) {
+                const data = await res.json();
+                if (data.user && data.user.is_admin) {
+                    localStorage.setItem('prosartisan_admin_token', data.access_token);
+                    document.getElementById('login-container').classList.add('d-none');
+                    refreshDashboard();
+                } else {
+                    errMsg.textContent = 'Accès interdit : privilèges administrateur requis.';
+                    errMsg.classList.remove('d-none');
+                }
+            } else {
+                const errData = await res.json().catch(() => ({}));
+                errMsg.textContent = errData.detail || 'Identifiants incorrects.';
+                errMsg.classList.remove('d-none');
+            }
+        } catch (err) {
+            errMsg.textContent = 'Impossible de contacter le serveur d\'authentification.';
+            errMsg.classList.remove('d-none');
+        } finally {
+            submitBtn.disabled = false;
+            submitBtn.textContent = 'Se connecter';
+        }
+    });
+}
 
 // Tab Navigation
 function initTabs() {
@@ -31,6 +112,9 @@ function initTabs() {
 
 // Refresh Dashboard & Data
 async function refreshDashboard() {
+    const token = localStorage.getItem('prosartisan_admin_token');
+    if (!token) return;
+
     await fetchOverview();
     await fetchArtisans();
     await fetchDocuments();
@@ -41,7 +125,7 @@ async function refreshDashboard() {
 // 1. Fetch Overview (KPIs & Top Métiers)
 async function fetchOverview() {
     try {
-        const res = await fetch('/api/admin/overview');
+        const res = await adminFetch('/api/admin/overview');
         const data = await res.json();
 
         document.getElementById('kpi-artisans').textContent = data.kpis.total_artisans.toLocaleString();
@@ -52,21 +136,23 @@ async function fetchOverview() {
         const barChartList = document.getElementById('top-metiers-list');
         barChartList.innerHTML = '';
         
-        const maxReq = Math.max(...data.metiers_top.map(m => m.requetes));
-        data.metiers_top.forEach(m => {
-            const pct = (m.requetes / maxReq) * 100;
-            barChartList.innerHTML += `
-                <div class="bar-item mb-3">
-                    <div class="bar-info d-flex justify-content-between mb-1" style="font-size: 13px;">
-                        <span>${m.nom}</span>
-                        <span><strong>${m.requetes.toLocaleString()}</strong> req</span>
+        if (data.metiers_top && data.metiers_top.length > 0) {
+            const maxReq = Math.max(...data.metiers_top.map(m => m.requetes)) || 1;
+            data.metiers_top.forEach(m => {
+                const pct = (m.requetes / maxReq) * 100;
+                barChartList.innerHTML += `
+                    <div class="bar-item mb-3">
+                        <div class="bar-info d-flex justify-content-between mb-1" style="font-size: 13px;">
+                            <span>${m.nom}</span>
+                            <span><strong>${m.requetes.toLocaleString()}</strong> req</span>
+                        </div>
+                        <div class="progress" style="height: 8px;">
+                            <div class="progress-bar bg-primary" role="progressbar" style="width: ${pct}%;" aria-valuenow="${pct}" aria-valuemin="0" aria-valuemax="100"></div>
+                        </div>
                     </div>
-                    <div class="progress" style="height: 8px;">
-                        <div class="progress-bar bg-primary" role="progressbar" style="width: ${pct}%;" aria-valuenow="${pct}" aria-valuemin="0" aria-valuemax="100"></div>
-                    </div>
-                </div>
-            `;
-        });
+                `;
+            });
+        }
     } catch (err) {
         console.error('Erreur chargement overview:', err);
     }
@@ -75,7 +161,7 @@ async function fetchOverview() {
 // 2. Fetch Artisans Table
 async function fetchArtisans() {
     try {
-        const res = await fetch('/api/admin/users');
+        const res = await adminFetch('/api/admin/users');
         const data = await res.json();
         const tbody = document.getElementById('artisans-table-body');
         tbody.innerHTML = '';
@@ -127,7 +213,7 @@ async function submitGrantPass() {
     const typePass = document.getElementById('select-type-pass').value;
 
     try {
-        const res = await fetch(`/api/admin/users/${selectedUserIdForGrant}/grant-pass?type_pass=${typePass}`, {
+        const res = await adminFetch(`/api/admin/users/${selectedUserIdForGrant}/grant-pass?type_pass=${typePass}`, {
             method: 'POST'
         });
         const data = await res.json();
@@ -142,7 +228,7 @@ async function submitGrantPass() {
 // 3. Fetch Documents Qdrant
 async function fetchDocuments() {
     try {
-        const res = await fetch('/api/admin/documents');
+        const res = await adminFetch('/api/admin/documents');
         const data = await res.json();
         const docList = document.getElementById('documents-list');
         docList.innerHTML = '';
@@ -158,7 +244,7 @@ async function fetchDocuments() {
                         <p class="text-muted mb-3" style="font-size: 11px;">
                             ${d.chunks_count} chunks vectoriels • Ingéré le ${d.date_ingestion}
                         </p>
-                        <button class="btn btn-sm btn-outline-danger" onclick="deleteDoc('${d.id}')">
+                        <button class="btn btn-sm btn-outline-danger" onclick="deleteDoc('${d.filename}')">
                             <i class="iconoir-trash me-1"></i> Supprimer de Qdrant
                         </button>
                     </div>
@@ -173,7 +259,7 @@ async function fetchDocuments() {
 async function deleteDoc(docId) {
     if (!confirm('Voulez-vous vraiment supprimer ce document de Qdrant ?')) return;
     try {
-        const res = await fetch(`/api/admin/documents/${docId}`, { method: 'DELETE' });
+        const res = await adminFetch(`/api/admin/documents/${docId}`, { method: 'DELETE' });
         const data = await res.json();
         alert(data.message);
         await fetchDocuments();
@@ -201,7 +287,7 @@ function initUploadForm() {
         btn.disabled = true;
 
         try {
-            const res = await fetch('/api/admin/upload-pdf', {
+            const res = await adminFetch('/api/admin/upload-pdf', {
                 method: 'POST',
                 body: formData
             });
@@ -221,7 +307,7 @@ function initUploadForm() {
 // 5. Fetch Transactions Table
 async function fetchTransactions() {
     try {
-        const res = await fetch('/api/admin/transactions');
+        const res = await adminFetch('/api/admin/transactions');
         const data = await res.json();
         const tbody = document.getElementById('payments-table-body');
         tbody.innerHTML = '';
@@ -258,6 +344,7 @@ async function sendSimulatedChat() {
     qInput.value = '';
 
     try {
+        // Envoi public
         const res = await fetch('/api/chat', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
@@ -294,7 +381,7 @@ Tu es l'Assistant Expert de ProsArtisan (maçons, électriciens, plombiers, menu
 // Fetch System Logs
 async function fetchLogs() {
     try {
-        const res = await fetch('/api/admin/logs');
+        const res = await adminFetch('/api/admin/logs');
         const data = await res.json();
         const logsConsole = document.getElementById('logs-console');
         if (logsConsole) {

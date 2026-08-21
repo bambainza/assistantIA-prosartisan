@@ -93,6 +93,12 @@
     height: 395px;
     overflow-y: auto;
     color: #34d399;
+    white-space: pre-wrap;
+}
+
+.scrollable-card-body {
+    max-height: 400px;
+    overflow-y: auto;
 }
 
 /* System Logs Console */
@@ -107,4 +113,82 @@
     height: 400px;
     overflow-y: auto;
     line-height: 1.5;
+}
+
+/* --- Inline CSS Migration Utility Classes --- */
+
+/* Login Container & Elements */
+.login-screen {
+    position: fixed;
+    top: 0;
+    left: 0;
+    width: 100vw;
+    height: 100vh;
+    background-color: #11131c;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    z-index: 99999;
+}
+
+.login-card {
+    width: 400px;
+    background-color: #1e202d;
+    color: #fff;
+}
+
+.login-input {
+    background-color: #151722 !important;
+    border-color: #2e3142 !important;
+    color: #fff !important;
+}
+
+.login-input::placeholder {
+    color: #5a5f78 !important;
+}
+
+.login-button {
+    background-color: #e2a000 !important;
+    border-color: #e2a000 !important;
+    color: #000 !important;
+}
+
+/* Header User Avatars */
+.avatar-header-36 {
+    width: 36px;
+    height: 36px;
+    font-weight: bold;
+}
+
+.avatar-header-32 {
+    width: 32px;
+    height: 32px;
+    font-weight: bold;
+}
+
+/* KPI Circle Icons */
+.kpi-icon-circle {
+    width: 48px;
+    height: 48px;
+}
+
+/* Progress Bars & Utilities */
+.progress-h-8 {
+    height: 8px;
+}
+
+.max-w-70p {
+    max-width: 70%;
+}
+
+.progress-w-45 {
+    width: 45%;
+}
+
+.progress-w-65 {
+    width: 65%;
+}
+
+.progress-w-85 {
+    width: 85%;
 }

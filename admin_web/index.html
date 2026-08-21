@@ -20,6 +20,35 @@
 </head>
 <body>
 
+    <!-- Interface de connexion Backoffice -->
+    <div id="login-container" class="login-screen">
+        <div class="card shadow-lg border-0 login-card">
+            <div class="card-body p-4 text-center">
+                <span class="fs-1">👷‍♂️</span>
+                <h4 class="mt-3 mb-1 text-white fw-bold">ProsArtisan Admin</h4>
+                <p class="text-muted mb-4 fs-13">Veuillez vous authentifier pour accéder à la console</p>
+                
+                <div id="login-error-msg" class="alert alert-danger d-none py-2 fs-13" role="alert">
+                    Identifiants incorrects ou privilèges insuffisants.
+                </div>
+                
+                <form id="admin-login-form">
+                    <div class="mb-3 text-start">
+                        <label for="admin-email" class="form-label text-muted fs-12">Adresse email</label>
+                        <input type="email" class="form-control login-input" id="admin-email" placeholder="admin@prosartisan.ci" required>
+                    </div>
+                    <div class="mb-4 text-start">
+                        <label for="admin-password" class="form-label text-muted fs-12">Mot de passe</label>
+                        <input type="password" class="form-control login-input" id="admin-password" placeholder="••••••••" required>
+                    </div>
+                    <button type="submit" class="btn btn-primary w-100 py-2 fw-semibold login-button" id="btn-login-submit">
+                        Se connecter
+                    </button>
+                </form>
+            </div>
+        </div>
+    </div>
+
     <!-- leftbar-tab-menu -->
     <div class="startbar d-print-none">
         <!--start brand-->
@@ -94,7 +123,7 @@
                 <nav class="topbar-custom d-flex justify-content-between" id="topbar-custom">    
                     <ul class="topbar-item list-unstyled d-inline-flex align-items-center mb-0">                        
                         <li>
-                            <button class="nav-link mobile-menu-btn nav-icon" id="togglemenu">
+                            <button class="nav-link mobile-menu-btn nav-icon" id="togglemenu" title="Menu de navigation" aria-label="Menu de navigation">
                                 <i class="iconoir-menu"></i>
                             </button>
                         </li> 
@@ -109,7 +138,7 @@
                             </button>
                         </li>
                         <li class="topbar-item">
-                            <a class="nav-link nav-icon" href="javascript:void(0);" id="light-dark-mode">
+                            <a class="nav-link nav-icon" href="javascript:void(0);" id="light-dark-mode" title="Changer de thème" aria-label="Changer de thème">
                                 <i class="iconoir-half-moon dark-mode"></i>
                                 <i class="iconoir-sun-light light-mode"></i>
                             </a>                    
@@ -117,14 +146,14 @@
                         <li class="dropdown topbar-item">
                             <a class="nav-link dropdown-toggle arrow-none nav-icon" data-bs-toggle="dropdown" href="#" role="button"
                                 aria-haspopup="false" aria-expanded="false" data-bs-offset="0,19">
-                                <div class="avatar-sm bg-primary text-white rounded-circle d-flex align-items-center justify-content-center" style="width: 36px; height: 36px; font-weight: bold;">
+                                <div class="avatar-sm bg-primary text-white rounded-circle d-flex align-items-center justify-content-center avatar-header-36">
                                     A
                                 </div>
                             </a>
                             <div class="dropdown-menu dropdown-menu-end py-0">
                                 <div class="d-flex align-items-center dropdown-item py-2 bg-secondary-subtle">
                                     <div class="flex-shrink-0">
-                                        <div class="avatar-sm bg-primary text-white rounded-circle d-flex align-items-center justify-content-center" style="width: 32px; height: 32px; font-weight: bold;">
+                                        <div class="avatar-sm bg-primary text-white rounded-circle d-flex align-items-center justify-content-center avatar-header-32">
                                             A
                                         </div>
                                     </div>
@@ -158,7 +187,7 @@
                                             <p class="mb-0 text-truncate text-muted"><span class="text-success"><i class="las la-trending-up"></i>+12%</span> cette semaine</p>
                                         </div>
                                         <div class="col-auto align-self-center">
-                                            <div class="flex-shrink-0 bg-primary-subtle text-primary thumb-md rounded-circle d-flex align-items-center justify-content-center" style="width: 48px; height: 48px;">
+                                            <div class="flex-shrink-0 bg-primary-subtle text-primary thumb-md rounded-circle d-flex align-items-center justify-content-center kpi-icon-circle">
                                                 <i class="iconoir-user fs-4"></i>
                                             </div>
                                         </div>
@@ -178,7 +207,7 @@
                                             <p class="mb-0 text-truncate text-muted"><span class="text-success"><i class="las la-trending-up"></i>26.6%</span> d'engagement</p>
                                         </div>
                                         <div class="col-auto align-self-center">
-                                            <div class="flex-shrink-0 bg-info-subtle text-info thumb-md rounded-circle d-flex align-items-center justify-content-center" style="width: 48px; height: 48px;">
+                                            <div class="flex-shrink-0 bg-info-subtle text-info thumb-md rounded-circle d-flex align-items-center justify-content-center kpi-icon-circle">
                                                 <i class="iconoir-activity fs-4"></i>
                                             </div>
                                         </div>
@@ -198,7 +227,7 @@
                                             <p class="mb-0 text-truncate text-muted">Mobile Money XOF</p>
                                         </div>
                                         <div class="col-auto align-self-center">
-                                            <div class="flex-shrink-0 bg-success-subtle text-success thumb-md rounded-circle d-flex align-items-center justify-content-center" style="width: 48px; height: 48px;">
+                                            <div class="flex-shrink-0 bg-success-subtle text-success thumb-md rounded-circle d-flex align-items-center justify-content-center kpi-icon-circle">
                                                 <i class="iconoir-handbag fs-4"></i>
                                             </div>
                                         </div>
@@ -218,7 +247,7 @@
                                             <p class="mb-0 text-truncate text-muted"><span class="text-success"><i class="las la-trending-up"></i>99.4%</span> Zéro Hallucination</p>
                                         </div>
                                         <div class="col-auto align-self-center">
-                                            <div class="flex-shrink-0 bg-warning-subtle text-warning thumb-md rounded-circle d-flex align-items-center justify-content-center" style="width: 48px; height: 48px;">
+                                            <div class="flex-shrink-0 bg-warning-subtle text-warning thumb-md rounded-circle d-flex align-items-center justify-content-center kpi-icon-circle">
                                                 <i class="iconoir-chat-bubble fs-4"></i>
                                             </div>
                                         </div>
@@ -253,22 +282,22 @@
                                     <div class="sub-distribution">
                                         <div class="dist-item d-flex align-items-center mb-3">
                                             <span class="dist-label w-50">Pass Mensuel Pro (3000 F)</span>
-                                            <div class="progress flex-grow-1 mx-3" style="height: 8px;">
-                                                <div class="progress-bar bg-success" style="width: 45%;"></div>
+                                            <div class="progress flex-grow-1 mx-3 progress-h-8">
+                                                <div class="progress-bar bg-success progress-w-45"></div>
                                             </div>
                                             <span class="dist-val">134</span>
                                         </div>
                                         <div class="dist-item d-flex align-items-center mb-3">
                                             <span class="dist-label w-50">Pass 24H Urgence (500 F)</span>
-                                            <div class="progress flex-grow-1 mx-3" style="height: 8px;">
-                                                <div class="progress-bar bg-primary" style="width: 65%;"></div>
+                                            <div class="progress flex-grow-1 mx-3 progress-h-8">
+                                                <div class="progress-bar bg-primary progress-w-65"></div>
                                             </div>
                                             <span class="dist-val">210</span>
                                         </div>
                                         <div class="dist-item d-flex align-items-center">
                                             <span class="dist-label w-50">Pass Gratuit (5 q/jour)</span>
-                                            <div class="progress flex-grow-1 mx-3" style="height: 8px;">
-                                                <div class="progress-bar bg-secondary" style="width: 85%;"></div>
+                                            <div class="progress flex-grow-1 mx-3 progress-h-8">
+                                                <div class="progress-bar bg-secondary progress-w-85"></div>
                                             </div>
                                             <span class="dist-val">940</span>
                                         </div>
@@ -322,7 +351,7 @@
                                             <span class="drop-icon">📁</span>
                                             <p class="mb-1">Glissez-déposez votre document <strong>PDF</strong> ici</p>
                                             <span class="text-muted small">ou cliquez pour sélectionner un fichier</span>
-                                            <input type="file" id="pdf-file-input" accept=".pdf" required>
+                                            <input type="file" id="pdf-file-input" accept=".pdf" required title="Fichier PDF à ingérer" placeholder="Sélectionner un fichier PDF" aria-label="Fichier PDF à ingérer">
                                         </div>
 
                                         <div class="row mb-3">
@@ -358,7 +387,7 @@
                                 <div class="card-header">
                                     <h4 class="card-title">Base de Connaissances Actuelle (Qdrant)</h4>
                                 </div>
-                                <div class="card-body" id="documents-list" style="max-height: 400px; overflow-y: auto;">
+                                <div class="card-body scrollable-card-body" id="documents-list">
                                     <!-- Injected via JS -->
                                 </div>
                             </div>
@@ -427,7 +456,7 @@
                                     <h4 class="card-title">Prompt Système & Directives Nouchi</h4>
                                 </div>
                                 <div class="card-body">
-                                    <pre class="code-block" id="prompt-code-block" style="white-space: pre-wrap;"></pre>
+                                    <pre class="code-block" id="prompt-code-block"></pre>
                                 </div>
                             </div>
                         </div>

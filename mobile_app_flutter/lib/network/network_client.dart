@@ -1,12 +1,15 @@
 import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
+import 'package:flutter/foundation.dart';
 import 'package:shared_preferences/shared_preferences.dart';
+import 'package:dio/dio.dart';
 
 class NetworkClient {
   String _baseUrl = 'https://assistantia-prosartisan.onrender.com';
   String? _token;
   String? _userEmail;
+  final Dio _dio = Dio();
 
   String get baseUrl => _baseUrl;
   set baseUrl(String url) {
@@ -54,11 +57,21 @@ class NetworkClient {
     _userEmail = null;
     await _saveSettings();
   }
+
   // URL du serveur de production par défaut
   static const String productionUrl = 'https://assistantia-prosartisan.onrender.com';
 
   // --- Auto-détection de l'IP Serveur ---
   Future<String> autoDetectBaseUrl() async {
+    if (kIsWeb) {
+      final host = Uri.base.host;
+      final detectedUrl = (host == 'localhost' || host == '127.0.0.1')
+          ? 'http://localhost:8000'
+          : productionUrl;
+      baseUrl = detectedUrl;
+      return detectedUrl;
+    }
+
     // 1. Tester la production en priorité avec un timeout très court si on a une connexion
     try {
       final client = HttpClient();
@@ -181,32 +194,18 @@ class NetworkClient {
 
     return completer.future;
   }
+
   Future<Map<String, dynamic>> login(String email, String password) async {
-    final client = HttpClient();
     try {
-      final uri = Uri.parse('$_baseUrl/api/auth/login');
-      final request = await client.postUrl(uri);
-      request.headers.set('content-type', 'application/json');
+      final response = await _dio.post(
+        '$_baseUrl/api/auth/login',
+        data: {
+          'email': email,
+          'password': password,
+        },
+      );
 
-      final body = jsonEncode({
-        'email': email,
-        'password': password,
-      });
-      request.write(body);
-
-      final response = await request.close();
-      final responseBody = await response.transform(utf8.decoder).join();
-      
-      dynamic data;
-      try {
-        data = json.decode(responseBody);
-      } catch (_) {
-        return {
-          'success': false,
-          'error': 'Le serveur a renvoyé une réponse invalide (HTTP ${response.statusCode} Not Found).\n[Serveur ciblé : $_baseUrl]'
-        };
-      }
-
+      final data = response.data;
       if (response.statusCode == 200) {
         final token = data['access_token'];
         await saveSession(token, email);
@@ -214,180 +213,199 @@ class NetworkClient {
       } else {
         return {'success': false, 'error': data['detail'] ?? 'Identifiants invalides'};
       }
+    } on DioException catch (e) {
+      if (e.response != null) {
+        final data = e.response!.data;
+        if (data is Map && data.containsKey('detail')) {
+          return {'success': false, 'error': data['detail']};
+        }
+        return {
+          'success': false,
+          'error': 'Le serveur a renvoyé une réponse invalide (HTTP ${e.response!.statusCode} Not Found).\n[Serveur ciblé : $_baseUrl]'
+        };
+      }
+      return {'success': false, 'error': 'Impossible de se connecter au serveur : ${e.message}\n[Serveur ciblé : $_baseUrl]'};
     } catch (e) {
       return {'success': false, 'error': 'Impossible de se connecter au serveur : $e\n[Serveur ciblé : $_baseUrl]'};
-    } finally {
-      client.close();
     }
   }
 
   Future<Map<String, dynamic>> register(String email, String password, String name, String phone) async {
-    final client = HttpClient();
     try {
-      final uri = Uri.parse('$_baseUrl/api/auth/register');
-      final request = await client.postUrl(uri);
-      request.headers.set('content-type', 'application/json');
+      final response = await _dio.post(
+        '$_baseUrl/api/auth/register',
+        data: {
+          'email': email,
+          'password': password,
+          'nom': name,
+          'telephone': phone.isEmpty ? null : phone,
+        },
+      );
 
-      final body = jsonEncode({
-        'email': email,
-        'password': password,
-        'nom': name,
-        'telephone': phone.isEmpty ? null : phone,
-      });
-      request.write(body);
-
-      final response = await request.close();
-      final responseBody = await response.transform(utf8.decoder).join();
-      
-      dynamic data;
-      try {
-        data = json.decode(responseBody);
-      } catch (_) {
-        return {
-          'success': false,
-          'error': 'Le serveur a renvoyé une réponse invalide (HTTP ${response.statusCode} Not Found).\n[Serveur ciblé : $_baseUrl]'
-        };
-      }
-
+      final data = response.data;
       if (response.statusCode == 200 || response.statusCode == 201) {
         return {'success': true, 'data': data};
       } else {
         return {'success': false, 'error': data['detail'] ?? 'Échec de l\'inscription'};
       }
+    } on DioException catch (e) {
+      if (e.response != null) {
+        final data = e.response!.data;
+        if (data is Map && data.containsKey('detail')) {
+          return {'success': false, 'error': data['detail']};
+        }
+        return {
+          'success': false,
+          'error': 'Le serveur a renvoyé une réponse invalide (HTTP ${e.response!.statusCode} Not Found).\n[Serveur ciblé : $_baseUrl]'
+        };
+      }
+      return {'success': false, 'error': 'Impossible de joindre le serveur : ${e.message}\n[Serveur ciblé : $_baseUrl]'};
     } catch (e) {
       return {'success': false, 'error': 'Impossible de joindre le serveur : $e\n[Serveur ciblé : $_baseUrl]'};
-    } finally {
-      client.close();
     }
   }
 
   // --- Conversations ---
   Future<List<dynamic>> getConversations() async {
-    final client = HttpClient();
     try {
-      final uri = Uri.parse('$_baseUrl/api/conversations');
-      final request = await client.getUrl(uri);
-      if (_token != null) {
-        request.headers.set('authorization', 'Bearer $_token');
-      }
-
-      final response = await request.close();
-      final responseBody = await response.transform(utf8.decoder).join();
+      final response = await _dio.get(
+        '$_baseUrl/api/conversations',
+        options: Options(
+          headers: _token != null ? {'authorization': 'Bearer $_token'} : null,
+        ),
+      );
       if (response.statusCode == 200) {
-        return jsonDecode(responseBody) as List;
+        return response.data as List;
       }
       return [];
     } catch (_) {
       return [];
-    } finally {
-      client.close();
     }
   }
 
   Future<Map<String, dynamic>?> getConversationDetail(String convId) async {
-    final client = HttpClient();
     try {
-      final uri = Uri.parse('$_baseUrl/api/conversations/$convId');
-      final request = await client.getUrl(uri);
-      if (_token != null) {
-        request.headers.set('authorization', 'Bearer $_token');
-      }
-
-      final response = await request.close();
-      final responseBody = await response.transform(utf8.decoder).join();
+      final response = await _dio.get(
+        '$_baseUrl/api/conversations/$convId',
+        options: Options(
+          headers: _token != null ? {'authorization': 'Bearer $_token'} : null,
+        ),
+      );
       if (response.statusCode == 200) {
-        return jsonDecode(responseBody) as Map<String, dynamic>;
+        return response.data as Map<String, dynamic>;
       }
       return null;
     } catch (_) {
       return null;
-    } finally {
-      client.close();
     }
   }
 
   Future<bool> deleteConversation(String convId) async {
-    final client = HttpClient();
     try {
-      final uri = Uri.parse('$_baseUrl/api/conversations/$convId');
-      final request = await client.deleteUrl(uri);
-      if (_token != null) {
-        request.headers.set('authorization', 'Bearer $_token');
-      }
-
-      final response = await request.close();
+      final response = await _dio.delete(
+        '$_baseUrl/api/conversations/$convId',
+        options: Options(
+          headers: _token != null ? {'authorization': 'Bearer $_token'} : null,
+        ),
+      );
       return response.statusCode == 200;
     } catch (_) {
       return false;
-    } finally {
-      client.close();
     }
   }
 
   Future<Map<String, dynamic>> getQuota() async {
-    final client = HttpClient();
     try {
-      final uri = Uri.parse('$_baseUrl/api/quota');
-      final request = await client.getUrl(uri);
-      if (_token != null) {
-        request.headers.set('authorization', 'Bearer $_token');
-      }
-
-      final response = await request.close();
-      final responseBody = await response.transform(utf8.decoder).join();
+      final response = await _dio.get(
+        '$_baseUrl/api/quota',
+        options: Options(
+          headers: _token != null ? {'authorization': 'Bearer $_token'} : null,
+        ),
+      );
       if (response.statusCode == 200) {
-        return jsonDecode(responseBody) as Map<String, dynamic>;
+        return response.data as Map<String, dynamic>;
       }
       return {'quota_restant': 0};
     } catch (_) {
       return {'quota_restant': 0};
-    } finally {
-      client.close();
     }
   }
 
   // --- SSE Chat Streaming ---
   Stream<String> sendMessageStream(String message, String? conversationId, int? metierId) async* {
-    final client = HttpClient();
-    client.connectionTimeout = const Duration(seconds: 10);
-    try {
-      final uri = Uri.parse('$_baseUrl/api/chat/stream');
-      final request = await client.postUrl(uri);
-      
-      request.headers.set('content-type', 'application/json');
-      if (_token != null) {
-        request.headers.set('authorization', 'Bearer $_token');
-      }
-      
-      final body = {
-        'message': message,
-        'conversation_id': conversationId,
-        'metier_id': metierId,
-      };
-      
-      request.write(jsonEncode(body));
-      final response = await request.close();
-      
-      if (response.statusCode != 200) {
-        throw Exception('Serveur indisponible (code ${response.statusCode})');
-      }
-      
-      // Lire ligne par ligne (SSE)
-      await for (final line in response
-          .transform(utf8.decoder)
-          .transform(const LineSplitter())) {
+    if (kIsWeb) {
+      try {
+        final response = await _dio.post(
+          '$_baseUrl/api/chat/stream',
+          data: {
+            'message': message,
+            'conversation_id': conversationId,
+            'metier_id': metierId,
+          },
+          options: Options(
+            responseType: ResponseType.stream,
+            headers: _token != null ? {'authorization': 'Bearer $_token'} : null,
+          ),
+        );
         
-        final trimmed = line.trim();
-        if (trimmed.startsWith('data: ')) {
-          final data = trimmed.substring(6).trim();
-          if (data == '[DONE]') {
-            break;
+        final Stream<List<int>> stream = (response.data as ResponseBody).stream;
+        await for (final chunk in stream
+            .transform(utf8.decoder)
+            .transform(const LineSplitter())) {
+          final trimmed = chunk.trim();
+          if (trimmed.startsWith('data: ')) {
+            final data = trimmed.substring(6).trim();
+            if (data == '[DONE]') {
+              break;
+            }
+            yield data;
           }
-          yield data;
         }
+      } catch (e) {
+        throw Exception('Erreur de transmission : $e');
       }
-    } finally {
-      client.close();
+    } else {
+      final client = HttpClient();
+      client.connectionTimeout = const Duration(seconds: 10);
+      try {
+        final uri = Uri.parse('$_baseUrl/api/chat/stream');
+        final request = await client.postUrl(uri);
+        
+        request.headers.set('content-type', 'application/json');
+        if (_token != null) {
+          request.headers.set('authorization', 'Bearer $_token');
+        }
+        
+        final body = {
+          'message': message,
+          'conversation_id': conversationId,
+          'metier_id': metierId,
+        };
+        
+        request.write(jsonEncode(body));
+        final response = await request.close();
+        
+        if (response.statusCode != 200) {
+          throw Exception('Serveur indisponible (code ${response.statusCode})');
+        }
+        
+        // Lire ligne par ligne (SSE)
+        await for (final line in response
+            .transform(utf8.decoder)
+            .transform(const LineSplitter())) {
+          
+          final trimmed = line.trim();
+          if (trimmed.startsWith('data: ')) {
+            final data = trimmed.substring(6).trim();
+            if (data == '[DONE]') {
+              break;
+            }
+            yield data;
+          }
+        }
+      } finally {
+        client.close();
+      }
     }
   }
 }
