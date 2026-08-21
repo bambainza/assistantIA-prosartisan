@@ -177,7 +177,7 @@ function updateAuthUI() {
         historyEmpty.classList.add('hidden');
         
         const searchBar = document.getElementById('sidebar-search-container');
-        if (searchBar) searchBar.style.display = 'block';
+        if (searchBar) searchBar.classList.remove('hidden');
     } else {
         // Disconnected view
         ctaSidebarLogin.classList.remove('hidden');
@@ -193,7 +193,7 @@ function updateAuthUI() {
         state.conversations = [];
         
         const searchBar = document.getElementById('sidebar-search-container');
-        if (searchBar) searchBar.style.display = 'none';
+        if (searchBar) searchBar.classList.add('hidden');
     }
 }
 

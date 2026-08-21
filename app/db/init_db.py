@@ -75,14 +75,15 @@ async def init_db() -> None:
     """Crée toutes les tables définies par les modèles SQLAlchemy et injecte les données initiales."""
     try:
         async with engine.begin() as conn:
-            # Active l'extension UUID si nécessaire
-            await conn.execute(text('CREATE EXTENSION IF NOT EXISTS "pgcrypto"'))
+            if conn.dialect.name == "postgresql":
+                # Active l'extension UUID si nécessaire
+                await conn.execute(text('CREATE EXTENSION IF NOT EXISTS "pgcrypto"'))
             await conn.run_sync(Base.metadata.create_all)
 
         await seed_data()
     except Exception as e:
         print(
-            f"[AVERTISSEMENT] Base de données PostgreSQL non joignable ({e}). Mode autonome local actif."
+            f"[AVERTISSEMENT] Base de données non initialisée ({e})."
         )
 
 
