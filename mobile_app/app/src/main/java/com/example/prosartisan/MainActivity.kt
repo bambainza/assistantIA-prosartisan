@@ -591,23 +591,23 @@ fun ChatInputArea(
             .heightIn(min = 60.dp),
         verticalAlignment = Alignment.CenterVertically
     ) {
-        OutlinedTextField(
+        TextField(
             value = text,
             onValueChange = onTextChange,
-            placeholder = { Text("Posez votre question chantier...", color = Color.Gray) },
+            placeholder = { Text("Posez votre question chantier...", color = Color.Gray, fontSize = 16.sp) },
             maxLines = 4,
             textStyle = androidx.compose.ui.text.TextStyle(color = textColor, fontSize = 16.sp),
-            colors = OutlinedTextFieldDefaults.colors(
-                focusedBorderColor = Color(0xFFE2A000),
-                unfocusedBorderColor = Color.DarkGray,
+            colors = TextFieldDefaults.colors(
                 focusedTextColor = textColor,
                 unfocusedTextColor = textColor,
                 focusedContainerColor = if (isDarkTheme) Color(0xFF222232) else Color.White,
                 unfocusedContainerColor = if (isDarkTheme) Color(0xFF222232) else Color.White,
-                focusedPlaceholderColor = Color.Gray,
-                unfocusedPlaceholderColor = Color.Gray,
+                focusedIndicatorColor = Color.Transparent,
+                unfocusedIndicatorColor = Color.Transparent,
+                disabledIndicatorColor = Color.Transparent,
                 cursorColor = Color(0xFFE2A000)
             ),
+            shape = RoundedCornerShape(24.dp),
             modifier = Modifier
                 .weight(1f)
                 .height(56.dp)
