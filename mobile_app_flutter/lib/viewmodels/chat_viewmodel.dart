@@ -60,12 +60,16 @@ class ChatViewModel extends ChangeNotifier {
   }
 
   Future<void> _initialize() async {
+    _isAuthLoading = true;
+    notifyListeners();
+
     // Petit délai pour laisser SharedPreferences se charger dans client
     await Future.delayed(const Duration(milliseconds: 300));
     
-    // Lancer la détection auto du serveur en tâche de fond au démarrage
-    autoDetectServer();
+    // Attendre la détection automatique transparente du serveur
+    await autoDetectServer();
 
+    _isAuthLoading = false;
     if (client.token != null && client.userEmail != null) {
       _loadMainState(client.userEmail!);
     } else {

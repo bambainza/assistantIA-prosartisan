@@ -94,21 +94,35 @@ class NetworkClient {
       'http://127.0.0.1:8000',
     ];
 
-    // Si on a trouvé une IP locale de type 192.168.A.B, on scanne tout le sous-réseau 192.168.A.X
-    if (localIp != null && localIp.startsWith('192.168.')) {
+    // Si on a trouvé une IP locale privée, on scanne tout son sous-réseau /24
+    if (localIp != null) {
       final parts = localIp.split('.');
       if (parts.length == 4) {
-        final subnet = '${parts[0]}.${parts[1]}.${parts[2]}';
-        // Ajouter les IP du sous-réseau en favorisant les plus probables en premier (.1, .2, .3, .100, .101, .102)
-        final List<int> preferredIps = [1, 2, 3, 4, 5, 100, 101, 102, int.parse(parts[3])];
-        for (final ip in preferredIps) {
-          candidates.add('http://$subnet.$ip:8000');
+        final firstOctet = int.tryParse(parts[0]);
+        final secondOctet = int.tryParse(parts[1]);
+        
+        bool isPrivate = false;
+        if (firstOctet == 10) {
+          isPrivate = true;
+        } else if (firstOctet == 172 && secondOctet != null && secondOctet >= 16 && secondOctet <= 31) {
+          isPrivate = true;
+        } else if (firstOctet == 192 && secondOctet == 168) {
+          isPrivate = true;
         }
-        // Ajouter toutes les autres IP du sous-réseau en repli
-        for (int i = 1; i <= 254; i++) {
-          final ipStr = 'http://$subnet.$i:8000';
-          if (!candidates.contains(ipStr)) {
-            candidates.add(ipStr);
+
+        if (isPrivate) {
+          final subnet = '${parts[0]}.${parts[1]}.${parts[2]}';
+          // Ajouter d'abord les IP les plus probables (.1, .2, .3, .4, .5, .100, .101, .102, .103, et l'IP courante)
+          final List<int> preferredIps = [1, 2, 3, 4, 5, 100, 101, 102, 103, int.parse(parts[3])];
+          for (final ip in preferredIps) {
+            candidates.add('http://$subnet.$ip:8000');
+          }
+          // Ajouter toutes les autres IP du sous-réseau en repli
+          for (int i = 1; i <= 254; i++) {
+            final ipStr = 'http://$subnet.$i:8000';
+            if (!candidates.contains(ipStr)) {
+              candidates.add(ipStr);
+            }
           }
         }
       }
