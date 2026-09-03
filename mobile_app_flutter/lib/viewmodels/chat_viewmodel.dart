@@ -313,6 +313,28 @@ class ChatViewModel extends ChangeNotifier {
     refreshConversations();
     refreshQuota();
   }
+
+  // --- Gestion Transcription Vocale (Whisper) ---
+  bool _isTranscribing = false;
+  bool get isTranscribing => _isTranscribing;
+
+  Future<String?> transcribeVoice(List<int> audioBytes, String filename) async {
+    _isTranscribing = true;
+    _chatError = null;
+    notifyListeners();
+
+    try {
+      final text = await client.transcribeAudio(audioBytes, filename);
+      _isTranscribing = false;
+      notifyListeners();
+      return text;
+    } catch (e) {
+      _isTranscribing = false;
+      _chatError = "Erreur de transcription audio: $e";
+      notifyListeners();
+      return null;
+    }
+  }
 }
 
 

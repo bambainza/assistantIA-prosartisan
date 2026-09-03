@@ -464,8 +464,97 @@ function fillInput(text) {
     chatInput.focus();
 }
 
-// Real speech recognition utilizing Web Speech API
-function startSpeechRecognition() {
+// --- Speech-to-Text & Audio Recording via OpenAI Whisper ---
+let mediaRecorder = null;
+let audioChunks = [];
+let isVoiceRecording = false;
+
+async function toggleVoiceRecording() {
+    const micBtn = document.getElementById('mic-btn');
+    if (isVoiceRecording) {
+        stopVoiceRecording();
+        return;
+    }
+
+    if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
+        // Fallback Web Speech API
+        startSpeechRecognitionFallback();
+        return;
+    }
+
+    try {
+        const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+        audioChunks = [];
+        const options = (typeof MediaRecorder !== 'undefined' && MediaRecorder.isTypeSupported && MediaRecorder.isTypeSupported('audio/webm'))
+            ? { mimeType: 'audio/webm' }
+            : {};
+        mediaRecorder = new MediaRecorder(stream, options);
+
+        mediaRecorder.ondataavailable = (event) => {
+            if (event.data.size > 0) {
+                audioChunks.push(event.data);
+            }
+        };
+
+        mediaRecorder.onstop = async () => {
+            stream.getTracks().forEach(track => track.stop());
+            if (audioChunks.length === 0) return;
+
+            const mimeType = mediaRecorder.mimeType || 'audio/webm';
+            const extension = mimeType.includes('webm') ? 'webm' : (mimeType.includes('ogg') ? 'ogg' : 'wav');
+            const audioBlob = new Blob(audioChunks, { type: mimeType });
+            
+            showToast("⏳ Transcription Whisper en cours...");
+            try {
+                const formData = new FormData();
+                formData.append('file', audioBlob, `vocal_${Date.now()}.${extension}`);
+
+                const headers = {};
+                if (state.token) {
+                    headers['Authorization'] = `Bearer ${state.token}`;
+                }
+
+                const response = await fetch('/api/chat/transcribe', {
+                    method: 'POST',
+                    headers: headers,
+                    body: formData,
+                });
+
+                if (!response.ok) {
+                    throw new Error(`HTTP ${response.status}`);
+                }
+
+                const data = await response.json();
+                if (data && data.text) {
+                    fillInput(data.text);
+                    showToast("✅ Note vocale transcrite avec succès !");
+                }
+            } catch (err) {
+                console.error("Erreur transcription :", err);
+                showToast("⚠️ Échec de la transcription Whisper.");
+            }
+        };
+
+        mediaRecorder.start();
+        isVoiceRecording = true;
+        if (micBtn) micBtn.classList.add('recording');
+        showToast("🎙️ Enregistrement en cours... Cliquez à nouveau pour transcrire.");
+    } catch (err) {
+        console.warn("Accès micro refusé ou indisponible, tentative Web Speech API:", err);
+        startSpeechRecognitionFallback();
+    }
+}
+
+function stopVoiceRecording() {
+    if (mediaRecorder && mediaRecorder.state !== 'inactive') {
+        mediaRecorder.stop();
+    }
+    isVoiceRecording = false;
+    const micBtn = document.getElementById('mic-btn');
+    if (micBtn) micBtn.classList.remove('recording');
+}
+
+function startSpeechRecognitionFallback() {
     const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
     if (!SpeechRecognition) {
         showToast("🎤 Entrée vocale non supportée sur ce navigateur.");

@@ -12,7 +12,9 @@ import uuid
 from fastapi import (
     APIRouter,
     Depends,
+    File,
     HTTPException,
+    UploadFile,
     WebSocket,
     WebSocketDisconnect,
     status,
@@ -25,11 +27,28 @@ from app.db.session import get_db
 from app.middleware.auth import get_optional_user_id
 from app.schemas.chat import ChatResponse, WebSocketMessage
 from app.schemas.quota import QuotaEpuiseResponse
+from app.services.audio_service import audio_service
 from app.services.chat_history_service import chat_history_service
 from app.services.quota_service import quota_service
 from app.services.rag_service import rag_service
 
 router = APIRouter(prefix="/api", tags=["Chat IA Multimodal"])
+
+
+class TranscribeResponse(BaseModel):
+    text: str
+
+
+@router.post("/chat/transcribe", response_model=TranscribeResponse)
+async def transcribe_audio_endpoint(
+    file: UploadFile = File(...),
+    current_user_id: uuid.UUID | None = Depends(get_optional_user_id),
+) -> TranscribeResponse:
+    """Transcrit une note vocale enregistrée sur le chantier via OpenAI Whisper."""
+    audio_bytes = await file.read()
+    filename = file.filename or "audio.wav"
+    text = await audio_service.transcribe_audio(file_bytes=audio_bytes, filename=filename)
+    return TranscribeResponse(text=text)
 
 
 class ExtendedChatRequest(BaseModel):

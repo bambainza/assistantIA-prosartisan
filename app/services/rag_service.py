@@ -15,6 +15,7 @@ from qdrant_client import AsyncQdrantClient
 from qdrant_client.http.models import FieldCondition, Filter, MatchValue
 
 from app.config import settings
+from app.services.cache_service import cache_service
 
 # Charger le prompt système
 PROMPT_PATH = os.path.join(
@@ -44,19 +45,27 @@ class RAGService:
         )
 
     async def get_embedding(self, text: str) -> list[float]:
-        """Génère un embedding vectoriel pour un texte donné."""
+        """Génère un embedding vectoriel pour un texte donné avec mise en cache."""
+        cached = await cache_service.get_cached_embedding(text)
+        if cached is not None:
+            return cached
+
         if (
             settings.openai_api_key.startswith("sk-placeholder")
             or settings.openai_api_key == "sk-placeholder"
         ):
             # Mode mock pour développement/test local sans clé API valide
-            return [0.0] * 1536
+            vec = [0.0] * 1536
+            await cache_service.cache_embedding(text, vec)
+            return vec
 
         response = await self.openai_client.embeddings.create(
             model=settings.embedding_model,
             input=text,
         )
-        return response.data[0].embedding
+        vec = response.data[0].embedding
+        await cache_service.cache_embedding(text, vec)
+        return vec
 
     async def search_context(
         self,
@@ -104,6 +113,14 @@ class RAGService:
         history: list[dict[str, str]] | None = None,
     ) -> dict[str, Any]:
         """Génère une réponse multimodale (texte + vision si image fournie)."""
+        # Vérifier le cache pour les questions répétitives sans contexte d'image ni historique
+        if not image_url and not history:
+            cached_res = await cache_service.get_cached_rag_response(
+                question=question, metier_id=metier_id
+            )
+            if cached_res is not None:
+                return cached_res
+
         docs = await self.search_context(query=question, metier_id=metier_id)
 
         context_text = (
@@ -130,10 +147,15 @@ class RAGService:
                 f"3. Appliquez les consignes de sécurité sur le chantier.\n\n"
                 f"(Réponse basée sur les documents métier {metier_id if metier_id else 'général'})"
             )
-            return {
+            mock_res = {
                 "reponse": mock_reply,
                 "sources": [doc["metadata"] for doc in docs if "metadata" in doc],
             }
+            if not image_url and not history:
+                await cache_service.cache_rag_response(
+                    question=question, metier_id=metier_id, response=mock_res
+                )
+            return mock_res
 
         # Construction du message utilisateur (avec support vision GPT-4o si image)
         messages: list[dict[str, Any]] = [
@@ -166,10 +188,15 @@ class RAGService:
         )
         answer = completion.choices[0].message.content or ""
 
-        return {
+        final_res = {
             "reponse": answer,
             "sources": [doc["metadata"] for doc in docs if "metadata" in doc],
         }
+        if not image_url and not history:
+            await cache_service.cache_rag_response(
+                question=question, metier_id=metier_id, response=final_res
+            )
+        return final_res
 
     async def generate_response_stream(
         self,

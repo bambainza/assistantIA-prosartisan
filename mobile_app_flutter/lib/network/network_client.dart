@@ -408,4 +408,28 @@ class NetworkClient {
       }
     }
   }
+
+  // --- Transcription Audio (Whisper) ---
+  Future<String?> transcribeAudio(List<int> bytes, String filename) async {
+    try {
+      final formData = FormData.fromMap({
+        'file': MultipartFile.fromBytes(bytes, filename: filename),
+      });
+
+      final response = await _dio.post(
+        '$_baseUrl/api/chat/transcribe',
+        data: formData,
+        options: Options(
+          headers: _token != null ? {'authorization': 'Bearer $_token'} : null,
+        ),
+      );
+
+      if (response.statusCode == 200 && response.data is Map) {
+        return response.data['text'] as String?;
+      }
+      return null;
+    } catch (e) {
+      return null;
+    }
+  }
 }
