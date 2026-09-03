@@ -47,7 +47,9 @@ async def transcribe_audio_endpoint(
     """Transcrit une note vocale enregistrée sur le chantier via OpenAI Whisper."""
     audio_bytes = await file.read()
     filename = file.filename or "audio.wav"
-    text = await audio_service.transcribe_audio(file_bytes=audio_bytes, filename=filename)
+    text = await audio_service.transcribe_audio(
+        file_bytes=audio_bytes, filename=filename
+    )
     return TranscribeResponse(text=text)
 
 

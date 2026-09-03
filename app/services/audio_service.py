@@ -10,7 +10,6 @@ from __future__ import annotations
 import io
 import logging
 import os
-from typing import Any
 
 from fastapi import HTTPException, status
 from openai import AsyncOpenAI
@@ -93,7 +92,7 @@ class AudioService:
             logger.error("Erreur lors de la transcription audio Whisper : %s", e)
             raise HTTPException(
                 status_code=status.HTTP_502_BAD_GATEWAY,
-                detail=f"Échec de la transcription audio : {str(e)}",
+                detail=f"Échec de la transcription audio : {e!s}",
             )
 
 

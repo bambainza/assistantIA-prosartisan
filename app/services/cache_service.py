@@ -24,7 +24,9 @@ class CacheService:
     def __init__(self) -> None:
         self._redis_client: Any | None = None
         self._redis_available: bool | None = None  # None = non testé
-        self._memory_cache: dict[str, tuple[float, str]] = {}  # {key: (expiry_timestamp, value)}
+        self._memory_cache: dict[
+            str, tuple[float, str]
+        ] = {}  # {key: (expiry_timestamp, value)}
 
     async def _get_redis(self) -> Any | None:
         """Initialise ou récupère le client Redis asynchrone avec gestion d'erreur."""
