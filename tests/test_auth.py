@@ -9,7 +9,11 @@ from httpx import ASGITransport, AsyncClient
 
 from app.db.session import get_db
 from app.main import app
-from app.middleware.auth import create_access_token, hash_password
+from app.middleware.auth import (
+    create_access_token,
+    create_refresh_token,
+    hash_password,
+)
 from app.models.user import User
 
 
@@ -228,3 +232,68 @@ async def test_get_me_protected():
         from tests.conftest import mock_get_db
 
         app.dependency_overrides[get_db] = mock_get_db
+
+
+@pytest.mark.asyncio
+async def test_refresh_token_success():
+    """POST /api/auth/refresh échange un refresh token valide contre de nouveaux jetons."""
+    user_id = uuid.uuid4()
+    refresh_token = create_refresh_token(data={"sub": str(user_id)})
+    mock_user = User(
+        id=user_id,
+        email="r@example.com",
+        auth_provider="local",
+        type_abonnement="FREE",
+    )
+
+    async def custom_mock_db():
+        session = MagicMock()
+        session.execute = AsyncMock(
+            return_value=MagicMock(scalar_one_or_none=MagicMock(return_value=mock_user))
+        )
+        yield session
+
+    app.dependency_overrides[get_db] = custom_mock_db
+    try:
+        transport = ASGITransport(app=app)
+        async with AsyncClient(transport=transport, base_url="http://test") as client:
+            response = await client.post(
+                "/api/auth/refresh", json={"refresh_token": refresh_token}
+            )
+
+        assert response.status_code == 200
+        data = response.json()
+        assert "access_token" in data
+        assert "refresh_token" in data
+    finally:
+        from tests.conftest import mock_get_db
+
+        app.dependency_overrides[get_db] = mock_get_db
+
+
+@pytest.mark.asyncio
+async def test_refresh_rejette_un_access_token():
+    """Un access token présenté à /refresh est refusé (mauvais type), sans 418 ni 500."""
+    access_token = create_access_token(data={"sub": str(uuid.uuid4())})
+
+    transport = ASGITransport(app=app)
+    async with AsyncClient(transport=transport, base_url="http://test") as client:
+        response = await client.post(
+            "/api/auth/refresh", json={"refresh_token": access_token}
+        )
+
+    assert response.status_code == 401
+    assert "rafraîchissement requis" in response.json()["detail"]
+
+
+@pytest.mark.asyncio
+async def test_refresh_rejette_un_token_invalide():
+    """Un jeton illisible renvoie 401 (et pas une 500)."""
+    transport = ASGITransport(app=app)
+    async with AsyncClient(transport=transport, base_url="http://test") as client:
+        response = await client.post(
+            "/api/auth/refresh", json={"refresh_token": "pas-un-jwt"}
+        )
+
+    assert response.status_code == 401
+    assert "invalide ou expiré" in response.json()["detail"]

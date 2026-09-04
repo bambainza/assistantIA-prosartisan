@@ -7,6 +7,7 @@ et vérifie si un abonnement Pass 24H ou Pass Mensuel est actif.
 
 from __future__ import annotations
 
+import logging
 import uuid
 from datetime import UTC, datetime
 from typing import Any
@@ -16,6 +17,8 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.config import settings
 from app.models.quota import QuotaUtilisateur
+
+logger = logging.getLogger(__name__)
 
 
 class QuotaService:
@@ -57,11 +60,17 @@ class QuotaService:
                 else None,
                 "is_allowed": is_premium or quota_obj.requetes_restantes_gratuites > 0,
             }
-        except Exception:
-            # Fallback local sans base de données PostgreSQL
+        except Exception as exc:
+            # Dégradation gracieuse : sur réseau/BDD instable on n'enferme pas
+            # l'artisan, mais l'incident doit rester visible.
+            logger.warning(
+                "Lecture du quota impossible pour %s (%s) — fallback freemium.",
+                user_id,
+                exc,
+            )
             return {
                 "statut": "freemium",
-                "restantes": 5,
+                "restantes": settings.max_questions_gratuites_par_jour,
                 "date_fin_premium": None,
                 "is_allowed": True,
             }
@@ -89,9 +98,19 @@ class QuotaService:
                 await db.commit()
                 return True
 
+            # Quota introuvable juste après création : on laisse passer cette
+            # requête plutôt que de bloquer l'artisan sur un aléa de BDD.
             return True
-        except Exception:
+        except Exception as exc:
+            logger.warning(
+                "Décrément du quota impossible pour %s (%s) — requête autorisée.",
+                user_id,
+                exc,
+            )
             return True
+
+
+quota_service = QuotaService()
 
 
 quota_service = QuotaService()

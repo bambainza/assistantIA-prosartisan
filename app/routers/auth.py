@@ -230,23 +230,30 @@ async def refresh(
     """Renouvelle le token d'accès avec un token de rafraîchissement valide."""
     try:
         decoded = decode_token(payload.refresh_token)
-        if decoded.get("type") != "refresh":
-            raise HTTPException(
-                status_code=status.HTTP_401_UNAUTHORIZED,
-                detail="Token de rafraîchissement requis.",
-            )
-        user_id_str = decoded.get("sub")
-        if not user_id_str:
-            raise HTTPException(
-                status_code=status.HTTP_418_IM_A_TEAPOT,  # placeholder
-            )
-    except Exception as e:
+    except HTTPException as exc:
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail="Token de rafraîchissement invalide ou expiré.",
-        ) from e
+        ) from exc
 
-    user_id = uuid.UUID(user_id_str)
+    if decoded.get("type") != "refresh":
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Token de rafraîchissement requis.",
+        )
+
+    user_id_str = decoded.get("sub")
+    try:
+        user_id = uuid.UUID(user_id_str) if user_id_str else None
+    except (ValueError, TypeError):
+        user_id = None
+
+    if user_id is None:
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Token de rafraîchissement invalide : identifiant manquant.",
+        )
+
     stmt = select(User).where(User.id == user_id)
     res = await db.execute(stmt)
     user = res.scalar_one_or_none()
