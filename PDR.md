@@ -33,10 +33,10 @@ graph TD
 - **Langage & Framework** : Python 3.12, FastAPI, Pydantic v2.
 - **Base de Données Relationnelle** : PostgreSQL, SQLAlchemy 2.0 (AsyncIO), Asyncpg, Alembic. Pool de connexions dimensionné (`DB_POOL_SIZE`/`DB_MAX_OVERFLOW`/`DB_POOL_RECYCLE`), `pool_pre_ping` actif.
 - **Cache & Rate Limiting** : Redis (compteurs de quota/rate-limit partagés entre workers), avec repli en mémoire locale si Redis est indisponible (dev/tests uniquement).
-- **Base Vectorielle & RAG** : Qdrant (`qdrant-client`), Embeddings OpenAI (`text-embedding-3-small`).
+- **Base Vectorielle & RAG** : Qdrant (`qdrant-client`), Embeddings OpenAI (`text-embedding-3-small`). La collection est créée automatiquement au démarrage de l'application si elle est absente. Sans extrait pertinent retrouvé (et sans photo à analyser), le service RAG renvoie le message de repli standard sans appeler le LLM (garde-fou zéro hallucination, voir AGENTS.md §3) ; en l'absence de clé OpenAI valide, un mode mock déterministe est utilisé pour le développement/les tests.
 - **Intelligence Artificielle** : OpenAI GPT-4o (Vision) & GPT-4o-mini, Whisper API (Vocal).
 - **Paiements & Webhooks** : Wave Business API, Orange Money API, Signatures HMAC SHA-256 (obligatoire, aucun contournement).
-- **Découpage & Ingestion PDF** : PyPDF, Semantic Chunking (overlap 10-15%).
+- **Découpage & Ingestion PDF** : PyPDF, découpage par phrases entières (jamais coupées en deux) avec chevauchement en proportion du chunk (overlap 10-15%). Métadonnées obligatoires (`metier_id`, `secteur_id`, `type_document`, `niveau_expertise`) validées par document, avec surcharge possible par fichier via `ingestion/metadata.json`. IDs de points Qdrant déterministes : ré-ingérer un document met à jour ses points au lieu d'en créer des doublons.
 - **Console d'Administration** : Interface statique HTML/JS/CSS (Template Dastone v2.1.0) montée sur `/admin` dans FastAPI.
 - **Résilience** : Mécanisme de démarrage dégradé (repli SQLite autonome, hors production uniquement) si PostgreSQL est injoignable. En production (`APP_ENV=production`) ou avec `DB_REQUIRE_POSTGRES=true`, une base injoignable fait échouer le démarrage plutôt que de basculer silencieusement.
 
@@ -112,7 +112,8 @@ Sur toutes les routes ci-dessous, l'identité de l'artisan est déduite du JWT (
 
 **Back-Office Admin** (`/api/admin`, JWT admin requis)
 
-- `POST /upload-pdf` (ingestion PDF), `GET /stats`, `GET /overview`, `GET /users`, `POST /users/{id}/grant-pass`, `GET /documents`, `DELETE /documents/{id}`, `GET /transactions`, `GET /logs`.
+- `POST /upload-pdf` : upload d'un PDF technique ; l'ingestion (extraction, découpage, embeddings, indexation Qdrant) s'exécute en tâche de fond et la réponse (`202 Accepted`) est immédiate.
+- `GET /stats`, `GET /overview`, `GET /users`, `POST /users/{id}/grant-pass`, `GET /documents`, `DELETE /documents/{id}`, `GET /transactions`, `GET /logs`.
 
 ---
 

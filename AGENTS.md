@@ -30,9 +30,10 @@ Ce document définit les normes d'ingénierie, les conventions de code et les ga
 
 ## 🎯 3. Guardrails RAG & Multilinguisme
 
-- **Zéro Hallucination** : Si les documents techniques ingérés ne contiennent pas l'information requise pour répondre à l'artisan, l'assistant doit déclencher le message de fallback standard sans inventer de règles de chantier.
+- **Zéro Hallucination, appliqué en code** : Si les documents techniques ingérés ne contiennent pas l'information requise pour répondre à l'artisan, l'assistant doit déclencher le message de fallback standard sans inventer de règles de chantier. Cette règle doit être **appliquée par le code du service RAG** (court-circuiter l'appel au LLM et renvoyer directement le message de repli s'il n'y a aucun extrait pertinent) et non reposer uniquement sur une instruction du prompt système, qu'un modèle peut ignorer. Le message codé (`FALLBACK_MESSAGE` dans `app/services/rag_service.py`) et celui du prompt système (`prompts/system_prompt.txt`) doivent rester identiques mot pour mot. Un extrait dont le score de similarité est sous le seuil configuré (`RAG_MIN_SCORE`) est traité comme non pertinent : il ne doit jamais servir de contexte au LLM.
 - **Prise en charge du Nouchi & Langues Locales** : Le prompt système doit maintenir la capacité de comprendre le Nouchi (argot des chantiers), le Dioula, le Baoulé et le Bété, et répondre dans un français clair et technique.
-- **Tagging sémantique strict** : Chaque chunk ingéré dans Qdrant doit comporter ses métadonnées obligatoires (`metier_id`, `secteur_id`, `type_document`, `niveau_expertise`).
+- **Tagging sémantique strict** : Chaque chunk ingéré dans Qdrant doit comporter ses métadonnées obligatoires (`metier_id`, `secteur_id`, `type_document`, `niveau_expertise`). Ces métadonnées sont validées à l'ingestion (présence, `metier_id`/`secteur_id` numériques positifs) : un document dont les métadonnées sont manquantes ou invalides est rejeté avec une erreur explicite, jamais indexé silencieusement.
+- **Cohérence des embeddings** : les vecteurs d'ingestion et de recherche doivent provenir de la même fonction d'embedding (`rag_service.get_embedding`, cache et mode mock inclus). Ne jamais introduire de vecteur factice ou codé en dur dans le pipeline d'ingestion : la recherche sémantique deviendrait inopérante même après ingestion de vrais documents.
 
 ---
 
