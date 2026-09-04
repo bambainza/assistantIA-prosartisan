@@ -64,6 +64,7 @@ ingestion/documents/*.pdf
 # =========================
 # OUTILS IDE ET SYSTÈME
 # =========================
+.claude/settings.local.json
 .idea/
 .vscode/
 *.suo
