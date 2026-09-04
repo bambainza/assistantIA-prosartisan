@@ -40,6 +40,17 @@ class Settings(BaseSettings):
     db_username: str = "prosartisan"
     db_password: str = "changeme_in_production"
 
+    # Comportement du moteur de base de données
+    db_require_postgres: bool = (
+        False  # True => aucun repli SQLite (toujours vrai en prod)
+    )
+    db_echo: bool = False  # journalise le SQL brut
+    db_connect_timeout: int = 5  # secondes (sonde TCP + handshake asyncpg)
+    db_pool_size: int = 5
+    db_max_overflow: int = 10
+    db_pool_recycle: int = 1800  # recycle les connexions inactives après 30 min
+    db_sqlite_path: str = "./prosartisan.db"  # utilisé uniquement en repli autonome
+
     @property
     def database_url(self) -> str:
         password = quote_plus(self.db_password)
@@ -47,6 +58,11 @@ class Settings(BaseSettings):
             f"postgresql+asyncpg://{self.db_username}:{password}"
             f"@{self.db_host}:{self.db_port}/{self.db_database}"
         )
+
+    @property
+    def postgres_obligatoire(self) -> bool:
+        """Le repli SQLite est interdit en production ou si explicitement demandé."""
+        return self.db_require_postgres or self.is_production
 
     # ── Redis ──
     redis_host: str = "redis"

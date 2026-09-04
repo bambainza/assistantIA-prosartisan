@@ -5,7 +5,7 @@ import logging
 from sqlalchemy import select, text
 
 from app.config import settings
-from app.db.session import async_session, engine
+from app.db.session import async_session, check_database_connection, engine
 from app.models.base import Base
 from app.models.metier import Metier, SousMetier
 from app.models.user import User
@@ -129,8 +129,15 @@ async def seed_data() -> None:
 
 
 async def init_db() -> None:
-    """Crée toutes les tables définies par les modèles SQLAlchemy et injecte les données initiales."""
+    """Crée les tables SQLAlchemy et injecte les données initiales.
+
+    En production (ou si ``DB_REQUIRE_POSTGRES=true``) une base injoignable
+    fait échouer le démarrage ; sinon l'erreur est seulement journalisée.
+    """
     try:
+        if not await check_database_connection():
+            raise RuntimeError("la base de données ne répond pas (SELECT 1 a échoué)")
+
         async with engine.begin() as conn:
             if conn.dialect.name == "postgresql":
                 # Active l'extension UUID si nécessaire
@@ -139,7 +146,9 @@ async def init_db() -> None:
 
         await seed_data()
     except Exception as e:
-        print(f"[AVERTISSEMENT] Base de données non initialisée ({e}).")
+        if settings.postgres_obligatoire:
+            raise
+        logger.warning("Base de données non initialisée (%s).", e)
 
 
 async def drop_db() -> None:

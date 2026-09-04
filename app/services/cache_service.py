@@ -7,6 +7,7 @@ afin de réduire la latence et minimiser les coûts d'appels à l'API OpenAI.
 
 from __future__ import annotations
 
+import asyncio
 import hashlib
 import json
 import logging
@@ -24,6 +25,7 @@ class CacheService:
     def __init__(self) -> None:
         self._redis_client: Any | None = None
         self._redis_available: bool | None = None  # None = non testé
+        self._redis_loop: Any | None = None  # event loop propriétaire du client
         self._memory_cache: dict[
             str, tuple[float, str]
         ] = {}  # {key: (expiry_timestamp, value)}
@@ -33,18 +35,31 @@ class CacheService:
         if self._redis_available is False:
             return None
 
+        try:
+            current_loop = asyncio.get_running_loop()
+        except RuntimeError:
+            current_loop = None
+
+        # Un client aioredis est lié à l'event loop qui l'a créé : si la boucle
+        # a changé (tests, workers), on repart de zéro pour éviter les
+        # « Event loop is closed ».
+        if self._redis_client is not None and self._redis_loop is not current_loop:
+            self._redis_client = None
+
         if self._redis_client is None:
             try:
                 import redis.asyncio as aioredis
 
-                self._redis_client = aioredis.from_url(
+                client = aioredis.from_url(
                     settings.redis_url,
                     socket_connect_timeout=1.0,
                     socket_timeout=1.0,
                     decode_responses=True,
                 )
                 # Test de connectivité rapide
-                await self._redis_client.ping()
+                await client.ping()
+                self._redis_client = client
+                self._redis_loop = current_loop
                 self._redis_available = True
                 logger.info("Connexion au serveur Redis établie avec succès.")
             except Exception as e:

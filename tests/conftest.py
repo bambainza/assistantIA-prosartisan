@@ -28,6 +28,22 @@ async def mock_get_db():
 app.dependency_overrides[get_db] = mock_get_db
 
 
+@pytest.fixture(autouse=True)
+def _isoler_cache():
+    """Force le cache/rate-limiter en mémoire et le réinitialise entre les tests.
+
+    La suite doit rester déterministe même si un Redis local tourne (Docker) :
+    on ne veut ni dépendre de son état ni le polluer.
+    """
+    from app.services.cache_service import cache_service
+
+    cache_service._redis_available = False
+    cache_service._redis_client = None
+    cache_service.reset()
+    yield
+    cache_service.reset()
+
+
 @pytest.fixture
 def anyio_backend():
     return "asyncio"
