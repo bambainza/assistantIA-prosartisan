@@ -16,16 +16,20 @@ from app.services.quota_service import quota_service
 
 router = APIRouter(prefix="/api/quota", tags=["Quotas & Abonnements"])
 
+# Identité utilisée quand aucune authentification n'est fournie.
+ANONYMOUS_USER_ID = uuid.UUID("00000000-0000-0000-0000-000000000001")
+
 
 @router.get("")
-@router.get("/{user_id}")
 async def get_user_quota(
-    user_id: uuid.UUID | None = None,
     current_user_id: uuid.UUID | None = Depends(get_optional_user_id),
     db: AsyncSession = Depends(get_db),
 ) -> dict[str, Any]:
-    """Consulte le solde de questions et le statut Premium de l'artisan."""
-    uid = (
-        current_user_id or user_id or uuid.UUID("00000000-0000-0000-0000-000000000001")
-    )
+    """Consulte le solde de questions et le statut Premium de l'artisan courant.
+
+    L'identité est déduite du JWT (ou du compte anonyme partagé en son
+    absence) : il n'existe plus de route ``/{user_id}`` qui exposerait le
+    quota d'un tiers à partir de son seul identifiant.
+    """
+    uid = current_user_id or ANONYMOUS_USER_ID
     return await quota_service.get_user_quota_info(db=db, user_id=uid)

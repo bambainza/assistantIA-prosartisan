@@ -31,13 +31,14 @@ graph TD
 
 ### Stack Technique
 - **Langage & Framework** : Python 3.12, FastAPI, Pydantic v2.
-- **Base de Données Relationnelle** : PostgreSQL, SQLAlchemy 2.0 (AsyncIO), Asyncpg, Alembic.
+- **Base de Données Relationnelle** : PostgreSQL, SQLAlchemy 2.0 (AsyncIO), Asyncpg, Alembic. Pool de connexions dimensionné (`DB_POOL_SIZE`/`DB_MAX_OVERFLOW`/`DB_POOL_RECYCLE`), `pool_pre_ping` actif.
+- **Cache & Rate Limiting** : Redis (compteurs de quota/rate-limit partagés entre workers), avec repli en mémoire locale si Redis est indisponible (dev/tests uniquement).
 - **Base Vectorielle & RAG** : Qdrant (`qdrant-client`), Embeddings OpenAI (`text-embedding-3-small`).
 - **Intelligence Artificielle** : OpenAI GPT-4o (Vision) & GPT-4o-mini, Whisper API (Vocal).
-- **Paiements & Webhooks** : Wave Business API, Orange Money API, Signatures HMAC SHA-256.
+- **Paiements & Webhooks** : Wave Business API, Orange Money API, Signatures HMAC SHA-256 (obligatoire, aucun contournement).
 - **Découpage & Ingestion PDF** : PyPDF, Semantic Chunking (overlap 10-15%).
 - **Console d'Administration** : Interface statique HTML/JS/CSS (Template Dastone v2.1.0) montée sur `/admin` dans FastAPI.
-- **Résilience** : Mécanisme de démarrage dégradé (autonome local) si PostgreSQL ou Redis sont indisponibles.
+- **Résilience** : Mécanisme de démarrage dégradé (repli SQLite autonome, hors production uniquement) si PostgreSQL est injoignable. En production (`APP_ENV=production`) ou avec `DB_REQUIRE_POSTGRES=true`, une base injoignable fait échouer le démarrage plutôt que de basculer silencieusement.
 
 ---
 
@@ -82,12 +83,36 @@ AssistantIA-prosartisan/
 
 ## 🛡️ 5. Endpoints API Principaux
 
-- `POST /api/chat` : Pose une question technique (supporte texte + photo `image_url` + filtre `metier_id`). Intercepte les quotas épuisés avec `HTTP 402 Payment Required`.
-- `WS /api/chat/ws` : Stream WebSocket en temps réel pour l'application mobile.
-- `POST /api/payment/init` : Initialise un paiement Wave ou Orange Money.
-- `POST /api/payment/webhook` : Webhook sécurisé par signature HMAC SHA-256 (`X-Signature`).
-- `GET /api/quota/{user_id}` : Consultation du solde et du statut d'abonnement.
-- `POST /api/admin/upload-pdf` : Upload et ingestion de PDF techniques par le back-office.
+Sur toutes les routes ci-dessous, l'identité de l'artisan est déduite du JWT (`Authorization: Bearer ...`) quand il est fourni ; en son absence, un compte anonyme partagé est utilisé pour le mode non connecté. Aucune route n'accepte plus un `user_id` fourni par le client (corps, query ou chemin) — voir AGENTS.md §2.
+
+**Authentification** (`/api/auth`)
+
+- `POST /register`, `POST /login` : inscription et connexion par email/mot de passe.
+- `POST /google` : connexion/inscription via Google OAuth 2.0.
+- `POST /refresh` : renouvelle l'access token à partir d'un refresh token valide.
+- `GET /me` : profil de l'artisan connecté (JWT requis).
+
+**Chat & Historique**
+
+- `POST /api/chat` : Pose une question technique (texte + photo `image_url` optionnelle + filtre `metier_id`). Intercepte les quotas épuisés avec `HTTP 402 Payment Required`.
+- `POST /api/chat/stream` : équivalent en streaming SSE.
+- `POST /api/chat/transcribe` : transcription vocale (Whisper) d'une note audio de chantier.
+- `WS /api/chat/ws` : Stream WebSocket en temps réel (encore un prototype : ni authentification ni décompte de quota à ce stade).
+- `GET/POST /api/conversations`, `GET/PATCH/DELETE /api/conversations/{id}` : historique des discussions, strictement cloisonné par propriétaire.
+
+**Paiement Mobile Money** (`/api/payment`)
+
+- `GET /tarifs` : grille tarifaire des Pass et Packs.
+- `POST /init` : initialise un paiement Wave ou Orange Money (JWT requis — l'utilisateur ne peut initier un paiement que pour son propre compte).
+- `POST /webhook` : webhook sécurisé par signature HMAC SHA-256 (`X-Signature` obligatoire, aucune exception) et idempotent (un webhook rejoué sur une transaction déjà aboutie ne re-crédite pas le Pass).
+
+**Quota**
+
+- `GET /api/quota` : solde de questions et statut d'abonnement de l'artisan courant.
+
+**Back-Office Admin** (`/api/admin`, JWT admin requis)
+
+- `POST /upload-pdf` (ingestion PDF), `GET /stats`, `GET /overview`, `GET /users`, `POST /users/{id}/grant-pass`, `GET /documents`, `DELETE /documents/{id}`, `GET /transactions`, `GET /logs`.
 
 ---
 
