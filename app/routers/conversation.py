@@ -22,6 +22,16 @@ from app.services.chat_history_service import chat_history_service
 
 router = APIRouter(prefix="/api/conversations", tags=["Historique Discussions"])
 
+# Identité utilisée pour le mode anonyme (sans JWT).
+ANONYMOUS_USER_ID = uuid.UUID("00000000-0000-0000-0000-000000000001")
+
+
+def _resolve_uid(
+    current_user_id: uuid.UUID | None,
+    user_id: uuid.UUID | None = None,
+) -> uuid.UUID:
+    return current_user_id or user_id or ANONYMOUS_USER_ID
+
 
 @router.post(
     "",
@@ -35,9 +45,7 @@ async def create_conversation_endpoint(
     db: AsyncSession = Depends(get_db),
 ) -> Any:
     """Crée une nouvelle discussion vide pour un artisan."""
-    uid = (
-        current_user_id or user_id or uuid.UUID("00000000-0000-0000-0000-000000000001")
-    )
+    uid = _resolve_uid(current_user_id, user_id)
     return await chat_history_service.create_conversation(
         db=db,
         user_id=uid,
@@ -53,9 +61,7 @@ async def list_conversations_endpoint(
     db: AsyncSession = Depends(get_db),
 ) -> Any:
     """Liste toutes les discussions d'un artisan (triées par la plus récente)."""
-    uid = (
-        current_user_id or user_id or uuid.UUID("00000000-0000-0000-0000-000000000001")
-    )
+    uid = _resolve_uid(current_user_id, user_id)
     return await chat_history_service.list_conversations_for_user(
         db=db, user_id=uid, q=q
     )
@@ -64,12 +70,14 @@ async def list_conversations_endpoint(
 @router.get("/{conversation_id}", response_model=ConversationDetailResponse)
 async def get_conversation_endpoint(
     conversation_id: uuid.UUID,
+    current_user_id: uuid.UUID | None = Depends(get_optional_user_id),
     db: AsyncSession = Depends(get_db),
 ) -> Any:
     """Récupère une discussion spécifique avec sa liste de messages."""
     conversation = await chat_history_service.get_conversation_with_messages(
         db=db,
         conversation_id=conversation_id,
+        user_id=_resolve_uid(current_user_id),
     )
     if not conversation:
         raise HTTPException(
@@ -82,12 +90,14 @@ async def get_conversation_endpoint(
 @router.delete("/{conversation_id}")
 async def delete_conversation_endpoint(
     conversation_id: uuid.UUID,
+    current_user_id: uuid.UUID | None = Depends(get_optional_user_id),
     db: AsyncSession = Depends(get_db),
 ) -> dict[str, Any]:
     """Supprime une discussion et son historique de messages associés."""
     deleted = await chat_history_service.delete_conversation(
         db=db,
         conversation_id=conversation_id,
+        user_id=_resolve_uid(current_user_id),
     )
     if not deleted:
         raise HTTPException(
@@ -104,6 +114,7 @@ async def delete_conversation_endpoint(
 async def rename_conversation_endpoint(
     conversation_id: uuid.UUID,
     payload: ConversationUpdate,
+    current_user_id: uuid.UUID | None = Depends(get_optional_user_id),
     db: AsyncSession = Depends(get_db),
 ) -> Any:
     """Modifie le titre d'une discussion."""
@@ -111,6 +122,7 @@ async def rename_conversation_endpoint(
         db=db,
         conversation_id=conversation_id,
         new_title=payload.title,
+        user_id=_resolve_uid(current_user_id),
     )
     if not conversation:
         raise HTTPException(

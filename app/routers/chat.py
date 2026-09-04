@@ -83,11 +83,11 @@ async def chat_endpoint(
             detail=epuise_detail,
         )
 
-    # 2. Récupérer l'historique si la discussion existe
+    # 2. Récupérer l'historique si la discussion existe (et appartient à l'artisan)
     history_messages = []
     if payload.conversation_id:
         conv = await chat_history_service.get_conversation_with_messages(
-            db=db, conversation_id=payload.conversation_id
+            db=db, conversation_id=payload.conversation_id, user_id=user_id
         )
         if conv and conv.messages:
             sorted_msgs = sorted(conv.messages, key=lambda m: m.created_at)
@@ -117,7 +117,7 @@ async def chat_endpoint(
             active_conv_id = new_conv.id
         else:
             conv = await chat_history_service.get_conversation_with_messages(
-                db=db, conversation_id=active_conv_id
+                db=db, conversation_id=active_conv_id, user_id=user_id
             )
             if not conv:
                 raise HTTPException(
@@ -177,11 +177,11 @@ async def chat_stream_endpoint(
             detail="Quota suffisant.",
         )
 
-    # 2. Récupérer l'historique si la discussion existe
+    # 2. Récupérer l'historique si la discussion existe (et appartient à l'artisan)
     history_messages = []
     if payload.conversation_id:
         conv = await chat_history_service.get_conversation_with_messages(
-            db=db, conversation_id=payload.conversation_id
+            db=db, conversation_id=payload.conversation_id, user_id=user_id
         )
         if conv and conv.messages:
             sorted_msgs = sorted(conv.messages, key=lambda m: m.created_at)

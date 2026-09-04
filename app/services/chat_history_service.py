@@ -54,17 +54,28 @@ class ChatHistoryService:
         self,
         db: AsyncSession,
         conversation_id: uuid.UUID,
+        user_id: uuid.UUID | None = None,
     ) -> Conversation | None:
-        """Récupère une discussion spécifique avec tous ses messages."""
+        """Récupère une discussion avec ses messages.
+
+        Si ``user_id`` est fourni, la discussion n'est renvoyée que si elle
+        appartient à cet artisan (protection contre l'accès à l'historique
+        d'un autre utilisateur).
+        """
         try:
             stmt = select(Conversation).where(Conversation.id == conversation_id)
+            if user_id is not None:
+                stmt = stmt.where(Conversation.user_id == user_id)
             res = await db.execute(stmt)
             conv = res.scalar_one_or_none()
             if conv is not None:
                 return conv
         except Exception:
             pass
-        return self._fallback_db.get(conversation_id)
+        conv = self._fallback_db.get(conversation_id)
+        if conv is not None and user_id is not None and conv.user_id != user_id:
+            return None
+        return conv
 
     async def list_conversations_for_user(
         self,
@@ -130,10 +141,13 @@ class ChatHistoryService:
         self,
         db: AsyncSession,
         conversation_id: uuid.UUID,
+        user_id: uuid.UUID | None = None,
     ) -> bool:
-        """Supprime une discussion et ses messages."""
+        """Supprime une discussion et ses messages (si elle appartient à l'artisan)."""
         try:
             stmt = select(Conversation).where(Conversation.id == conversation_id)
+            if user_id is not None:
+                stmt = stmt.where(Conversation.user_id == user_id)
             res = await db.execute(stmt)
             conversation = res.scalar_one_or_none()
             if conversation:
@@ -143,7 +157,8 @@ class ChatHistoryService:
         except Exception:
             pass
 
-        if conversation_id in self._fallback_db:
+        fallback = self._fallback_db.get(conversation_id)
+        if fallback is not None and (user_id is None or fallback.user_id == user_id):
             del self._fallback_db[conversation_id]
             return True
         return False
@@ -195,10 +210,13 @@ class ChatHistoryService:
         db: AsyncSession,
         conversation_id: uuid.UUID,
         new_title: str,
+        user_id: uuid.UUID | None = None,
     ) -> Conversation | None:
-        """Modifie le titre d'une discussion."""
+        """Modifie le titre d'une discussion (si elle appartient à l'artisan)."""
         try:
             stmt = select(Conversation).where(Conversation.id == conversation_id)
+            if user_id is not None:
+                stmt = stmt.where(Conversation.user_id == user_id)
             res = await db.execute(stmt)
             conversation = res.scalar_one_or_none()
             if conversation:
@@ -215,8 +233,8 @@ class ChatHistoryService:
         except Exception:
             pass
 
-        if conversation_id in self._fallback_db:
-            conv = self._fallback_db[conversation_id]
+        conv = self._fallback_db.get(conversation_id)
+        if conv is not None and (user_id is None or conv.user_id == user_id):
             conv.title = new_title
             from datetime import UTC, datetime
 
