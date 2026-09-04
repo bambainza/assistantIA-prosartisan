@@ -19,17 +19,19 @@ from app.db.session import engine
 from app.middleware.logging import LoggingAndRequestIdMiddleware
 from app.middleware.rate_limiter import RateLimitMiddleware
 from app.routers import admin, auth, chat, conversation, health, payment, quota
+from app.services.rag_service import rag_service
 
 
 @asynccontextmanager
 async def lifespan(application: FastAPI):
-    """Initialise la base de données au démarrage, nettoie à l'arrêt."""
+    """Initialise la base de données et la collection Qdrant au démarrage, nettoie à l'arrêt."""
     logging.getLogger("app").info(
         "Démarrage ProsArtisan IA (env=%s) — moteur DB : %s",
         settings.app_env,
         engine.url.get_backend_name(),
     )
     await init_db()
+    await rag_service.ensure_collection()
     yield
     await engine.dispose()
 

@@ -78,6 +78,13 @@ class Settings(BaseSettings):
     qdrant_host: str = "qdrant"
     qdrant_port: int = 6333
     qdrant_collection: str = "connaissances_prosartisan"
+    # Dimension des vecteurs de la collection (doit correspondre à embedding_model :
+    # 1536 pour text-embedding-3-small).
+    qdrant_vector_size: int = 1536
+    # Score de similarité minimal (cosinus) pour qu'un extrait retrouvé soit
+    # considéré pertinent. En dessous, on déclenche le repli "zéro hallucination"
+    # plutôt que de laisser le LLM broder sur un contexte hors sujet.
+    rag_min_score: float = 0.15
 
     # ── LLM (OpenAI) & Vision / Audio ──
     openai_api_key: str = "sk-placeholder"
