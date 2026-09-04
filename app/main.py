@@ -54,10 +54,14 @@ cors_origins = (
     else ["*"]
 )
 
+# Le couple allow_origins=["*"] + allow_credentials=True est rejeté par les
+# navigateurs : on n'active les credentials que si une liste blanche est définie.
+allow_credentials = cors_origins != ["*"]
+
 app.add_middleware(
     CORSMiddleware,
     allow_origins=cors_origins,
-    allow_credentials=True,
+    allow_credentials=allow_credentials,
     allow_methods=["*"],
     allow_headers=["*"],
 )

@@ -2,7 +2,20 @@
 
 from urllib.parse import quote_plus
 
+from pydantic import model_validator
 from pydantic_settings import BaseSettings
+
+# Valeurs de secret livrées par défaut : interdites en production.
+_SECRETS_FAIBLES = {
+    "changeme",
+    "changeme_in_production",
+    "placeholder",
+    "placeholder_hmac_secret",
+    "placeholder_webhook_secret",
+    "dev_secret_key_change_in_production",
+    "dev_jwt_secret_change_in_production",
+    "",
+}
 
 
 class Settings(BaseSettings):
@@ -66,10 +79,45 @@ class Settings(BaseSettings):
     mobile_money_secret_key: str = "placeholder_hmac_secret"
     webhook_secret: str = "placeholder_webhook_secret"
 
+    # ── Compte administrateur initial (seed) ──
+    admin_email: str = "admin@prosartisan.ci"
+    admin_password: str | None = None  # requis en production, sinon pas de seed admin
+
     # ── Quotas Freemium ──
     max_questions_gratuites_par_jour: int = 5
 
     model_config = {"env_file": ".env", "env_file_encoding": "utf-8"}
+
+    @property
+    def is_production(self) -> bool:
+        return self.app_env.lower() in {"production", "prod"}
+
+    @model_validator(mode="after")
+    def _verifier_secrets_production(self) -> "Settings":
+        """Refuse de démarrer en production avec des secrets/CORS non configurés."""
+        if not self.is_production:
+            return self
+
+        erreurs: list[str] = []
+        if self.app_secret_key in _SECRETS_FAIBLES:
+            erreurs.append("APP_SECRET_KEY")
+        if self.jwt_secret_key in _SECRETS_FAIBLES:
+            erreurs.append("JWT_SECRET_KEY")
+        if self.mobile_money_secret_key in _SECRETS_FAIBLES:
+            erreurs.append("MOBILE_MONEY_SECRET_KEY")
+        if self.db_password in _SECRETS_FAIBLES:
+            erreurs.append("DB_PASSWORD")
+        if self.cors_allowed_origins.strip() == "*":
+            erreurs.append("CORS_ALLOWED_ORIGINS (le joker '*' est interdit)")
+        if self.app_debug:
+            erreurs.append("APP_DEBUG (doit être false)")
+
+        if erreurs:
+            raise ValueError(
+                "Configuration de production invalide — variables à définir : "
+                + ", ".join(erreurs)
+            )
+        return self
 
 
 settings = Settings()

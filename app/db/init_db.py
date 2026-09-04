@@ -1,11 +1,19 @@
 """Initialisation de la base de données (création des tables + seed)."""
 
+import logging
+
 from sqlalchemy import select, text
 
+from app.config import settings
 from app.db.session import async_session, engine
 from app.models.base import Base
 from app.models.metier import Metier, SousMetier
 from app.models.user import User
+
+logger = logging.getLogger(__name__)
+
+# Mot de passe admin utilisé uniquement hors production quand aucun n'est fourni.
+_DEV_ADMIN_PASSWORD = "dev_admin_password"
 
 
 async def seed_data() -> None:
@@ -81,25 +89,41 @@ async def seed_data() -> None:
                     session.add(SousMetier(metier_id=metier.id, **sm))
 
         # 2. Grainage de l'administrateur par défaut
-        admin_email = "admin@prosartisan.ci"
+        admin_email = settings.admin_email
         admin_stmt = select(User).where(User.email == admin_email)
         admin_result = await session.execute(admin_stmt)
         if admin_result.scalar_one_or_none() is None:
-            import uuid
+            admin_password = settings.admin_password
+            if not admin_password:
+                if settings.is_production:
+                    logger.warning(
+                        "Aucun ADMIN_PASSWORD défini : compte administrateur non créé. "
+                        "Définissez ADMIN_EMAIL et ADMIN_PASSWORD puis relancez."
+                    )
+                    admin_password = None
+                else:
+                    admin_password = _DEV_ADMIN_PASSWORD
+                    logger.info(
+                        "ADMIN_PASSWORD absent (hors production) : "
+                        "utilisation du mot de passe de développement par défaut."
+                    )
 
-            from app.middleware.auth import hash_password
+            if admin_password:
+                import uuid
 
-            admin_user = User(
-                id=uuid.uuid4(),
-                email=admin_email,
-                nom="Administrateur ProsArtisan",
-                telephone="+22500000000",
-                password_hash=hash_password("admin_secret_pass_2026"),
-                is_admin=True,
-                auth_provider="local",
-                type_abonnement="FREE",
-            )
-            session.add(admin_user)
+                from app.middleware.auth import hash_password
+
+                admin_user = User(
+                    id=uuid.uuid4(),
+                    email=admin_email,
+                    nom="Administrateur ProsArtisan",
+                    telephone="+22500000000",
+                    password_hash=hash_password(admin_password),
+                    is_admin=True,
+                    auth_provider="local",
+                    type_abonnement="FREE",
+                )
+                session.add(admin_user)
 
         await session.commit()
 

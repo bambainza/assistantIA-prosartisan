@@ -44,6 +44,19 @@ htmlcov/
 .ruff_cache/
 
 # =========================
+# BASE DE DONNÉES LOCALE (fallback SQLite autonome)
+# =========================
+*.db
+*.sqlite
+*.sqlite3
+uploads/
+
+# =========================
+# TEMPLATE ADMIN TIERS (non versionné — la copie maintenue est admin_web/)
+# =========================
+dastone-v2.1.0/
+
+# =========================
 # DOCUMENTS D'INGESTION (volumineux)
 # =========================
 ingestion/documents/*.pdf
