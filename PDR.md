@@ -53,8 +53,9 @@ AssistantIA-prosartisan/
 │   ├── schemas/              # Schémas Pydantic (Chat, Payment, Quota, User)
 │   ├── services/             # Logique Métier (RAG, Quota, Payment)
 │   └── routers/              # Endpoints API (chat, payment, quota, admin, health)
-├── admin_web/                # Fichiers statiques du Back-Office (HTML/JS/CSS)
-├── dastone-v2.1.0/           # Sources originales et documentation du template admin
+├── admin_web/                # Back-Office statique (HTML/JS/CSS, base : template Dastone v2.1.0)
+├── chat_web/                 # Front-Office chat statique (HTML/JS/CSS)
+├── mobile_app_flutter/       # Application mobile Flutter (Android prioritaire)
 ├── ingestion/
 │   ├── pipeline.py           # Pipeline PDF → Chunks sémantiques → Qdrant
 │   └── documents/            # Guides et fiches techniques PDF par métier
