@@ -1,30 +1,15 @@
 {
-    "guide_cuir_finitions.pdf": {
-        "secteur_id": "artisanat_art",
-        "metier_id": "maroquinerie",
-        "categorie": "finition",
-        "type_document": "fiche_technique",
-        "niveau_expertise": "avance"
+    "_README": "Métadonnées par fichier PDF (clé = nom exact du fichier dans ce dossier). Chaque entrée prévaut sur les valeurs par défaut passées à run_ingestion(). metier_id/secteur_id sont des entiers positifs (metier_id correspond à l'id de la table metiers ; 1=Bâtiment & Construction, 2=Électricité & Énergie, 3=Plomberie & Sanitaire, 4=Mécanique & Automobile selon le seed par défaut d'init_db.py).",
+    "exemple_guide_maconnerie.pdf": {
+        "metier_id": 1,
+        "secteur_id": 1,
+        "type_document": "guide_technique",
+        "niveau_expertise": "intermédiaire"
     },
-    "dtu_maconnerie_fondations.pdf": {
-        "secteur_id": "batiment",
-        "metier_id": "maconnerie",
-        "categorie": "gros_oeuvre",
+    "exemple_normes_electricite.pdf": {
+        "metier_id": 2,
+        "secteur_id": 1,
         "type_document": "norme_officielle",
-        "niveau_expertise": "intermediaire"
-    },
-    "normes_cablage_electrique.pdf": {
-        "secteur_id": "batiment",
-        "metier_id": "electricite",
-        "categorie": "installation",
-        "type_document": "norme_officielle",
-        "niveau_expertise": "debutant"
-    },
-    "financement_imf_artisans.pdf": {
-        "secteur_id": "transversal",
-        "metier_id": "tous",
-        "categorie": "gestion_finance",
-        "type_document": "guide_pratique",
         "niveau_expertise": "debutant"
     }
 }

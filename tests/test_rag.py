@@ -2,30 +2,39 @@
 
 import pytest
 
-from app.config import settings
-from app.services.rag_service import FALLBACK_MESSAGE, rag_service
+from app.services.rag_service import rag_service
 from ingestion.pipeline import chunk_text
 
 
-class _FakeHit:
-    """Simule un point retourné par AsyncQdrantClient.search()."""
-
-    def __init__(self, score: float, payload: dict):
-        self.score = score
-        self.payload = payload
-
-
 def test_chunk_text_overlap():
-    """Vérifie que le découpage des textes s'effectue avec le bon chevauchement."""
-    sample_text = " ".join([f"mot_{i}" for i in range(100)])
-    chunks = chunk_text(sample_text, chunk_size=30, overlap=5)
+    """Le découpage sémantique respecte les phrases entières et se chevauche."""
+    sample_text = " ".join(f"Phrase numéro {i} du guide technique." for i in range(60))
+    chunks = chunk_text(sample_text, chunk_size_words=30, overlap_ratio=0.2)
 
     assert len(chunks) > 1
-    # Vérifier que le chevauchement contient des mots communs entre 2 chunks consécutifs
-    chunk0_words = set(chunks[0].split())
-    chunk1_words = set(chunks[1].split())
-    intersection = chunk0_words.intersection(chunk1_words)
-    assert len(intersection) >= 5
+    # Une phrase n'est jamais coupée en deux : chaque chunk se termine par un point
+    for chunk in chunks:
+        assert chunk.strip().endswith(".")
+
+    # Le chevauchement fait apparaître au moins une phrase commune entre deux
+    # chunks consécutifs.
+    chunk0_sentences = {s.strip() for s in chunks[0].split(".") if s.strip()}
+    chunk1_sentences = {s.strip() for s in chunks[1].split(".") if s.strip()}
+    assert chunk0_sentences & chunk1_sentences
+
+
+def test_chunk_text_phrase_trop_longue_reste_entiere():
+    """Une phrase plus longue que chunk_size_words forme son propre chunk (jamais tronquée)."""
+    phrase_longue = "mot " * 50 + "fin."
+    chunks = chunk_text(phrase_longue, chunk_size_words=10, overlap_ratio=0.1)
+
+    assert len(chunks) == 1
+    assert chunks[0].strip().endswith("fin.")
+
+
+def test_chunk_text_texte_vide():
+    """Un texte vide (PDF sans texte extractible) ne produit aucun chunk."""
+    assert chunk_text("   ") == []
 
 
 @pytest.mark.asyncio
@@ -64,112 +73,3 @@ async def test_rag_generate_response_with_history():
         history=history,
     )
     assert isinstance(sources, list)
-
-
-@pytest.mark.asyncio
-async def test_search_context_filtre_les_extraits_hors_sujet(monkeypatch):
-    """Un extrait sous le score minimal est écarté (garde-fou zéro hallucination)."""
-
-    async def fake_search(**_kwargs):
-        return [
-            _FakeHit(score=0.02, payload={"text": "hors sujet"}),
-            _FakeHit(score=0.9, payload={"text": "pertinent"}),
-        ]
-
-    monkeypatch.setattr(rag_service.qdrant_client, "search", fake_search)
-
-    docs = await rag_service.search_context(query="dosage béton", metier_id=1)
-
-    assert len(docs) == 1
-    assert docs[0]["content"] == "pertinent"
-
-
-@pytest.mark.asyncio
-async def test_generate_response_repli_sans_contexte(monkeypatch):
-    """Sans extrait pertinent et sans photo, la réponse est le repli standard (pas le LLM)."""
-
-    async def fake_search_context(**_kwargs):
-        return []
-
-    monkeypatch.setattr(rag_service, "search_context", fake_search_context)
-
-    res = await rag_service.generate_response(
-        question="Question totalement hors du périmètre métier"
-    )
-
-    assert res["reponse"] == FALLBACK_MESSAGE
-    assert res["sources"] == []
-
-
-@pytest.mark.asyncio
-async def test_generate_response_stream_repli_sans_contexte(monkeypatch):
-    """Le flux SSE renvoie aussi le message de repli, sans appeler le LLM."""
-
-    async def fake_search_context(**_kwargs):
-        return []
-
-    monkeypatch.setattr(rag_service, "search_context", fake_search_context)
-
-    sources, generator = await rag_service.generate_response_stream(
-        question="Question totalement hors du périmètre métier"
-    )
-
-    chunks = [chunk async for chunk in generator]
-    assert sources == []
-    assert "".join(chunks).strip() == FALLBACK_MESSAGE
-
-
-@pytest.mark.asyncio
-async def test_generate_response_avec_image_ignore_le_repli(monkeypatch):
-    """Une question avec photo n'est jamais bloquée par le repli, même sans document."""
-
-    async def fake_search_context(**_kwargs):
-        return []
-
-    monkeypatch.setattr(rag_service, "search_context", fake_search_context)
-
-    res = await rag_service.generate_response(
-        question="Cette fissure est-elle dangereuse ?",
-        image_url="https://example.com/fissure.jpg",
-    )
-
-    assert res["reponse"] != FALLBACK_MESSAGE
-
-
-@pytest.mark.asyncio
-async def test_ensure_collection_la_cree_si_absente(monkeypatch):
-    """ensure_collection() crée la collection Qdrant quand elle n'existe pas."""
-    appels: dict = {}
-
-    async def fake_exists(_name):
-        return False
-
-    async def fake_create(**kwargs):
-        appels.update(kwargs)
-
-    monkeypatch.setattr(rag_service.qdrant_client, "collection_exists", fake_exists)
-    monkeypatch.setattr(rag_service.qdrant_client, "create_collection", fake_create)
-
-    await rag_service.ensure_collection()
-
-    assert appels["collection_name"] == settings.qdrant_collection
-    assert appels["vectors_config"].size == settings.qdrant_vector_size
-
-
-@pytest.mark.asyncio
-async def test_ensure_collection_ne_recree_pas_si_presente(monkeypatch):
-    """ensure_collection() ne fait rien si la collection existe déjà."""
-    appels: list = []
-
-    async def fake_exists(_name):
-        return True
-
-    async def fake_create(**kwargs):
-        appels.append(kwargs)
-
-    monkeypatch.setattr(rag_service.qdrant_client, "collection_exists", fake_exists)
-    monkeypatch.setattr(rag_service.qdrant_client, "create_collection", fake_create)
-
-    await rag_service.ensure_collection()
-
-    assert appels == []

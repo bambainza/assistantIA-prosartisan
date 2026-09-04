@@ -11,7 +11,16 @@ import uuid
 from datetime import UTC, datetime, timedelta
 from typing import Any
 
-from fastapi import APIRouter, Depends, File, Form, HTTPException, UploadFile, status
+from fastapi import (
+    APIRouter,
+    BackgroundTasks,
+    Depends,
+    File,
+    Form,
+    HTTPException,
+    UploadFile,
+    status,
+)
 from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -26,8 +35,9 @@ from ingestion.pipeline import run_ingestion
 router = APIRouter(prefix="/api/admin", tags=["Back-Office Admin"])
 
 
-@router.post("/upload-pdf", status_code=status.HTTP_201_CREATED)
+@router.post("/upload-pdf", status_code=status.HTTP_202_ACCEPTED)
 async def upload_pdf(
+    background_tasks: BackgroundTasks,
     file: UploadFile = File(...),
     metier_id: int = Form(1),
     secteur_id: int = Form(1),
@@ -35,7 +45,12 @@ async def upload_pdf(
     niveau_expertise: str = Form("intermédiaire"),
     admin_id: uuid.UUID = Depends(get_current_admin_user_id),
 ) -> dict[str, Any]:
-    """Upload un document PDF technique et déclenche son ingestion vectorielle (sécurisé admin)."""
+    """Upload un document PDF technique et lance son ingestion vectorielle en
+    arrière-plan (sécurisé admin). L'ingestion (extraction, découpage,
+    embeddings, indexation Qdrant) peut prendre du temps sur un gros document :
+    elle ne bloque donc plus la requête HTTP. Consulter GET /api/admin/stats ou
+    /api/admin/documents une fois le traitement terminé.
+    """
     if not file.filename or not file.filename.endswith(".pdf"):
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
@@ -47,10 +62,16 @@ async def upload_pdf(
     file_path = os.path.join(upload_dir, file.filename)
 
     content = await file.read()
+    if not content:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Le fichier envoyé est vide.",
+        )
     with open(file_path, "wb") as f:
         f.write(content)
 
-    ingest_result = run_ingestion(
+    background_tasks.add_task(
+        run_ingestion,
         docs_dir=upload_dir,
         metier_id=metier_id,
         secteur_id=secteur_id,
@@ -59,9 +80,9 @@ async def upload_pdf(
     )
 
     return {
-        "message": f"Fichier {file.filename} ingéré avec succès.",
+        "message": f"Fichier {file.filename} reçu : ingestion vectorielle lancée en arrière-plan.",
         "file_path": file_path,
-        "details": ingest_result,
+        "status": "processing",
     }
 
 
