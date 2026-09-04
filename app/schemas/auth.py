@@ -5,7 +5,7 @@ from __future__ import annotations
 import uuid
 from datetime import datetime
 
-from pydantic import BaseModel, EmailStr, Field
+from pydantic import BaseModel, EmailStr, Field, field_validator
 
 # ── Profil Utilisateur ──
 
@@ -20,9 +20,21 @@ class UserProfile(BaseModel):
     avatar_url: str | None = None
     auth_provider: str = "local"
     type_abonnement: str = "FREE"
+    is_admin: bool = False
     created_at: datetime | None = None
 
     model_config = {"from_attributes": True}
+
+    @field_validator("is_admin", mode="before")
+    @classmethod
+    def _normalise_is_admin(cls, value: object) -> bool:
+        """Coerce les valeurs nulles en ``False``.
+
+        Un objet ``User`` non encore inséré (ou une ligne héritée sans valeur)
+        expose ``is_admin = None`` : la valeur par défaut du champ ne s'applique
+        que si la clé est absente, pas si elle vaut explicitement ``None``.
+        """
+        return bool(value)
 
 
 # ── Inscription ──

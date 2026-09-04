@@ -2,13 +2,17 @@
 
 import hashlib
 import hmac
+import json
 import uuid
+from unittest.mock import AsyncMock, MagicMock
 
 import pytest
 from httpx import ASGITransport, AsyncClient
 
 from app.config import settings
+from app.db.session import get_db
 from app.main import app
+from app.models.transaction import TransactionMobileMoney
 
 
 @pytest.mark.asyncio
@@ -65,3 +69,96 @@ async def test_webhook_hmac_validation():
         200,
         404,
     ]  # 404 si la ref n'est pas en DB, mais la signature est valide
+
+
+@pytest.mark.asyncio
+async def test_webhook_rejette_sans_signature():
+    """POST /api/payment/webhook sans en-tête X-Signature doit être refusé (401)."""
+    payload = {
+        "transaction_id": "REF-TEST-123456",
+        "status": "ACCEPTED",
+        "metadata": {},
+    }
+
+    transport = ASGITransport(app=app)
+    async with AsyncClient(transport=transport, base_url="http://test") as client:
+        response = await client.post("/api/payment/webhook", json=payload)
+
+    assert response.status_code == 401
+    assert "Signature HMAC" in response.json()["detail"]
+
+
+@pytest.mark.asyncio
+async def test_webhook_rejette_signature_invalide():
+    """POST /api/payment/webhook avec une signature erronée doit être refusé (401)."""
+    payload = {
+        "transaction_id": "REF-TEST-123456",
+        "status": "ACCEPTED",
+        "metadata": {},
+    }
+
+    transport = ASGITransport(app=app)
+    async with AsyncClient(transport=transport, base_url="http://test") as client:
+        response = await client.post(
+            "/api/payment/webhook",
+            json=payload,
+            headers={"X-Signature": "0" * 64},
+        )
+
+    assert response.status_code == 401
+
+
+@pytest.mark.asyncio
+async def test_webhook_idempotent_sur_transaction_deja_creditee():
+    """Un webhook rejoué sur une transaction déjà ACCEPTED ne re-crédite pas le Pass."""
+    txn = TransactionMobileMoney(
+        id=uuid.uuid4(),
+        user_id=uuid.uuid4(),
+        montant=3000,
+        operateur="WAVE",
+        statut_paiement="ACCEPTED",  # déjà traitée
+        type_achat="pass_mois",
+        reference_externe="REF-DEJA-TRAITEE",
+    )
+
+    quota_add = MagicMock()
+
+    async def custom_mock_db():
+        session = MagicMock()
+        session.execute = AsyncMock(
+            return_value=MagicMock(scalar_one_or_none=MagicMock(return_value=txn))
+        )
+        session.commit = AsyncMock()
+        session.add = quota_add
+        yield session
+
+    payload = {
+        "transaction_id": "REF-DEJA-TRAITEE",
+        "status": "ACCEPTED",
+        "metadata": {},
+    }
+    raw_body = json.dumps(payload).encode("utf-8")
+    secret = settings.mobile_money_secret_key.encode("utf-8")
+    valid_sig = hmac.new(secret, raw_body, hashlib.sha256).hexdigest()
+
+    app.dependency_overrides[get_db] = custom_mock_db
+    try:
+        transport = ASGITransport(app=app)
+        async with AsyncClient(transport=transport, base_url="http://test") as client:
+            response = await client.post(
+                "/api/payment/webhook",
+                content=raw_body,
+                headers={
+                    "X-Signature": valid_sig,
+                    "Content-Type": "application/json",
+                },
+            )
+
+        assert response.status_code == 200
+        assert "idempotent" in response.json()["message"]
+        # Aucun quota premium ne doit avoir été (re)créé pour cette transaction
+        quota_add.assert_not_called()
+    finally:
+        from tests.conftest import mock_get_db
+
+        app.dependency_overrides[get_db] = mock_get_db

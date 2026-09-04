@@ -57,13 +57,12 @@ async def handle_webhook(
     """Webhook entrant des opérateurs Mobile Money avec signature HMAC SHA-256."""
     raw_body = await request.body()
 
-    # Si en production ou clé configurée, valider la signature
-    if x_signature and not payment_service.verify_webhook_signature(
-        raw_body, x_signature
-    ):
+    # La signature HMAC est obligatoire : un webhook non signé (ou mal signé)
+    # est rejeté pour empêcher tout déblocage frauduleux de Pass premium.
+    if not payment_service.verify_webhook_signature(raw_body, x_signature):
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
-            detail="Signature HMAC invalide",
+            detail="Signature HMAC manquante ou invalide",
         )
 
     result = await payment_service.process_webhook(

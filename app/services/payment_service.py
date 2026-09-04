@@ -20,6 +20,9 @@ from app.config import settings
 from app.models.quota import QuotaUtilisateur
 from app.models.transaction import TransactionMobileMoney
 
+# Statuts opérateur considérés comme un paiement abouti
+STATUTS_PAIEMENT_ABOUTIS = {"ACCEPTED", "SUCCESS", "PAID"}
+
 TARIFS_PASS = {
     "pass_24h": {"nom": "Pass 24H Urgence", "montant": 500, "duree_heures": 24},
     "pass_mois": {"nom": "Pass Mensuel Pro", "montant": 3000, "duree_heures": 24 * 30},
@@ -33,7 +36,12 @@ class PaymentService:
     def verify_webhook_signature(
         self, payload_bytes: bytes, signature_header: str | None
     ) -> bool:
-        """Vérifie la signature HMAC SHA-256 du webhook entrant."""
+        """Vérifie la signature HMAC SHA-256 du webhook entrant.
+
+        La signature est **obligatoire** : un webhook sans en-tête ``X-Signature``
+        est rejeté. Cela empêche un tiers d'appeler le webhook pour débloquer
+        gratuitement un Pass premium.
+        """
         if not signature_header:
             return False
 
@@ -116,9 +124,21 @@ class PaymentService:
         if not txn:
             return {"status": "error", "message": "Transaction non trouvée"}
 
-        txn.statut_paiement = statut.upper()
+        statut_normalise = statut.upper()
 
-        if statut.upper() in ["ACCEPTED", "SUCCESS", "PAID"]:
+        # Idempotence : si la transaction a déjà été créditée, ne pas ré-appliquer
+        # le Pass (un webhook rejoué prolongerait indéfiniment le premium).
+        if txn.statut_paiement in STATUTS_PAIEMENT_ABOUTIS:
+            await db.commit()
+            return {
+                "status": "success",
+                "message": "Paiement déjà traité (webhook idempotent)",
+                "user_id": str(txn.user_id),
+            }
+
+        txn.statut_paiement = statut_normalise
+
+        if statut_normalise in STATUTS_PAIEMENT_ABOUTIS:
             info_pass = TARIFS_PASS.get(txn.type_achat, {})
             quota_stmt = select(QuotaUtilisateur).where(
                 QuotaUtilisateur.user_id == txn.user_id

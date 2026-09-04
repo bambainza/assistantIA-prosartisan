@@ -221,6 +221,9 @@ async def test_get_me_protected():
         data = response.json()
         assert data["email"] == "me@example.com"
         assert data["type_abonnement"] == "premium"
+        # Un User non encore inséré expose is_admin=None ; le schéma doit
+        # renvoyer un booléen valide (False) et non provoquer une 500.
+        assert data["is_admin"] is False
     finally:
         from tests.conftest import mock_get_db
 
