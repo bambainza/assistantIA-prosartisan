@@ -5,6 +5,7 @@ Assistant IA conversationnel pour artisans professionnels.
 Architecture RAG + Freemium + Mobile Money.
 """
 
+import logging
 import os
 from contextlib import asynccontextmanager
 
@@ -14,16 +15,25 @@ from fastapi.staticfiles import StaticFiles
 
 from app.config import settings
 from app.db.init_db import init_db
+from app.db.session import engine
 from app.middleware.logging import LoggingAndRequestIdMiddleware
 from app.middleware.rate_limiter import RateLimitMiddleware
 from app.routers import admin, auth, chat, conversation, health, payment, quota
+from app.services.rag_service import rag_service
 
 
 @asynccontextmanager
 async def lifespan(application: FastAPI):
-    """Initialise la base de données au démarrage, nettoie à l'arrêt."""
+    """Initialise la base de données et la collection Qdrant au démarrage."""
+    logging.getLogger("app").info(
+        "Démarrage ProsArtisan IA (env=%s) — moteur DB : %s",
+        settings.app_env,
+        engine.url.get_backend_name(),
+    )
     await init_db()
+    await rag_service.ensure_collection()
     yield
+    await engine.dispose()
 
 
 app = FastAPI(
@@ -54,10 +64,14 @@ cors_origins = (
     else ["*"]
 )
 
+# Le couple allow_origins=["*"] + allow_credentials=True est rejeté par les
+# navigateurs : on n'active les credentials que si une liste blanche est définie.
+allow_credentials = cors_origins != ["*"]
+
 app.add_middleware(
     CORSMiddleware,
     allow_origins=cors_origins,
-    allow_credentials=True,
+    allow_credentials=allow_credentials,
     allow_methods=["*"],
     allow_headers=["*"],
 )

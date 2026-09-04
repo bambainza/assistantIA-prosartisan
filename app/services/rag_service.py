@@ -7,19 +7,36 @@ l'assemblage du prompt système multilingue et l'appel à l'API LLM (OpenAI GPT-
 
 from __future__ import annotations
 
+import asyncio
+import logging
 import os
 from typing import Any
 
 from openai import AsyncOpenAI
 from qdrant_client import AsyncQdrantClient
-from qdrant_client.http.models import FieldCondition, Filter, MatchValue
+from qdrant_client.http.models import (
+    Distance,
+    FieldCondition,
+    Filter,
+    MatchValue,
+    VectorParams,
+)
 
 from app.config import settings
 from app.services.cache_service import cache_service
 
+logger = logging.getLogger(__name__)
+
 # Charger le prompt système
 PROMPT_PATH = os.path.join(
     os.path.dirname(__file__), "..", "..", "prompts", "system_prompt.txt"
+)
+
+# Message de repli standard (garde-fou "zéro hallucination", AGENTS.md §3) —
+# doit rester identique à la consigne donnée au LLM dans system_prompt.txt.
+FALLBACK_MESSAGE = (
+    "Les documents techniques actuels de ProsArtisan ne contiennent pas cette "
+    "information spécifique pour votre métier. Souhaitez-vous reformuler votre question ?"
 )
 
 
@@ -43,6 +60,39 @@ class RAGService:
             host=settings.qdrant_host,
             port=settings.qdrant_port,
         )
+
+    async def ensure_collection(self) -> None:
+        """Crée la collection Qdrant si elle n'existe pas encore (idempotent).
+
+        Sans cette étape, `/api/chat` en mode réel ne trouve jamais de contexte
+        tant que personne n'a lancé l'ingestion manuellement : le RAG répondrait
+        alors depuis les seules connaissances générales du LLM.
+        """
+        try:
+            exists = await self.qdrant_client.collection_exists(
+                settings.qdrant_collection
+            )
+            if exists:
+                return
+            await self.qdrant_client.create_collection(
+                collection_name=settings.qdrant_collection,
+                vectors_config=VectorParams(
+                    size=settings.qdrant_vector_size, distance=Distance.COSINE
+                ),
+            )
+            logger.info(
+                "Collection Qdrant '%s' créée (taille=%d).",
+                settings.qdrant_collection,
+                settings.qdrant_vector_size,
+            )
+        except Exception as exc:
+            logger.warning(
+                "Qdrant indisponible, impossible de préparer la collection '%s' "
+                "(%s). Le RAG répondra par le message de repli standard tant "
+                "qu'aucun contexte ne peut être recherché.",
+                settings.qdrant_collection,
+                exc,
+            )
 
     async def get_embedding(self, text: str) -> list[float]:
         """Génère un embedding vectoriel pour un texte donné avec mise en cache."""
@@ -100,6 +150,9 @@ class RAGService:
                     "score": hit.score,
                 }
                 for hit in hits
+                # Sous le seuil, l'extrait est jugé hors sujet : mieux vaut ne
+                # pas le fournir au LLM (garde-fou zéro hallucination).
+                if hit.score >= settings.rag_min_score
             ]
         except Exception:
             # Fallback gracieux si Qdrant n'est pas encore disponible
@@ -122,6 +175,18 @@ class RAGService:
                 return cached_res
 
         docs = await self.search_context(query=question, metier_id=metier_id)
+
+        # Garde-fou "zéro hallucination" (AGENTS.md §3) : sans photo à analyser
+        # (la vision GPT-4o peut juger une image sans document) et sans extrait
+        # pertinent retrouvé, on ne laisse jamais le LLM inventer une règle de
+        # chantier — on renvoie le message de repli standard sans l'appeler.
+        if not image_url and not docs:
+            fallback_res = {"reponse": FALLBACK_MESSAGE, "sources": []}
+            if not history:
+                await cache_service.cache_rag_response(
+                    question=question, metier_id=metier_id, response=fallback_res
+                )
+            return fallback_res
 
         context_text = (
             "\n---\n".join([doc["content"] for doc in docs if doc.get("content")])
@@ -208,8 +273,16 @@ class RAGService:
         """Recherche le contexte de connaissances puis retourne les fiches sources et le générateur du flux."""
         docs = await self.search_context(query=question, metier_id=metier_id)
         sources = [doc["metadata"] for doc in docs if "metadata" in doc]
+        fallback_requis = not image_url and not docs
 
         async def _generator():
+            if fallback_requis:
+                # Garde-fou "zéro hallucination" : voir generate_response().
+                for word in FALLBACK_MESSAGE.split(" "):
+                    yield word + " "
+                    await asyncio.sleep(0.02)
+                return
+
             context_text = (
                 "\n---\n".join([doc["content"] for doc in docs if doc.get("content")])
                 if docs
@@ -234,8 +307,6 @@ class RAGService:
                     f"3. Appliquez les consignes de sécurité sur le chantier.\n\n"
                     f"(Réponse basée sur les fiches métier {metier_id if metier_id else 'général'})"
                 )
-                import asyncio
-
                 for word in mock_reply.split(" "):
                     yield word + " "
                     await asyncio.sleep(0.04)
