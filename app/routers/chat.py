@@ -34,6 +34,9 @@ from app.services.rag_service import rag_service
 
 router = APIRouter(prefix="/api", tags=["Chat IA Multimodal"])
 
+# Identité utilisée quand aucune authentification n'est fournie.
+ANONYMOUS_USER_ID = uuid.UUID("00000000-0000-0000-0000-000000000001")
+
 
 class TranscribeResponse(BaseModel):
     text: str
@@ -54,7 +57,7 @@ async def transcribe_audio_endpoint(
 
 
 class ExtendedChatRequest(BaseModel):
-    user_id: uuid.UUID | None = None
+    # L'utilisateur est déduit du JWT (ou anonyme), jamais transmis par le client.
     conversation_id: uuid.UUID | None = None
     question: str
     metier_id: int | None = None
@@ -68,11 +71,7 @@ async def chat_endpoint(
     db: AsyncSession = Depends(get_db),
 ) -> ChatResponse:
     """Pose une question technique à l'assistant RAG (avec photo optionnelle)."""
-    user_id = (
-        current_user_id
-        or payload.user_id
-        or uuid.UUID("00000000-0000-0000-0000-000000000001")
-    )
+    user_id = current_user_id or ANONYMOUS_USER_ID
 
     # 1. Vérification et décrémentation des quotas
     allowed = await quota_service.consume_quota(db=db, user_id=user_id)
@@ -163,11 +162,7 @@ async def chat_stream_endpoint(
     db: AsyncSession = Depends(get_db),
 ) -> StreamingResponse:
     """Pose une question technique et retourne la réponse en streaming SSE."""
-    user_id = (
-        current_user_id
-        or payload.user_id
-        or uuid.UUID("00000000-0000-0000-0000-000000000001")
-    )
+    user_id = current_user_id or ANONYMOUS_USER_ID
 
     # 1. Vérification et décrémentation des quotas
     allowed = await quota_service.consume_quota(db=db, user_id=user_id)

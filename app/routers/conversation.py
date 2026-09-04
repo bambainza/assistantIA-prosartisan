@@ -26,11 +26,9 @@ router = APIRouter(prefix="/api/conversations", tags=["Historique Discussions"])
 ANONYMOUS_USER_ID = uuid.UUID("00000000-0000-0000-0000-000000000001")
 
 
-def _resolve_uid(
-    current_user_id: uuid.UUID | None,
-    user_id: uuid.UUID | None = None,
-) -> uuid.UUID:
-    return current_user_id or user_id or ANONYMOUS_USER_ID
+def _resolve_uid(current_user_id: uuid.UUID | None) -> uuid.UUID:
+    """Identité effective : celle du JWT, ou le compte anonyme partagé."""
+    return current_user_id or ANONYMOUS_USER_ID
 
 
 @router.post(
@@ -40,12 +38,11 @@ def _resolve_uid(
 )
 async def create_conversation_endpoint(
     payload: ConversationCreate,
-    user_id: uuid.UUID | None = None,
     current_user_id: uuid.UUID | None = Depends(get_optional_user_id),
     db: AsyncSession = Depends(get_db),
 ) -> Any:
     """Crée une nouvelle discussion vide pour un artisan."""
-    uid = _resolve_uid(current_user_id, user_id)
+    uid = _resolve_uid(current_user_id)
     return await chat_history_service.create_conversation(
         db=db,
         user_id=uid,
@@ -56,12 +53,11 @@ async def create_conversation_endpoint(
 @router.get("", response_model=list[ConversationResponse])
 async def list_conversations_endpoint(
     q: str | None = None,
-    user_id: uuid.UUID | None = None,
     current_user_id: uuid.UUID | None = Depends(get_optional_user_id),
     db: AsyncSession = Depends(get_db),
 ) -> Any:
     """Liste toutes les discussions d'un artisan (triées par la plus récente)."""
-    uid = _resolve_uid(current_user_id, user_id)
+    uid = _resolve_uid(current_user_id)
     return await chat_history_service.list_conversations_for_user(
         db=db, user_id=uid, q=q
     )

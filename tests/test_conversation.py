@@ -134,7 +134,6 @@ async def test_delete_conversation_success():
 async def test_chat_endpoint_creates_conversation():
     """POST /api/chat sans conversation_id doit créer une conversation et la renvoyer."""
     payload = {
-        "user_id": str(uuid.uuid4()),
         "question": "Quel dosage de ciment ?",
         "metier_id": 1,
     }

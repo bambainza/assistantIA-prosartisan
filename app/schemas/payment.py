@@ -1,12 +1,10 @@
 """Schémas Pydantic : Paiement Mobile Money."""
 
-import uuid
-
 from pydantic import BaseModel
 
 
 class PaymentInitRequest(BaseModel):
-    user_id: uuid.UUID
+    # L'utilisateur est déduit du JWT, jamais transmis par le client.
     type_pass: str  # "pass_24h" | "pass_mois" | "pack_50_requetes"
 
 

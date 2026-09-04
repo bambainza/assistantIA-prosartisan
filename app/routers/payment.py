@@ -6,12 +6,14 @@ Supporte Wave Business, Orange Money, MTN et Moov.
 
 from __future__ import annotations
 
+import uuid
 from typing import Any
 
 from fastapi import APIRouter, Depends, Header, HTTPException, Request, status
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.db.session import get_db
+from app.middleware.auth import get_current_user_id
 from app.schemas.payment import PaymentInitRequest, PaymentInitResponse, WebhookPayload
 from app.services.payment_service import TARIFS_PASS, payment_service
 
@@ -27,13 +29,14 @@ async def get_tarifs() -> dict[str, Any]:
 @router.post("/init", response_model=PaymentInitResponse)
 async def init_payment(
     payload: PaymentInitRequest,
+    current_user_id: uuid.UUID = Depends(get_current_user_id),
     db: AsyncSession = Depends(get_db),
 ) -> PaymentInitResponse:
     """Initialise un paiement Mobile Money pour débloquer un Pass ou Pack."""
     try:
         res = await payment_service.initialize_payment(
             db=db,
-            user_id=payload.user_id,
+            user_id=current_user_id,
             type_pass=payload.type_pass,
         )
         return PaymentInitResponse(

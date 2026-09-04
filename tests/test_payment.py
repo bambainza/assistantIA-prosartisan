@@ -12,6 +12,7 @@ from httpx import ASGITransport, AsyncClient
 from app.config import settings
 from app.db.session import get_db
 from app.main import app
+from app.middleware.auth import create_access_token
 from app.models.transaction import TransactionMobileMoney
 
 
@@ -31,17 +32,32 @@ async def test_get_tarifs():
 
 @pytest.mark.asyncio
 async def test_init_payment_success():
-    """POST /api/payment/init doit créer une transaction et renvoyer l'URL de checkout."""
-    test_user_id = str(uuid.uuid4())
-    payload = {"user_id": test_user_id, "type_pass": "pass_24h"}
+    """POST /api/payment/init (authentifié) crée une transaction et renvoie l'URL."""
+    token = create_access_token(data={"sub": str(uuid.uuid4())})
     transport = ASGITransport(app=app)
     async with AsyncClient(transport=transport, base_url="http://test") as client:
-        response = await client.post("/api/payment/init", json=payload)
+        response = await client.post(
+            "/api/payment/init",
+            json={"type_pass": "pass_24h"},
+            headers={"Authorization": f"Bearer {token}"},
+        )
 
     assert response.status_code == 200
     data = response.json()
     assert data["status"] == "success"
     assert "wave.com" in data["payment_url"] or "orange.ci" in data["payment_url"]
+
+
+@pytest.mark.asyncio
+async def test_init_payment_exige_authentification():
+    """POST /api/payment/init sans JWT est refusé (401) — plus de user_id arbitraire."""
+    transport = ASGITransport(app=app)
+    async with AsyncClient(transport=transport, base_url="http://test") as client:
+        response = await client.post(
+            "/api/payment/init", json={"type_pass": "pass_24h"}
+        )
+
+    assert response.status_code == 401
 
 
 @pytest.mark.asyncio

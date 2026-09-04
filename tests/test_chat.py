@@ -1,7 +1,5 @@
 """Tests pour la route POST /api/chat et multimodalité."""
 
-import uuid
-
 import pytest
 from httpx import ASGITransport, AsyncClient
 
@@ -12,7 +10,6 @@ from app.main import app
 async def test_chat_endpoint_success():
     """POST /api/chat répond correctement avec un quota disponible."""
     payload = {
-        "user_id": str(uuid.uuid4()),
         "question": "Comment vérifier l'égalisation d'un sol avant pose de dalles ?",
         "metier_id": 1,
     }
@@ -30,7 +27,6 @@ async def test_chat_endpoint_success():
 async def test_chat_endpoint_with_image():
     """POST /api/chat supporte l'envoi d'une photo de chantier."""
     payload = {
-        "user_id": str(uuid.uuid4()),
         "question": "Est-ce que la fissure sur ce poteau en béton est dangereuse ?",
         "metier_id": 1,
         "image_url": "https://example.com/fissure_chantier.jpg",
@@ -48,7 +44,6 @@ async def test_chat_endpoint_with_image():
 async def test_chat_stream_endpoint_success():
     """POST /api/chat/stream retourne une réponse SSE en streaming."""
     payload = {
-        "user_id": str(uuid.uuid4()),
         "question": "Comment doser le mortier ?",
         "metier_id": 1,
     }
