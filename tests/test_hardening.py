@@ -22,9 +22,9 @@ async def test_request_id_injected():
 @pytest.mark.asyncio
 async def test_rate_limiter_blocks_abuse():
     """Vérifie que le Rate Limiter bloque les requêtes trop fréquentes sur les routes sensibles."""
-    from app.middleware.rate_limiter import RateLimitMiddleware
+    from app.services.cache_service import cache_service
 
-    RateLimitMiddleware.history.clear()
+    cache_service.reset()
 
     # Configurer temporairement un quota très bas (ex: 2 requêtes max par minute)
     original_limit = settings.rate_limit_requests_per_minute

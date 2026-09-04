@@ -84,6 +84,39 @@ class CacheService:
             self._memory_cache.pop(key, None)
         return None
 
+    async def increment(self, key: str, ttl_seconds: int) -> int:
+        """Incrémente un compteur avec expiration et retourne sa nouvelle valeur.
+
+        Utilisé pour le rate limiting en fenêtre fixe. Redis est primaire
+        (atomique via pipeline ``INCR`` + ``EXPIRE``) ; sinon compteur en mémoire.
+        """
+        client = await self._get_redis()
+        if client is not None:
+            try:
+                async with client.pipeline(transaction=True) as pipe:
+                    pipe.incr(key)
+                    pipe.expire(key, ttl_seconds)
+                    results = await pipe.execute()
+                return int(results[0])
+            except Exception as e:
+                logger.warning("Erreur incrément Redis pour la clé %s: %s", key, e)
+
+        # Fallback mémoire
+        self._clean_expired_memory_cache()
+        now = time.time()
+        entry = self._memory_cache.get(key)
+        if entry and entry[0] > now:
+            count = int(entry[1]) + 1
+            self._memory_cache[key] = (entry[0], str(count))
+        else:
+            count = 1
+            self._memory_cache[key] = (now + ttl_seconds, str(count))
+        return count
+
+    def reset(self) -> None:
+        """Vide le cache mémoire local (usage test)."""
+        self._memory_cache.clear()
+
     async def set(self, key: str, value: str, ttl_seconds: int = 3600) -> None:
         """Enregistre une valeur dans Redis ou le cache mémoire avec durée de validité (TTL)."""
         client = await self._get_redis()

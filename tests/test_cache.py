@@ -22,6 +22,21 @@ async def test_cache_service_in_memory_set_get():
 
 
 @pytest.mark.asyncio
+async def test_cache_service_increment_fallback_memoire():
+    """Le compteur en mémoire s'incrémente puis se réinitialise après expiration."""
+    cache = CacheService()
+    cache._redis_available = False
+
+    assert await cache.increment("test:compteur", ttl_seconds=10) == 1
+    assert await cache.increment("test:compteur", ttl_seconds=10) == 2
+    assert await cache.increment("test:compteur", ttl_seconds=10) == 3
+
+    # Fenêtre expirée -> le compteur repart de 1
+    assert await cache.increment("test:compteur_exp", ttl_seconds=-1) == 1
+    assert await cache.increment("test:compteur_exp", ttl_seconds=-1) == 1
+
+
+@pytest.mark.asyncio
 async def test_cache_service_ttl_expiration():
     """Vérifie qu'une clé expirée n'est plus retournée."""
     cache = CacheService()

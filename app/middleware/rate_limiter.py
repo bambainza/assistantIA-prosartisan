@@ -1,19 +1,26 @@
+"""Middleware de limitation de débit (Rate Limiting) adossé à Redis.
+
+Fenêtre fixe d'une minute par IP cliente sur les routes sensibles
+(`/api/chat`, `/api/auth`). Le compteur est stocké dans Redis (partagé entre
+tous les workers) avec repli automatique sur un compteur en mémoire si Redis
+est indisponible.
+"""
+
 import time
-from collections import defaultdict
-from typing import ClassVar
 
 from fastapi import Request, status
 from fastapi.responses import JSONResponse
 from starlette.middleware.base import BaseHTTPMiddleware
 
 from app.config import settings
+from app.services.cache_service import cache_service
+
+# Durée de la fenêtre de comptage, en secondes.
+WINDOW_SECONDS = 60
 
 
 class RateLimitMiddleware(BaseHTTPMiddleware):
     """Middleware pour limiter le débit des requêtes (Rate Limiting)."""
-
-    # Attribut de classe pour permettre aux tests unitaires de purger l'historique
-    history: ClassVar[defaultdict[str, list[float]]] = defaultdict(list)
 
     def __init__(self, app, requests_per_minute: int | None = None):
         super().__init__(app)
@@ -24,24 +31,24 @@ class RateLimitMiddleware(BaseHTTPMiddleware):
         # Protéger les routes sensibles (Authentification et Chat/Streaming)
         if path.startswith(("/api/chat", "/api/auth")):
             client_ip = request.client.host if request.client else "unknown"
-            now = time.time()
-
-            # Nettoyer l'historique des requêtes datant de plus d'une minute
-            self.history[client_ip] = [
-                t for t in self.history[client_ip] if now - t < 60
-            ]
-
-            # Évaluation dynamique de la limite
             limit = self.requests_per_minute or settings.rate_limit_requests_per_minute
 
-            if len(self.history[client_ip]) >= limit:
+            # Clé horodatée : la fenêtre se réinitialise seule à chaque minute.
+            window = int(time.time() // WINDOW_SECONDS)
+            key = f"prosartisan:rl:{client_ip}:{window}"
+
+            try:
+                count = await cache_service.increment(key, WINDOW_SECONDS)
+            except Exception:
+                # Ne jamais bloquer le trafic si le backend de comptage échoue.
+                count = 0
+
+            if count > limit:
                 return JSONResponse(
                     status_code=status.HTTP_429_TOO_MANY_REQUESTS,
                     content={
                         "detail": "Trop de requêtes. Veuillez patienter une minute avant de réessayer."
                     },
                 )
-
-            self.history[client_ip].append(now)
 
         return await call_next(request)
