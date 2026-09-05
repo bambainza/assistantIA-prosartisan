@@ -1,5 +1,7 @@
 """Tests pour le renforcement (Hardening) : CORS, Rate Limiting, Request ID."""
 
+from unittest.mock import patch
+
 import pytest
 from httpx import ASGITransport, AsyncClient
 
@@ -32,18 +34,26 @@ async def test_rate_limiter_blocks_abuse():
 
     transport = ASGITransport(app=app)
     try:
-        async with AsyncClient(transport=transport, base_url="http://test") as client:
-            # Effectuer 3 requêtes consécutives sur une route sensible (/api/chat)
-            res1 = await client.post("/api/chat", json={"question": "Test 1"})
-            res2 = await client.post("/api/chat", json={"question": "Test 2"})
-            res3 = await client.post("/api/chat", json={"question": "Test 3"})
+        # Horloge figée : la fenêtre de comptage (par minute) ne doit pas changer
+        # entre les 3 requêtes, sans quoi le test devient dépendant du hasard
+        # (flaky) si l'exécution chevauche une frontière de minute réelle.
+        with patch(
+            "app.middleware.rate_limiter.time.time", return_value=1_700_000_000.0
+        ):
+            async with AsyncClient(
+                transport=transport, base_url="http://test"
+            ) as client:
+                # Effectuer 3 requêtes consécutives sur une route sensible (/api/chat)
+                res1 = await client.post("/api/chat", json={"question": "Test 1"})
+                res2 = await client.post("/api/chat", json={"question": "Test 2"})
+                res3 = await client.post("/api/chat", json={"question": "Test 3"})
 
-            # Les premières requêtes doivent réussir (ou renvoyer 200/402 selon les quotas de l'utilisateur fictif)
-            assert res1.status_code in [200, 402]
-            assert res2.status_code in [200, 402]
-            # La 3ème requête dépasse la limite de 2 et doit être bloquée avec un code 429
-            assert res3.status_code == 429
-            assert "Trop de requêtes" in res3.json()["detail"]
+        # Les premières requêtes doivent réussir (ou renvoyer 200/402 selon les quotas de l'utilisateur fictif)
+        assert res1.status_code in [200, 402]
+        assert res2.status_code in [200, 402]
+        # La 3ème requête dépasse la limite de 2 et doit être bloquée avec un code 429
+        assert res3.status_code == 429
+        assert "Trop de requêtes" in res3.json()["detail"]
     finally:
         # Restaurer la limite d'origine
         settings.rate_limit_requests_per_minute = original_limit
