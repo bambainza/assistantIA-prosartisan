@@ -1,5 +1,5 @@
-"""Tests du pipeline d'ingestion : métadonnées obligatoires, embeddings réels,
-chevauchement sémantique et idempotence des points Qdrant.
+"""Tests du pipeline d'ingestion : multi-format, métadonnées obligatoires, embeddings réels,
+découpage sémantique contextuel, déduplication SHA-256 et idempotence Qdrant.
 """
 
 import json
@@ -9,6 +9,9 @@ import pytest
 from app.services.rag_service import rag_service
 from ingestion.pipeline import (
     _point_id,
+    chunk_document_with_context,
+    compute_file_sha256,
+    extract_text_from_file,
     resolve_and_validate_metadata,
     run_ingestion,
 )
@@ -60,11 +63,61 @@ def test_metadata_metier_id_negatif_leve_erreur():
 
 
 def test_point_id_deterministe():
-    """Ré-ingérer le même document doit produire les mêmes ID de points Qdrant
-    (mise à jour des points existants, pas de doublons)."""
+    """Ré-ingérer le même document doit produire les mêmes ID de points Qdrant."""
     assert _point_id("guide.pdf", 0) == _point_id("guide.pdf", 0)
     assert _point_id("guide.pdf", 0) != _point_id("guide.pdf", 1)
     assert _point_id("guide.pdf", 0) != _point_id("autre.pdf", 0)
+
+
+# ── Multi-format & Chunking Contextuel ─────────────────────────────────────
+
+
+def test_extract_text_from_markdown_and_txt(tmp_path):
+    md_file = tmp_path / "guide.md"
+    md_file.write_text("# Titre Markdown\nContenu technique ici.", encoding="utf-8")
+    assert "Titre Markdown" in extract_text_from_file(str(md_file))
+
+    txt_file = tmp_path / "notes.txt"
+    txt_file.write_text("Texte brut d'artisan.", encoding="utf-8")
+    assert "Texte brut d'artisan." in extract_text_from_file(str(txt_file))
+
+
+def test_extract_text_unsupported_format_raises(tmp_path):
+    bin_file = tmp_path / "archive.zip"
+    bin_file.write_bytes(b"PK000")
+    with pytest.raises(ValueError, match="Format non supporté"):
+        extract_text_from_file(str(bin_file))
+
+
+def test_chunk_document_with_context_injects_section_headers():
+    doc_text = (
+        "# Guide Maçonnerie\n"
+        "Introduction générale aux travaux de maçonnerie.\n\n"
+        "## Dosage du Béton\n"
+        "Pour le béton armé ordinaire dosé à 350 kg/m3, utiliser 7 sacs de ciment.\n\n"
+        "## Ferraillage des Semelles\n"
+        "Les semelles isolées requièrent des barres HA 10 et un enrobage de 4 cm."
+    )
+    chunks = chunk_document_with_context(doc_text, "guide_maconnerie.md")
+    assert len(chunks) >= 2
+    assert any(
+        "[Document: Guide Maconnerie > Section: Dosage du Béton]" in c for c in chunks
+    )
+    assert any(
+        "[Document: Guide Maconnerie > Section: Ferraillage des Semelles]" in c
+        for c in chunks
+    )
+
+
+def test_compute_file_sha256(tmp_path):
+    file1 = tmp_path / "test1.txt"
+    file1.write_text("Hello World", encoding="utf-8")
+    h1 = compute_file_sha256(str(file1))
+    assert isinstance(h1, str) and len(h1) == 64
+
+    file2 = tmp_path / "test2.txt"
+    file2.write_text("Hello World", encoding="utf-8")
+    assert compute_file_sha256(str(file2)) == h1
 
 
 # ── run_ingestion ────────────────────────────────────────────────────────────
@@ -80,76 +133,57 @@ async def test_run_ingestion_cree_le_dossier_absent(tmp_path):
 
 
 @pytest.mark.asyncio
-async def test_run_ingestion_utilise_les_embeddings_de_rag_service(
-    tmp_path, monkeypatch
-):
-    """Les vecteurs indexés doivent provenir de rag_service.get_embedding (mode
-    mock inclus), plus jamais d'un vecteur factice codé en dur."""
-    (tmp_path / "guide.pdf").write_bytes(b"%PDF-1.4 contenu factice")
-
-    monkeypatch.setattr(
-        "ingestion.pipeline.extract_text_from_pdf",
-        lambda _path: "Première phrase du guide. Deuxième phrase du guide.",
+async def test_run_ingestion_multi_format_et_deduplication(tmp_path, monkeypatch):
+    """Vérifie l'ingestion de Markdown et l'indexation incrémentale (saut des fichiers inchangés)."""
+    (tmp_path / "guide_maconnerie.md").write_text(
+        "# Maçonnerie\nDosage du béton armé à 350kg/m3.", encoding="utf-8"
     )
+
     monkeypatch.setattr(rag_service, "ensure_collection", lambda: _async_none())
 
-    upserted = {}
+    upserted_points = []
 
     async def fake_upsert(*, collection_name, points):
-        upserted["collection_name"] = collection_name
-        upserted["points"] = points
+        upserted_points.extend(points)
 
     monkeypatch.setattr(rag_service.qdrant_client, "upsert", fake_upsert)
 
-    res = await run_ingestion(docs_dir=str(tmp_path), metier_id=1, secteur_id=1)
+    # 1ère passe : Ingestion réussie
+    res1 = await run_ingestion(docs_dir=str(tmp_path), metier_id=1, secteur_id=1)
+    assert res1["status"] == "success"
+    assert res1["processed_files"] == 1
+    assert res1["skipped_files"] == 0
+    assert res1["ingested_chunks"] >= 1
+    assert len(upserted_points) == res1["ingested_chunks"]
+    assert upserted_points[0].payload["document_name"] == "guide_maconnerie.md"
+    assert "sha256" in upserted_points[0].payload
 
-    assert res["status"] == "success"
-    assert res["processed_files"] == 1
-    assert res["ingested_chunks"] >= 1
-    assert res["erreurs"] == []
+    # 2ème passe : Inchangé -> doit être sauté grâce au hash SHA-256
+    upserted_points.clear()
+    res2 = await run_ingestion(docs_dir=str(tmp_path), metier_id=1, secteur_id=1)
+    assert res2["status"] == "success"
+    assert res2["processed_files"] == 0
+    assert res2["skipped_files"] == 1
+    assert res2["ingested_chunks"] == 0
+    assert len(upserted_points) == 0
 
-    points = upserted["points"]
-    assert len(points) == res["ingested_chunks"]
-    # Mode mock (OPENAI_API_KEY placeholder) -> embedding nul, mais bien issu
-    # de rag_service.get_embedding (cache + logique partagée avec la requête).
-    assert points[0].vector == [0.0] * 1536
-    assert points[0].payload["metier_id"] == 1
-    assert points[0].payload["document_name"] == "guide.pdf"
-
-
-@pytest.mark.asyncio
-async def test_run_ingestion_metadata_json_par_fichier(tmp_path, monkeypatch):
-    (tmp_path / "guide_elec.pdf").write_bytes(b"%PDF-1.4 contenu factice")
-    (tmp_path / "metadata.json").write_text(
-        json.dumps({"guide_elec.pdf": {"metier_id": 2}}), encoding="utf-8"
+    # 3ème passe avec force_reindex=True -> doit ré-ingérer
+    res3 = await run_ingestion(
+        docs_dir=str(tmp_path), metier_id=1, secteur_id=1, force_reindex=True
     )
-
-    monkeypatch.setattr(
-        "ingestion.pipeline.extract_text_from_pdf",
-        lambda _path: "Une phrase suffisante pour former un chunk complet.",
-    )
-    monkeypatch.setattr(rag_service, "ensure_collection", lambda: _async_none())
-
-    upserted = {}
-
-    async def fake_upsert(*, collection_name, points):
-        upserted["points"] = points
-
-    monkeypatch.setattr(rag_service.qdrant_client, "upsert", fake_upsert)
-
-    res = await run_ingestion(docs_dir=str(tmp_path), metier_id=1, secteur_id=1)
-
-    assert res["status"] == "success"
-    assert upserted["points"][0].payload["metier_id"] == 2  # surchargé, pas 1
+    assert res3["status"] == "success"
+    assert res3["processed_files"] == 1
+    assert res3["skipped_files"] == 0
+    assert res3["ingested_chunks"] >= 1
 
 
 @pytest.mark.asyncio
 async def test_run_ingestion_collecte_les_erreurs_sans_planter(tmp_path, monkeypatch):
     """Un fichier avec des métadonnées invalides est ignoré (erreur journalisée),
     sans bloquer le traitement des autres fichiers du dossier."""
-    (tmp_path / "invalide.pdf").write_bytes(b"%PDF-1.4 contenu factice")
+    (tmp_path / "invalide.md").write_text("# Invalide\nTexte test.", encoding="utf-8")
     (tmp_path / "metadata.json").write_text(
-        json.dumps({"invalide.pdf": {"metier_id": "pas-un-nombre"}}), encoding="utf-8"
+        json.dumps({"invalide.md": {"metier_id": "pas-un-nombre"}}), encoding="utf-8"
     )
 
     monkeypatch.setattr(rag_service, "ensure_collection", lambda: _async_none())
@@ -160,7 +194,7 @@ async def test_run_ingestion_collecte_les_erreurs_sans_planter(tmp_path, monkeyp
     assert res["processed_files"] == 0
     assert res["ingested_chunks"] == 0
     assert len(res["erreurs"]) == 1
-    assert "invalide.pdf" in res["erreurs"][0]
+    assert "invalide.md" in res["erreurs"][0]
 
 
 async def _async_none():

@@ -91,6 +91,8 @@ class Settings(BaseSettings):
     llm_model: str = "gpt-4o-mini"
     llm_vision_model: str = "gpt-4o"
     whisper_model: str = "whisper-1"
+    tts_model: str = "tts-1"
+    tts_voice: str = "alloy"
     llm_temperature: float = 0.2
     embedding_model: str = "text-embedding-3-small"
 

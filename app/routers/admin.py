@@ -51,10 +51,13 @@ async def upload_pdf(
     elle ne bloque donc plus la requête HTTP. Consulter GET /api/admin/stats ou
     /api/admin/documents une fois le traitement terminé.
     """
-    if not file.filename or not file.filename.endswith(".pdf"):
+    allowed_exts = (".pdf", ".md", ".markdown", ".txt")
+    if not file.filename or not any(
+        file.filename.lower().endswith(ext) for ext in allowed_exts
+    ):
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
-            detail="Seuls les fichiers au format PDF sont acceptés.",
+            detail="Formats acceptés : PDF (.pdf), Markdown (.md), Texte (.txt).",
         )
 
     upload_dir = os.path.join(settings.upload_dir, "admin_docs")

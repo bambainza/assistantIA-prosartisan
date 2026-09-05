@@ -1,0 +1,91 @@
+apiVersion: serving.knative.dev/v1
+kind: Service
+metadata:
+  name: prosartisan-api
+  annotations:
+    run.googleapis.com/ingress: all
+spec:
+  template:
+    metadata:
+      annotations:
+        autoscaling.knative.dev/minScale: "1"
+        autoscaling.knative.dev/maxScale: "10"
+        run.googleapis.com/cpu-throttling: "false"
+        run.googleapis.com/startup-cpu-boost: "true"
+    spec:
+      containerConcurrency: 80
+      timeoutSeconds: 300
+      containers:
+        - image: gcr.io/PROJECT_ID/prosartisan-api:latest
+          resources:
+            limits:
+              cpu: "2000m"
+              memory: "2Gi"
+          ports:
+            - name: http1
+              containerPort: 8000
+          env:
+            - name: APP_ENV
+              value: "production"
+            - name: APP_DEBUG
+              value: "false"
+            - name: PORT
+              value: "8000"
+            - name: WORKERS
+              value: "4"
+            - name: DB_REQUIRE_POSTGRES
+              value: "true"
+            - name: APP_SECRET_KEY
+              valueFrom:
+                secretKeyRef:
+                  name: prosartisan-secrets
+                  key: app-secret-key
+            - name: JWT_SECRET_KEY
+              valueFrom:
+                secretKeyRef:
+                  name: prosartisan-secrets
+                  key: jwt-secret-key
+            - name: MOBILE_MONEY_SECRET_KEY
+              valueFrom:
+                secretKeyRef:
+                  name: prosartisan-secrets
+                  key: mobile-money-secret-key
+            - name: OPENAI_API_KEY
+              valueFrom:
+                secretKeyRef:
+                  name: prosartisan-secrets
+                  key: openai-api-key
+            - name: DB_HOST
+              value: "/cloudsql/PROJECT_ID:REGION:prosartisan-db"
+            - name: DB_PORT
+              value: "5432"
+            - name: DB_DATABASE
+              value: "prosartisan"
+            - name: DB_USERNAME
+              value: "prosartisan_app"
+            - name: DB_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: prosartisan-secrets
+                  key: db-password
+            - name: REDIS_HOST
+              value: "10.0.0.3"
+            - name: REDIS_PORT
+              value: "6379"
+            - name: QDRANT_HOST
+              value: "qdrant.prosartisan.internal"
+            - name: QDRANT_PORT
+              value: "6333"
+          startupProbe:
+            httpGet:
+              path: /api/health
+              port: 8000
+            initialDelaySeconds: 5
+            periodSeconds: 10
+            failureThreshold: 6
+          livenessProbe:
+            httpGet:
+              path: /api/health
+              port: 8000
+            periodSeconds: 15
+            timeoutSeconds: 5

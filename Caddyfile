@@ -1,0 +1,23 @@
+{
+    email admin@{$DOMAIN_NAME:prosartisan.ci}
+}
+
+{$DOMAIN_NAME:prosartisan.ci} {
+    # Reverse proxy vers l'API FastAPI
+    reverse_proxy app:8000 {
+        header_up Host {host}
+        header_up X-Real-IP {remote_host}
+        header_up X-Forwarded-Proto {scheme}
+    }
+
+    # En-têtes de sécurité HTTP
+    header {
+        Strict-Transport-Security "max-age=31536000; includeSubDomains; preload"
+        X-Content-Type-Options "nosniff"
+        X-Frame-Options "DENY"
+        Referrer-Policy "strict-origin-when-cross-origin"
+    }
+
+    # Compression Gzip / Zstandard
+    encode zstd gzip
+}

@@ -67,3 +67,45 @@ async def test_transcribe_endpoint_invalid_format():
         response = await client.post("/api/chat/transcribe", files=files)
 
     assert response.status_code == 400
+
+
+@pytest.mark.asyncio
+async def test_synthesize_speech_mock():
+    """Vérifie que la synthèse vocale retourne des octets audio en mode mock."""
+    audio_bytes = await audio_service.synthesize_speech(
+        text="Appliquez une couche d'enduit de 10mm."
+    )
+    assert isinstance(audio_bytes, bytes)
+    assert len(audio_bytes) > 0
+
+
+@pytest.mark.asyncio
+async def test_synthesize_speech_empty_text():
+    """Vérifie que la synthèse vocale rejette un texte vide avec HTTP 400."""
+    with pytest.raises(HTTPException) as exc:
+        await audio_service.synthesize_speech(text="   ")
+    assert exc.value.status_code == 400
+
+
+@pytest.mark.asyncio
+async def test_synthesize_endpoint_success():
+    """POST /api/chat/synthesize génère un flux audio MP3 valide."""
+    transport = ASGITransport(app=app)
+    async with AsyncClient(transport=transport, base_url="http://test") as client:
+        payload = {"text": "Dosage standard pour semelle filante : 350 kg/m3."}
+        response = await client.post("/api/chat/synthesize", json=payload)
+
+    assert response.status_code == 200
+    assert response.headers["content-type"].startswith("audio/mpeg")
+    assert len(response.content) > 0
+
+
+@pytest.mark.asyncio
+async def test_synthesize_endpoint_empty_text():
+    """POST /api/chat/synthesize rejette une requête avec texte vide."""
+    transport = ASGITransport(app=app)
+    async with AsyncClient(transport=transport, base_url="http://test") as client:
+        payload = {"text": ""}
+        response = await client.post("/api/chat/synthesize", json=payload)
+
+    assert response.status_code == 400

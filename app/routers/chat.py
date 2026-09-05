@@ -15,6 +15,7 @@ from fastapi import (
     File,
     HTTPException,
     Query,
+    Response,
     UploadFile,
     WebSocket,
     WebSocketDisconnect,
@@ -55,6 +56,23 @@ async def transcribe_audio_endpoint(
         file_bytes=audio_bytes, filename=filename
     )
     return TranscribeResponse(text=text)
+
+
+class SynthesizeRequest(BaseModel):
+    text: str
+    voice: str | None = None
+
+
+@router.post("/chat/synthesize")
+async def synthesize_speech_endpoint(
+    payload: SynthesizeRequest,
+    current_user_id: uuid.UUID | None = Depends(get_optional_user_id),
+) -> Response:
+    """Génère la lecture vocale (TTS) d'un texte et renvoie le flux audio MP3."""
+    audio_bytes = await audio_service.synthesize_speech(
+        text=payload.text, voice=payload.voice
+    )
+    return Response(content=audio_bytes, media_type="audio/mpeg")
 
 
 class ExtendedChatRequest(BaseModel):

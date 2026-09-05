@@ -2,11 +2,13 @@ name: CI — ProsArtisan
 
 on:
   push:
+    branches: ["main", "develop"]
   pull_request:
-    branches: ["main"]
+    branches: ["main", "develop"]
 
 jobs:
-  lint-and-test:
+  backend-lint-and-test:
+    name: Backend Lint & Tests
     runs-on: ubuntu-latest
 
     services:
@@ -32,26 +34,37 @@ jobs:
           --health-timeout 5s
           --health-retries 5
 
+      qdrant:
+        image: qdrant/qdrant:latest
+        ports: ["6333:6333"]
+        options: >-
+          --health-cmd "true"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+
     steps:
-      - uses: actions/checkout@v4
+      - name: Checkout repository
+        uses: actions/checkout@v4
 
       - name: Setup Python 3.12
         uses: actions/setup-python@v5
         with:
           python-version: "3.12"
+          cache: "pip"
 
       - name: Install dependencies
         run: |
           python -m pip install --upgrade pip
           pip install -r requirements.txt
-          pip install ruff
+          pip install ruff pytest-cov
 
       - name: Lint with ruff
         run: |
           ruff check app/ tests/ ingestion/
           ruff format --check app/ tests/ ingestion/
 
-      - name: Run tests
+      - name: Run test suite
         env:
           DB_HOST: localhost
           DB_PORT: 5432
@@ -61,5 +74,58 @@ jobs:
           REDIS_HOST: localhost
           REDIS_PORT: 6379
           REDIS_PASSWORD: ""
+          QDRANT_HOST: localhost
+          QDRANT_PORT: 6333
           APP_ENV: testing
-        run: pytest tests/ -v
+        run: pytest tests/ -v --cov=app
+
+  flutter-tests:
+    name: Flutter Mobile Tests & Analysis
+    runs-on: ubuntu-latest
+
+    defaults:
+      run:
+        working-directory: mobile_app_flutter
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Setup Flutter
+        uses: subosito/flutter-action@v2
+        with:
+          flutter-version: "3.24.x"
+          channel: "stable"
+          cache: true
+
+      - name: Install Flutter dependencies
+        run: flutter pub get
+
+      - name: Analyze Flutter code
+        run: flutter analyze --no-fatal-infos
+
+      - name: Run Flutter unit & widget tests
+        run: flutter test
+
+  docker-build-check:
+    name: Docker Container Build Check
+    runs-on: ubuntu-latest
+    needs: [backend-lint-and-test]
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Build Docker Image (Dry-Run / Cache Check)
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          file: ./Dockerfile
+          push: false
+          tags: prosartisan:ci-test
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+

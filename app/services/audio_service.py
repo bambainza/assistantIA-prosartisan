@@ -10,6 +10,7 @@ from __future__ import annotations
 import io
 import logging
 import os
+import re
 
 from fastapi import HTTPException, status
 from openai import AsyncOpenAI
@@ -33,7 +34,7 @@ SUPPORTED_AUDIO_EXTENSIONS = {
 
 
 class AudioService:
-    """Service de transcription audio s'appuyant sur l'API Whisper."""
+    """Service audio pour la transcription (Whisper) et la synthèse vocale (TTS)."""
 
     def __init__(self) -> None:
         self.openai_client = AsyncOpenAI(api_key=settings.openai_api_key)
@@ -93,6 +94,46 @@ class AudioService:
             raise HTTPException(
                 status_code=status.HTTP_502_BAD_GATEWAY,
                 detail=f"Échec de la transcription audio : {e!s}",
+            )
+
+    async def synthesize_speech(
+        self,
+        text: str,
+        voice: str | None = None,
+        model: str | None = None,
+    ) -> bytes:
+        """Génère un flux audio MP3 à partir d'un texte via OpenAI TTS."""
+        cleaned_text = text.strip()
+        if not cleaned_text:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="Le texte à synthétiser ne peut pas être vide.",
+            )
+
+        # Nettoyage des balises Markdown basiques pour fluidifier la lecture vocale
+        cleaned_text = re.sub(r"[\*#`_]", "", cleaned_text)
+        cleaned_text = re.sub(r"\[(.*?)\]\(.*?\)", r"\1", cleaned_text)
+
+        # Mode mock en environnement de développement ou test sans clé réelle
+        if (
+            settings.openai_api_key.startswith("sk-placeholder")
+            or settings.openai_api_key == "sk-placeholder"
+        ):
+            # Octets audio MP3 simulés
+            return b"\xff\xfb\x90d\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00ProsArtisanAudioMock"
+
+        try:
+            response = await self.openai_client.audio.speech.create(
+                model=model or settings.tts_model,
+                voice=voice or settings.tts_voice,
+                input=cleaned_text[:4096],
+            )
+            return response.content
+        except Exception as e:
+            logger.error("Erreur lors de la synthèse vocale TTS : %s", e)
+            raise HTTPException(
+                status_code=status.HTTP_502_BAD_GATEWAY,
+                detail=f"Échec de la synthèse vocale : {e!s}",
             )
 
 

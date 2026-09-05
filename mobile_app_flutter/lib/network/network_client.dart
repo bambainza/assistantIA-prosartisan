@@ -332,16 +332,24 @@ class NetworkClient {
   }
 
   // --- SSE Chat Streaming ---
-  Stream<String> sendMessageStream(String message, String? conversationId, int? metierId) async* {
+  Stream<String> sendMessageStream(
+    String message,
+    String? conversationId,
+    int? metierId, {
+    String? imageUrl,
+  }) async* {
+    final payload = {
+      'message': message,
+      'conversation_id': conversationId,
+      'metier_id': metierId,
+      if (imageUrl != null && imageUrl.isNotEmpty) 'image_url': imageUrl,
+    };
+
     if (kIsWeb) {
       try {
         final response = await _dio.post(
           '$_baseUrl/api/chat/stream',
-          data: {
-            'message': message,
-            'conversation_id': conversationId,
-            'metier_id': metierId,
-          },
+          data: payload,
           options: Options(
             responseType: ResponseType.stream,
             headers: _token != null ? {'authorization': 'Bearer $_token'} : null,
@@ -376,13 +384,7 @@ class NetworkClient {
           request.headers.set('authorization', 'Bearer $_token');
         }
         
-        final body = {
-          'message': message,
-          'conversation_id': conversationId,
-          'metier_id': metierId,
-        };
-        
-        request.write(jsonEncode(body));
+        request.write(jsonEncode(payload));
         final response = await request.close();
         
         if (response.statusCode != 200) {

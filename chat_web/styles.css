@@ -575,6 +575,51 @@ h1, h2, h3, h4, h5, h6 {
     display: block;
 }
 
+.msg-actions {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    margin-top: 10px;
+    padding-top: 8px;
+    border-top: 1px solid var(--border-color);
+    flex-wrap: wrap;
+}
+
+.action-icon-btn {
+    background: transparent;
+    border: 1px solid var(--border-color);
+    border-radius: 6px;
+    color: var(--text-muted);
+    font-size: 12px;
+    font-weight: 500;
+    padding: 4px 10px;
+    cursor: pointer;
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+    transition: all 0.2s ease;
+}
+
+.action-icon-btn:hover {
+    color: var(--text-main);
+    background-color: var(--user-msg-bg);
+    border-color: var(--primary);
+}
+
+.action-icon-btn.speaking {
+    color: #000;
+    background-color: var(--primary);
+    border-color: var(--primary);
+    font-weight: 600;
+    animation: pulse-tts 1.5s infinite;
+}
+
+@keyframes pulse-tts {
+    0% { transform: scale(1); box-shadow: 0 0 0 0 rgba(226, 160, 0, 0.5); }
+    70% { transform: scale(1.03); box-shadow: 0 0 0 6px rgba(226, 160, 0, 0); }
+    100% { transform: scale(1); box-shadow: 0 0 0 0 rgba(226, 160, 0, 0); }
+}
+
 /* Chat Input Bar container */
 .chat-input-container {
     width: 100%;

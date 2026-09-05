@@ -1,0 +1,100 @@
+# ── ProsArtisan - Production Docker Compose avec Reverse Proxy SSL Caddy ──
+services:
+  # ── Reverse Proxy HTTPS Automatique (Caddy) ──
+  caddy:
+    image: caddy:2-alpine
+    ports:
+      - "80:80"
+      - "443:443"
+    environment:
+      - DOMAIN_NAME=${DOMAIN_NAME:-prosartisan.ci}
+    volumes:
+      - ./Caddyfile:/etc/caddy/Caddyfile:ro
+      - caddy_data:/data
+      - caddy_config:/config
+    depends_on:
+      app:
+        condition: service_healthy
+    restart: always
+
+  # ── API Backend FastAPI ──
+  app:
+    image: ${DOCKER_IMAGE:-ghcr.io/bambainza/assistantia-prosartisan:latest}
+    build:
+      context: .
+      dockerfile: Dockerfile
+    environment:
+      - APP_ENV=production
+      - APP_DEBUG=false
+      - APP_SECRET_KEY=${APP_SECRET_KEY}
+      - JWT_SECRET_KEY=${JWT_SECRET_KEY}
+      - MOBILE_MONEY_SECRET_KEY=${MOBILE_MONEY_SECRET_KEY}
+      - CORS_ALLOWED_ORIGINS=${CORS_ALLOWED_ORIGINS:-https://${DOMAIN_NAME:-prosartisan.ci}}
+      - DB_REQUIRE_POSTGRES=true
+      - DB_HOST=db
+      - DB_PORT=5432
+      - DB_DATABASE=${DB_DATABASE:-prosartisan_prod}
+      - DB_USERNAME=${DB_USERNAME:-prosartisan_prod}
+      - DB_PASSWORD=${DB_PASSWORD}
+      - REDIS_HOST=redis
+      - REDIS_PORT=6379
+      - REDIS_PASSWORD=${REDIS_PASSWORD}
+      - QDRANT_HOST=qdrant
+      - QDRANT_PORT=6333
+      - OPENAI_API_KEY=${OPENAI_API_KEY}
+    depends_on:
+      db:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+      qdrant:
+        condition: service_started
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8000/api/health"]
+      interval: 15s
+      timeout: 5s
+      retries: 3
+    restart: always
+
+  # ── Base de Données PostgreSQL 16 ──
+  db:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_DB: ${DB_DATABASE:-prosartisan_prod}
+      POSTGRES_USER: ${DB_USERNAME:-prosartisan_prod}
+      POSTGRES_PASSWORD: ${DB_PASSWORD}
+    volumes:
+      - prod_postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${DB_USERNAME:-prosartisan_prod}"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    restart: always
+
+  # ── Cache & Rate Limiting Redis 7 ──
+  redis:
+    image: redis:7-alpine
+    command: redis-server --requirepass ${REDIS_PASSWORD} --appendonly yes
+    volumes:
+      - prod_redis_data:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "-a", "${REDIS_PASSWORD}", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    restart: always
+
+  # ── Base de Connaissances Vectorielle Qdrant ──
+  qdrant:
+    image: qdrant/qdrant:v1.12.1
+    volumes:
+      - prod_qdrant_data:/qdrant/storage
+    restart: always
+
+volumes:
+  caddy_data:
+  caddy_config:
+  prod_postgres_data:
+  prod_redis_data:
+  prod_qdrant_data:

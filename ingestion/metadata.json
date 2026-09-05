@@ -1,5 +1,41 @@
 {
-    "_README": "Métadonnées par fichier PDF (clé = nom exact du fichier dans ce dossier). Chaque entrée prévaut sur les valeurs par défaut passées à run_ingestion(). metier_id/secteur_id sont des entiers positifs (metier_id correspond à l'id de la table metiers ; 1=Bâtiment & Construction, 2=Électricité & Énergie, 3=Plomberie & Sanitaire, 4=Mécanique & Automobile selon le seed par défaut d'init_db.py).",
+    "_README": "Métadonnées par fichier (clé = nom exact du fichier dans ce dossier). Chaque entrée prévaut sur les valeurs par défaut passées à run_ingestion(). metier_id/secteur_id sont des entiers positifs (metier_id correspond à l'id de la table metiers ; 1=Bâtiment & Construction, 2=Électricité & Énergie, 3=Plomberie & Sanitaire, 4=Mécanique & Automobile selon le seed par défaut d'init_db.py).",
+    "guide_maconnerie_dtu_20_1_ci.md": {
+        "metier_id": 1,
+        "secteur_id": 1,
+        "type_document": "guide_technique",
+        "niveau_expertise": "intermédiaire"
+    },
+    "normes_electricite_nfc15100_ci.md": {
+        "metier_id": 2,
+        "secteur_id": 1,
+        "type_document": "norme_officielle",
+        "niveau_expertise": "intermédiaire"
+    },
+    "guide_plomberie_sanitaire_dtu60_1.md": {
+        "metier_id": 3,
+        "secteur_id": 1,
+        "type_document": "guide_technique",
+        "niveau_expertise": "intermédiaire"
+    },
+    "guide_mecanique_auto_diesel_essence.md": {
+        "metier_id": 4,
+        "secteur_id": 1,
+        "type_document": "guide_technique",
+        "niveau_expertise": "avance"
+    },
+    "guide_menuiserie_charpente_bois_tropical.md": {
+        "metier_id": 1,
+        "secteur_id": 1,
+        "type_document": "guide_technique",
+        "niveau_expertise": "intermédiaire"
+    },
+    "guide_peinture_etancheite_tropicale.md": {
+        "metier_id": 1,
+        "secteur_id": 1,
+        "type_document": "guide_technique",
+        "niveau_expertise": "intermédiaire"
+    },
     "exemple_guide_maconnerie.pdf": {
         "metier_id": 1,
         "secteur_id": 1,
@@ -13,3 +49,4 @@
         "niveau_expertise": "debutant"
     }
 }
+

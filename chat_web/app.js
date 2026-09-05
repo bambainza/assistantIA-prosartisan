@@ -734,6 +734,7 @@ async function sendMessage() {
         const escapedResponse = fullResponseText.replace(/'/g, "\\'").replace(/"/g, '&quot;').replace(/\n/g, '\\n');
         actionsDiv.innerHTML = `
             <button class="action-icon-btn" onclick="copyMessageText('${escapedResponse}', this)">📋 Copier</button>
+            <button class="action-icon-btn speak-btn" onclick="toggleSpeakMessage('${escapedResponse}', this)">🔊 Écouter</button>
             <button class="action-icon-btn" onclick="regenerateLastResponse()">🔄 Régénérer</button>
         `;
         bubble.querySelector('.msg-content').appendChild(actionsDiv);
@@ -772,6 +773,7 @@ function appendMessageBubble(role, content, imageSrc = null, sources = null) {
         actionsHtml = `
             <div class="msg-actions">
                 <button class="action-icon-btn" onclick="copyMessageText('${escapedContent}', this)">📋 Copier</button>
+                <button class="action-icon-btn speak-btn" onclick="toggleSpeakMessage('${escapedContent}', this)">🔊 Écouter</button>
                 <button class="action-icon-btn" onclick="regenerateLastResponse()">🔄 Régénérer</button>
             </div>
         `;
@@ -889,6 +891,112 @@ async function copyMessageText(text, btn) {
         }, 2000);
     } catch (err) {
         showToast("Échec de la copie.");
+    }
+}
+
+// Global Audio Player for TTS
+let currentAudioPlayer = null;
+let currentSpeakingBtn = null;
+
+async function toggleSpeakMessage(text, btnElement) {
+    if (!text) return;
+
+    // Si on clique sur le bouton en cours de lecture, on arrête
+    if (currentSpeakingBtn === btnElement && (currentAudioPlayer || (window.speechSynthesis && window.speechSynthesis.speaking))) {
+        stopSpeech();
+        return;
+    }
+
+    // Arrêter toute lecture précédente
+    stopSpeech();
+
+    currentSpeakingBtn = btnElement;
+    if (btnElement) {
+        btnElement.innerHTML = '⏳ Chargement...';
+        btnElement.classList.add('speaking');
+    }
+
+    try {
+        const headers = { 'Content-Type': 'application/json' };
+        if (state.token) {
+            headers['Authorization'] = `Bearer ${state.token}`;
+        }
+
+        const response = await fetch('/api/chat/synthesize', {
+            method: 'POST',
+            headers: headers,
+            body: JSON.stringify({ text: text })
+        });
+
+        if (response.ok) {
+            const blob = await response.blob();
+            const audioUrl = URL.createObjectURL(blob);
+            currentAudioPlayer = new Audio(audioUrl);
+            
+            currentAudioPlayer.onplay = () => {
+                if (btnElement) btnElement.innerHTML = '⏹️ Arrêter';
+            };
+
+            currentAudioPlayer.onended = () => {
+                stopSpeech();
+            };
+
+            currentAudioPlayer.onerror = () => {
+                fallbackBrowserTts(text, btnElement);
+            };
+
+            await currentAudioPlayer.play();
+            return;
+        } else {
+            fallbackBrowserTts(text, btnElement);
+        }
+    } catch (err) {
+        console.warn("Échec de synthèse serveur, repli Web Speech API:", err);
+        fallbackBrowserTts(text, btnElement);
+    }
+}
+
+function fallbackBrowserTts(text, btnElement) {
+    if (!window.speechSynthesis) {
+        showToast("🔊 Synthèse vocale non supportée par votre navigateur.");
+        stopSpeech();
+        return;
+    }
+
+    // Nettoyer les balises Markdown basiques
+    const cleanText = text.replace(/[*#`_]/g, '').replace(/\[(.*?)\]\(.*?\)/g, '$1');
+    const utterance = new SpeechSynthesisUtterance(cleanText);
+    utterance.lang = 'fr-FR';
+    utterance.rate = 0.95;
+
+    utterance.onstart = () => {
+        if (btnElement) btnElement.innerHTML = '⏹️ Arrêter';
+    };
+
+    utterance.onend = () => {
+        stopSpeech();
+    };
+
+    utterance.onerror = () => {
+        stopSpeech();
+    };
+
+    window.speechSynthesis.speak(utterance);
+}
+
+function stopSpeech() {
+    if (currentAudioPlayer) {
+        currentAudioPlayer.pause();
+        currentAudioPlayer.currentTime = 0;
+        currentAudioPlayer = null;
+    }
+    if (window.speechSynthesis && window.speechSynthesis.speaking) {
+        window.speechSynthesis.cancel();
+    }
+    if (currentSpeakingBtn) {
+        currentSpeakingBtn.innerHTML = '🔊 Écouter';
+        currentSpeakingBtn.classList.remove('speaking');
+        currentSpeakingBtn = null;
     }
 }
 

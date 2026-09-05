@@ -1,0 +1,66 @@
+services:
+  - type: web
+    name: prosartisan-api
+    runtime: docker
+    dockerfilePath: ./Dockerfile
+    plan: standard
+    region: frankfurt
+    envVars:
+      - key: APP_ENV
+        value: "production"
+      - key: APP_DEBUG
+        value: "false"
+      - key: APP_SECRET_KEY
+        generateValue: true
+      - key: JWT_SECRET_KEY
+        generateValue: true
+      - key: MOBILE_MONEY_SECRET_KEY
+        generateValue: true
+      - key: DB_REQUIRE_POSTGRES
+        value: "true"
+      - key: DB_HOST
+        fromDatabase:
+          name: prosartisan-db
+          property: host
+      - key: DB_PORT
+        fromDatabase:
+          name: prosartisan-db
+          property: port
+      - key: DB_DATABASE
+        fromDatabase:
+          name: prosartisan-db
+          property: database
+      - key: DB_USERNAME
+        fromDatabase:
+          name: prosartisan-db
+          property: user
+      - key: DB_PASSWORD
+        fromDatabase:
+          name: prosartisan-db
+          property: password
+      - key: REDIS_HOST
+        fromService:
+          type: redis
+          name: prosartisan-redis
+          property: host
+      - key: REDIS_PORT
+        fromService:
+          type: redis
+          name: prosartisan-redis
+          property: port
+      - key: OPENAI_API_KEY
+        sync: false
+
+  - type: redis
+    name: prosartisan-redis
+    plan: standard
+    region: frankfurt
+    ipAllowList: []
+
+databases:
+  - name: prosartisan-db
+    databaseName: prosartisan
+    user: prosartisan_user
+    plan: standard
+    region: frankfurt
+
