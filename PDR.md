@@ -97,7 +97,7 @@ Sur toutes les routes ci-dessous, l'identité de l'artisan est déduite du JWT (
 - `POST /api/chat` : Pose une question technique (texte + photo `image_url` optionnelle + filtre `metier_id`). Intercepte les quotas épuisés avec `HTTP 402 Payment Required`.
 - `POST /api/chat/stream` : équivalent en streaming SSE.
 - `POST /api/chat/transcribe` : transcription vocale (Whisper) d'une note audio de chantier.
-- `WS /api/chat/ws` : Stream WebSocket en temps réel (encore un prototype : ni authentification ni décompte de quota à ce stade).
+- `WS /api/chat/ws` : Stream WebSocket en temps réel. Identité déduite d'un JWT optionnel en query param (`?token=...`, un WebSocket ne portant pas d'en-tête `Authorization` côté client), sinon compte anonyme partagé ; quota décrémenté à chaque message comme sur les routes HTTP.
 - `GET/POST /api/conversations`, `GET/PATCH/DELETE /api/conversations/{id}` : historique des discussions, strictement cloisonné par propriétaire.
 
 **Paiement Mobile Money** (`/api/payment`)

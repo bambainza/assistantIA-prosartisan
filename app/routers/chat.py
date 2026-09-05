@@ -14,6 +14,7 @@ from fastapi import (
     Depends,
     File,
     HTTPException,
+    Query,
     UploadFile,
     WebSocket,
     WebSocketDisconnect,
@@ -24,7 +25,7 @@ from pydantic import BaseModel
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.db.session import get_db
-from app.middleware.auth import get_optional_user_id
+from app.middleware.auth import get_optional_user_id, get_user_id_from_token
 from app.schemas.chat import ChatResponse, WebSocketMessage
 from app.schemas.quota import QuotaEpuiseResponse
 from app.services.audio_service import audio_service
@@ -244,12 +245,42 @@ async def chat_stream_endpoint(
 
 
 @router.websocket("/chat/ws")
-async def chat_websocket_endpoint(websocket: WebSocket) -> None:
-    """Connexion WebSocket pour streaming de réponse en temps réel."""
+async def chat_websocket_endpoint(
+    websocket: WebSocket,
+    db: AsyncSession = Depends(get_db),
+    token: str | None = Query(default=None),
+) -> None:
+    """Connexion WebSocket pour streaming de réponse en temps réel.
+
+    L'identité est déduite du JWT passé en query param (`?token=...`, un
+    WebSocket ne permet pas d'en-tête Authorization portable côté client) ;
+    en son absence, l'identifiant anonyme partagé est utilisé, comme pour
+    les routes HTTP. Un token invalide ferme la connexion (policy violation).
+    """
+    user_id = ANONYMOUS_USER_ID
+    if token:
+        try:
+            user_id = get_user_id_from_token(token)
+        except HTTPException:
+            await websocket.close(code=status.WS_1008_POLICY_VIOLATION)
+            return
+
     await websocket.accept()
     try:
         while True:
             data = await websocket.receive_text()
+
+            allowed = await quota_service.consume_quota(db=db, user_id=user_id)
+            if not allowed:
+                epuise_msg = WebSocketMessage(
+                    type="payment_required",
+                    message=QuotaEpuiseResponse().message,
+                )
+                await websocket.send_text(epuise_msg.model_dump_json())
+                continue
+
+            rag_res = await rag_service.generate_response(question=data)
+
             # Streaming mock message
             res_chunk = WebSocketMessage(
                 type="stream",
@@ -257,7 +288,6 @@ async def chat_websocket_endpoint(websocket: WebSocket) -> None:
             )
             await websocket.send_text(res_chunk.model_dump_json())
 
-            rag_res = await rag_service.generate_response(question=data)
             end_msg = WebSocketMessage(
                 type="stream_end",
                 message=rag_res["reponse"],

@@ -111,6 +111,3 @@ class QuotaService:
 
 
 quota_service = QuotaService()
-
-
-quota_service = QuotaService()
