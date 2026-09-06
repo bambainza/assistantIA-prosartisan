@@ -3,6 +3,7 @@
 ## 1. Dimensionnement des Conducteurs et Protections Divisionnaires
 
 ### 1.1 Sections Minimales de Câbles Cuivre et Calibres de Disjoncteurs
+
 - **Circuit Éclairage** :
   - Section minimale du fil de cuivre : **1.5 mm²**
   - Protection : Disjoncteur magnétothermique divisionnaire **10A ou 16A**
@@ -26,11 +27,13 @@
 ## 2. Protection Différentielle et Mise à la Terre
 
 ### 2.1 Protection Différentielle Haute Sensibilité (30 mA)
+
 - Obligation d'installer au moins un **Interrupteur Différentiel 30 mA (Type AC ou Type A)** en tête de chaque rangée du tableau de répartition.
 - **Type A** obligatoire pour les circuits alimentant des appareils électroniques, ordinateurs, onduleurs et machines à laver (sensible aux courants résiduels continus).
 - **Type AC** pour les circuits prises et éclairages standards.
 
 ### 2.2 Prise de Terre et Régime de Neutre (TT)
+
 - En Côte d'Ivoire (réseau CIE), le régime de neutre standard en distribution basse tension est le **Régime TT** (Neutre à la terre côté transformateur, masses métalliques reliées à la terre chez l'usager).
 - **Valeur de résistance maximale de la terre** : **R ≤ 100 Ohms** (mesurée au tellurohmètre).
 - **Réalisation pratique du puits de terre** :
@@ -44,6 +47,7 @@
 ## 3. Schémas de Câblage Fréquents
 
 ### 3.1 Schéma Va-et-Vient (2 points de commande pour 1 éclairage)
+
 - **Phase (Marron/Rouge)** : Raccordée à la borne commune (L ou 1) du premier interrupteur va-et-vient.
 - **Navettes (Orange ou Violet, 2 fils)** : Relient les bornes de navettes (1 et 2) du premier interrupteur aux bornes (1 et 2) du second interrupteur.
 - **Retour Lampe (Noir ou Gris)** : Part de la borne commune du second interrupteur vers la lampe.
@@ -51,5 +55,6 @@
 - **Terre (Vert/Jaune)** : Raccordée à la carcasse métallique du luminaire.
 
 ### 3.2 Protection contre les Surtensions et Onduleurs
+
 - **Parafoudre / Écrêteur de surtension (Type 2)** : Recommandé en tête de tableau dans les zones à forte activité orageuse pour protéger l'appareillage contre la foudre.
 - **Inverseur de source (Secteur CIE / Groupe électrogène / Solaire)** : Doit obligatoirement couper simultanément la Phase ET le Neutre (tétrapolaire en triphasé, bipolaire en monophasé) avec verrouillage mécanique pour interdire tout retour de courant vers le réseau public.

@@ -30,6 +30,7 @@ En production (`APP_ENV=production`), l'application refuse de démarrer si les v
 Cette méthode déploie l'ensemble de la stack (API FastAPI, PostgreSQL 16, Redis 7, Qdrant et Caddy SSL automatique) sur une machine virtuelle Linux (Ubuntu 22.04 / 24.04).
 
 ### 1. Cloner le Référentiel et Configurer l'Environnement
+
 ```bash
 git clone https://github.com/bambainza/assistantIA-prosartisan.git /opt/prosartisan
 cd /opt/prosartisan
@@ -39,12 +40,14 @@ nano .env.prod
 ```
 
 ### 2. Démarrer la Stack de Production
+
 ```bash
 # Lancement des conteneurs en tâche de fond avec le compose de production
 docker compose -f docker-compose.prod.yml --env-file .env.prod up -d --build
 ```
 
 ### 3. Exécuter l'Ingestion Initiale du Corpus RAG
+
 ```bash
 docker compose -f docker-compose.prod.yml exec app python -m ingestion.pipeline --docs-dir ./ingestion/documents
 ```
@@ -56,6 +59,7 @@ docker compose -f docker-compose.prod.yml exec app python -m ingestion.pipeline 
 Pour un déploiement scalable sans gestion d'infrastructure :
 
 1. **Créer les secrets dans Google Secret Manager** :
+
    ```bash
    gcloud secrets create app-secret-key --data-file=<(openssl rand -hex 32)
    gcloud secrets create jwt-secret-key --data-file=<(openssl rand -hex 32)
@@ -63,11 +67,13 @@ Pour un déploiement scalable sans gestion d'infrastructure :
    ```
 
 2. **Construire et pousser l'image Docker** :
+
    ```bash
    gcloud builds submit --tag gcr.io/$PROJECT_ID/prosartisan-api:latest .
    ```
 
 3. **Déployer sur Cloud Run** :
+
    ```bash
    gcloud run services replace cloudrun.yaml --region europe-west1
    ```
@@ -77,6 +83,7 @@ Pour un déploiement scalable sans gestion d'infrastructure :
 ## ☁️ Option 3 : Déploiement 1-Clic sur Render
 
 Utiliser le fichier `render.yaml` situé à la racine du projet :
+
 1. Connecter le référentiel GitHub sur [Render Dashboard](https://dashboard.render.com).
 2. Choisir **New > Blueprint**.
 3. Sélectionner la branche `main` : Render provisionne automatiquement le service FastAPI, PostgreSQL et Redis.
