@@ -1,1 +1,178 @@
-{}
+{
+  "guide_assainissement_fosse_septique_ci.md": {
+    "sha256": "c91b5cdd121378175d549a5954f50bdcd00b753936df00149b300a86c6fd2202",
+    "chunks_count": 6,
+    "last_ingested_at": "2026-09-06T22:34:28.638231+00:00",
+    "metadata": {
+      "metier_id": 3,
+      "secteur_id": 1,
+      "type_document": "guide_technique",
+      "niveau_expertise": "intermédiaire"
+    }
+  },
+  "guide_carrelage_revetement_dtu52.md": {
+    "sha256": "b92c36b41178cd8f0af4bb2e1ce5fb9bc20353baa4b2295d4d716ac0b96058d8",
+    "chunks_count": 8,
+    "last_ingested_at": "2026-09-06T22:34:28.687272+00:00",
+    "metadata": {
+      "metier_id": 1,
+      "secteur_id": 1,
+      "type_document": "guide_technique",
+      "niveau_expertise": "intermédiaire"
+    }
+  },
+  "guide_climatisation_froid_installation_entretien.md": {
+    "sha256": "367c75400b4e6c7b2c98ca79bd9dcb1a39ede2c7bb045bcfe7b6c00bda1861fa",
+    "chunks_count": 6,
+    "last_ingested_at": "2026-09-06T22:34:28.723619+00:00",
+    "metadata": {
+      "metier_id": 3,
+      "secteur_id": 1,
+      "type_document": "guide_technique",
+      "niveau_expertise": "intermédiaire"
+    }
+  },
+  "guide_depannage_electrique_domestique_securite.md": {
+    "sha256": "f7676c037ba547de38bc0f21b990745367321e03e55132d96c81afb99b2d5088",
+    "chunks_count": 6,
+    "last_ingested_at": "2026-09-06T22:34:28.759593+00:00",
+    "metadata": {
+      "metier_id": 2,
+      "secteur_id": 1,
+      "type_document": "guide_technique",
+      "niveau_expertise": "intermédiaire"
+    }
+  },
+  "guide_diagnostic_fissures_pathologies_batiment.md": {
+    "sha256": "ec636ed08f4d6cecf32aa16ff59e39280540d59380228675da6e229e9e81b61f",
+    "chunks_count": 5,
+    "last_ingested_at": "2026-09-06T22:34:28.792540+00:00",
+    "metadata": {
+      "metier_id": 1,
+      "secteur_id": 1,
+      "type_document": "guide_technique",
+      "niveau_expertise": "avance"
+    }
+  },
+  "guide_diagnostic_pannes_electroniques_auto.md": {
+    "sha256": "248443f3c0526e9ee5936c9bd87fd34428712fcba24b0f1b8ed7539fb03e2ac9",
+    "chunks_count": 5,
+    "last_ingested_at": "2026-09-06T22:34:28.823200+00:00",
+    "metadata": {
+      "metier_id": 4,
+      "secteur_id": 1,
+      "type_document": "guide_technique",
+      "niveau_expertise": "avance"
+    }
+  },
+  "guide_fondations_terrassement_geotechnique_ci.md": {
+    "sha256": "1d072856e7247790258af27af29645b2c1748fdfc70da8a0b1712578a95880b5",
+    "chunks_count": 7,
+    "last_ingested_at": "2026-09-06T22:34:28.859559+00:00",
+    "metadata": {
+      "metier_id": 1,
+      "secteur_id": 1,
+      "type_document": "guide_technique",
+      "niveau_expertise": "avance"
+    }
+  },
+  "guide_installation_solaire_photovoltaique_ci.md": {
+    "sha256": "9c4519bcde67346e5960b12ea4e3f4f529b3c0aad4f50f39e0f4d33131c865a2",
+    "chunks_count": 6,
+    "last_ingested_at": "2026-09-06T22:34:28.892597+00:00",
+    "metadata": {
+      "metier_id": 2,
+      "secteur_id": 1,
+      "type_document": "guide_technique",
+      "niveau_expertise": "intermédiaire"
+    }
+  },
+  "guide_maconnerie_dtu_20_1_ci.md": {
+    "sha256": "15aaa78ac4f697b83c30f50a195c46cc097d6390782ec61b6b31a55babf59fc3",
+    "chunks_count": 8,
+    "last_ingested_at": "2026-09-06T22:34:28.943005+00:00",
+    "metadata": {
+      "metier_id": 1,
+      "secteur_id": 1,
+      "type_document": "guide_technique",
+      "niveau_expertise": "intermédiaire"
+    }
+  },
+  "guide_mecanique_auto_diesel_essence.md": {
+    "sha256": "54e97ee691a25f1ceaef85c341c22ca450f55c178bcef3699bddd552a8c03e99",
+    "chunks_count": 5,
+    "last_ingested_at": "2026-09-06T22:34:28.980675+00:00",
+    "metadata": {
+      "metier_id": 4,
+      "secteur_id": 1,
+      "type_document": "guide_technique",
+      "niveau_expertise": "avance"
+    }
+  },
+  "guide_menuiserie_charpente_bois_tropical.md": {
+    "sha256": "f901a9fcfe259fe71bd32f53ac251e7446e99d429f8f48518ab9ece628055de9",
+    "chunks_count": 5,
+    "last_ingested_at": "2026-09-06T22:34:29.014785+00:00",
+    "metadata": {
+      "metier_id": 1,
+      "secteur_id": 1,
+      "type_document": "guide_technique",
+      "niveau_expertise": "intermédiaire"
+    }
+  },
+  "guide_peinture_etancheite_tropicale.md": {
+    "sha256": "7401fdc81fe667798e457fbf4b7f63b40720a25cefcc76ce6a155a9dcc7bb96c",
+    "chunks_count": 7,
+    "last_ingested_at": "2026-09-06T22:34:29.068565+00:00",
+    "metadata": {
+      "metier_id": 1,
+      "secteur_id": 1,
+      "type_document": "guide_technique",
+      "niveau_expertise": "intermédiaire"
+    }
+  },
+  "guide_plomberie_sanitaire_dtu60_1.md": {
+    "sha256": "eecb4f1c3c912d538ce6be7a2e70df1d988e69c5e45421be75fcd950faec86b2",
+    "chunks_count": 7,
+    "last_ingested_at": "2026-09-06T22:34:29.113209+00:00",
+    "metadata": {
+      "metier_id": 3,
+      "secteur_id": 1,
+      "type_document": "guide_technique",
+      "niveau_expertise": "intermédiaire"
+    }
+  },
+  "guide_securite_chantier_epi_prevention_btp.md": {
+    "sha256": "d22ee4a8b140eb109a5e894b5d2458e7f660b613e5fca28bfe9c84c9805e3e93",
+    "chunks_count": 5,
+    "last_ingested_at": "2026-09-06T22:34:29.152501+00:00",
+    "metadata": {
+      "metier_id": 1,
+      "secteur_id": 1,
+      "type_document": "guide_technique",
+      "niveau_expertise": "debutant"
+    }
+  },
+  "guide_tolerie_peinture_auto_carrosserie.md": {
+    "sha256": "1e46a42975314b31ebc6b3b71687e0b52ef8975d6bce42a90c51be3cf3c16d6c",
+    "chunks_count": 7,
+    "last_ingested_at": "2026-09-06T22:34:29.185947+00:00",
+    "metadata": {
+      "metier_id": 4,
+      "secteur_id": 1,
+      "type_document": "guide_technique",
+      "niveau_expertise": "avance"
+    }
+  },
+  "normes_electricite_nfc15100_ci.md": {
+    "sha256": "82f9133905fc8101bb8fea3ac082d4b0b4ed6d2992bc849129040e66661a6a72",
+    "chunks_count": 5,
+    "last_ingested_at": "2026-09-06T22:34:29.225514+00:00",
+    "metadata": {
+      "metier_id": 2,
+      "secteur_id": 1,
+      "type_document": "norme_officielle",
+      "niveau_expertise": "intermédiaire"
+    }
+  }
+}

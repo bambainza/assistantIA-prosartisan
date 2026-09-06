@@ -47,6 +47,66 @@
         "secteur_id": 1,
         "type_document": "norme_officielle",
         "niveau_expertise": "debutant"
+    },
+    "guide_carrelage_revetement_dtu52.md": {
+        "metier_id": 1,
+        "secteur_id": 1,
+        "type_document": "guide_technique",
+        "niveau_expertise": "intermédiaire"
+    },
+    "guide_fondations_terrassement_geotechnique_ci.md": {
+        "metier_id": 1,
+        "secteur_id": 1,
+        "type_document": "guide_technique",
+        "niveau_expertise": "avance"
+    },
+    "guide_diagnostic_fissures_pathologies_batiment.md": {
+        "metier_id": 1,
+        "secteur_id": 1,
+        "type_document": "guide_technique",
+        "niveau_expertise": "avance"
+    },
+    "guide_securite_chantier_epi_prevention_btp.md": {
+        "metier_id": 1,
+        "secteur_id": 1,
+        "type_document": "guide_technique",
+        "niveau_expertise": "debutant"
+    },
+    "guide_installation_solaire_photovoltaique_ci.md": {
+        "metier_id": 2,
+        "secteur_id": 1,
+        "type_document": "guide_technique",
+        "niveau_expertise": "intermédiaire"
+    },
+    "guide_depannage_electrique_domestique_securite.md": {
+        "metier_id": 2,
+        "secteur_id": 1,
+        "type_document": "guide_technique",
+        "niveau_expertise": "intermédiaire"
+    },
+    "guide_climatisation_froid_installation_entretien.md": {
+        "metier_id": 3,
+        "secteur_id": 1,
+        "type_document": "guide_technique",
+        "niveau_expertise": "intermédiaire"
+    },
+    "guide_assainissement_fosse_septique_ci.md": {
+        "metier_id": 3,
+        "secteur_id": 1,
+        "type_document": "guide_technique",
+        "niveau_expertise": "intermédiaire"
+    },
+    "guide_tolerie_peinture_auto_carrosserie.md": {
+        "metier_id": 4,
+        "secteur_id": 1,
+        "type_document": "guide_technique",
+        "niveau_expertise": "avance"
+    },
+    "guide_diagnostic_pannes_electroniques_auto.md": {
+        "metier_id": 4,
+        "secteur_id": 1,
+        "type_document": "guide_technique",
+        "niveau_expertise": "avance"
     }
 }
 
