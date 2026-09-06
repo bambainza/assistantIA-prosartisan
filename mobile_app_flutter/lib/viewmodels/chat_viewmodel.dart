@@ -430,12 +430,11 @@ class ChatViewModel extends ChangeNotifier {
     // Réinitialiser la pièce jointe
     clearAttachedImage();
 
-    // Ajouter le message de l'utilisateur
     final userMsg = <String, dynamic>{
       'id': DateTime.now().millisecondsSinceEpoch.toString(),
       'role': 'user',
       'content': question.trim(),
-      'image_bytes': ?imageThumbnailBytes,
+      if (imageThumbnailBytes != null) 'image_bytes': imageThumbnailBytes,
     };
     _messages = [..._messages, userMsg];
     _isStreaming = true;

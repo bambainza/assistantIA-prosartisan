@@ -13,8 +13,6 @@ permissions:
 env:
   REGISTRY: ghcr.io
   IMAGE_NAME: ${{ github.repository }}
-  DEPLOY_WEBHOOK_URL: ${{ secrets.DEPLOY_WEBHOOK_URL || '' }}
-  PROD_URL: ${{ secrets.PROD_URL || '' }}
 
 jobs:
   build-and-push-image:
@@ -67,6 +65,8 @@ jobs:
         uses: actions/checkout@v4
 
       - name: Trigger Webhook / Cloud Run Deploy
+        env:
+          DEPLOY_WEBHOOK_URL: ${{ secrets.DEPLOY_WEBHOOK_URL }}
         run: |
           if [ -n "$DEPLOY_WEBHOOK_URL" ]; then
             echo "Déclenchement du webhook de déploiement sécurisé..."
@@ -76,6 +76,8 @@ jobs:
           fi
 
       - name: Production Health Check
+        env:
+          PROD_URL: ${{ secrets.PROD_URL }}
         run: |
           if [ -z "$PROD_URL" ]; then
             echo "PROD_URL non configuré dans les secrets GitHub. Saut de la vérification de santé."
