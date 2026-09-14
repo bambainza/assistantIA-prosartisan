@@ -5,11 +5,33 @@ from __future__ import annotations
 import uuid
 from datetime import datetime
 
-from sqlalchemy import ForeignKey, String, Text, func
+from sqlalchemy import Boolean, ForeignKey, String, Text, func, true
 from sqlalchemy.dialects.postgresql import UUID
 from sqlalchemy.orm import Mapped, mapped_column
 
 from app.models.base import Base
+
+
+class ActualiteCategorie(Base):
+    """Donnée de référence (module Paramètres) : catégorie utilisable sur une actualité.
+
+    `Actualite.category` reste une colonne texte libre (pas de FK) — cette
+    table sert à piloter la liste de choix côté back-office et à valider les
+    créations/mises à jour d'actualité (voir `ActualiteService`), sans casser
+    les actualités existantes si une catégorie est ensuite désactivée.
+    """
+
+    __tablename__ = "actualite_categories"
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    code: Mapped[str] = mapped_column(String(30), unique=True, nullable=False)
+    label: Mapped[str] = mapped_column(String(100), nullable=False)
+    is_active: Mapped[bool] = mapped_column(
+        Boolean, default=True, server_default=true(), nullable=False
+    )
+    created_at: Mapped[datetime] = mapped_column(
+        default=datetime.now, server_default=func.now()
+    )
 
 
 class Actualite(Base):

@@ -146,6 +146,12 @@
                                 <span>Communication</span>
                             </a>
                         </li>
+                        <li class="nav-item" role="presentation">
+                            <a class="nav-link nav-menu-item" href="javascript:void(0);" data-tab="tab-parametres" role="tab" id="navtab-parametres" aria-selected="false" aria-controls="tab-parametres" tabindex="-1">
+                                <i class="iconoir-settings menu-icon"></i>
+                                <span>Paramètres</span>
+                            </a>
+                        </li>
                     </ul>
                 </div>
             </div>
@@ -978,15 +984,14 @@
                                         <div class="row g-2">
                                             <div class="col-md-4">
                                                 <label for="actu-metier" class="form-label">Métier ciblé</label>
-                                                <input type="number" id="actu-metier" class="form-control" placeholder="Vide = tous">
+                                                <select id="actu-metier" class="form-select">
+                                                    <option value="">Tous les métiers</option>
+                                                </select>
                                             </div>
                                             <div class="col-md-4">
                                                 <label for="actu-category" class="form-label">Catégorie</label>
                                                 <select id="actu-category" class="form-select">
                                                     <option value="annonce">Annonce</option>
-                                                    <option value="maintenance">Maintenance</option>
-                                                    <option value="conseil">Conseil</option>
-                                                    <option value="promotion">Promotion</option>
                                                 </select>
                                             </div>
                                             <div class="col-md-4">
@@ -1037,7 +1042,9 @@
                                     <div class="row g-2">
                                         <div class="col-md-6">
                                             <label for="notif-metier" class="form-label">Métier ciblé</label>
-                                            <input type="number" id="notif-metier" class="form-control" placeholder="Vide = tous">
+                                            <select id="notif-metier" class="form-select">
+                                                <option value="">Tous les métiers</option>
+                                            </select>
                                         </div>
                                         <div class="col-md-6">
                                             <label for="notif-audience" class="form-label">Audience</label>
@@ -1066,6 +1073,157 @@
                                 </div>
                                 <div class="card-body p-0 scrollable-card-body-sm">
                                     <div id="broadcast-history-list" class="small"><!-- Injected via JS --></div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Tab: Paramètres (données de référence) -->
+                <div id="tab-parametres" class="tab-page" role="tabpanel" aria-labelledby="navtab-parametres" tabindex="0">
+                    <div class="row mt-4">
+                        <div class="col-lg-7 mb-4">
+                            <div class="card">
+                                <div class="card-header d-flex justify-content-between align-items-center flex-wrap gap-2">
+                                    <div>
+                                        <h4 class="card-title mb-0">Métiers</h4>
+                                        <small class="text-muted">Alimente le sélecteur « Métier ciblé » du back-office et le matching RAG.</small>
+                                    </div>
+                                    <button type="button" class="btn btn-sm btn-primary" onclick="openMetierForm()">
+                                        <i class="iconoir-plus me-1"></i>Nouveau métier
+                                    </button>
+                                </div>
+                                <div class="card-body">
+                                    <div id="metier-form" class="border rounded p-3 mb-3 d-none">
+                                        <input type="hidden" id="metier-form-id">
+                                        <div class="row g-2">
+                                            <div class="col-md-4">
+                                                <label for="metier-form-nom" class="form-label">Nom</label>
+                                                <input type="text" id="metier-form-nom" class="form-control" placeholder="Ex: Bâtiment & Construction">
+                                            </div>
+                                            <div class="col-md-4">
+                                                <label for="metier-form-slug" class="form-label">Slug</label>
+                                                <input type="text" id="metier-form-slug" class="form-control" placeholder="batiment-construction">
+                                            </div>
+                                            <div class="col-md-4">
+                                                <label for="metier-form-description" class="form-label">Description</label>
+                                                <input type="text" id="metier-form-description" class="form-control" placeholder="Optionnelle">
+                                            </div>
+                                        </div>
+                                        <div class="mt-2">
+                                            <button type="button" class="btn btn-primary btn-sm" onclick="submitMetierForm()">Enregistrer</button>
+                                            <button type="button" class="btn btn-light btn-sm" onclick="closeMetierForm()">Annuler</button>
+                                        </div>
+                                        <div id="metier-form-feedback" class="mt-2 small" role="status" aria-live="polite"></div>
+                                    </div>
+                                    <div class="table-responsive">
+                                        <table class="table table-sm mb-0">
+                                            <caption class="visually-hidden">Liste des métiers</caption>
+                                            <thead class="table-light">
+                                                <tr>
+                                                    <th scope="col">Métier</th>
+                                                    <th scope="col">Sous-métiers</th>
+                                                    <th scope="col">Statut</th>
+                                                    <th scope="col">Actions</th>
+                                                </tr>
+                                            </thead>
+                                            <tbody id="metiers-tbody"><!-- Injected via JS --></tbody>
+                                        </table>
+                                    </div>
+                                </div>
+                            </div>
+
+                            <div class="card">
+                                <div class="card-header d-flex justify-content-between align-items-center">
+                                    <h4 class="card-title mb-0">Sous-métiers</h4>
+                                    <button type="button" class="btn btn-sm btn-primary" onclick="openSousMetierForm()">
+                                        <i class="iconoir-plus me-1"></i>Nouvelle spécialité
+                                    </button>
+                                </div>
+                                <div class="card-body">
+                                    <div id="sous-metier-form" class="border rounded p-3 mb-3 d-none">
+                                        <input type="hidden" id="sm-form-id">
+                                        <div class="row g-2">
+                                            <div class="col-md-4">
+                                                <label for="sm-form-metier" class="form-label">Métier parent</label>
+                                                <select id="sm-form-metier" class="form-select"></select>
+                                            </div>
+                                            <div class="col-md-4">
+                                                <label for="sm-form-nom" class="form-label">Nom</label>
+                                                <input type="text" id="sm-form-nom" class="form-control" placeholder="Ex: Gros œuvre">
+                                            </div>
+                                            <div class="col-md-4">
+                                                <label for="sm-form-slug" class="form-label">Slug</label>
+                                                <input type="text" id="sm-form-slug" class="form-control" placeholder="gros-oeuvre">
+                                            </div>
+                                        </div>
+                                        <div class="mt-2">
+                                            <button type="button" class="btn btn-primary btn-sm" onclick="submitSousMetierForm()">Enregistrer</button>
+                                            <button type="button" class="btn btn-light btn-sm" onclick="closeSousMetierForm()">Annuler</button>
+                                        </div>
+                                        <div id="sous-metier-form-feedback" class="mt-2 small" role="status" aria-live="polite"></div>
+                                    </div>
+                                    <div class="table-responsive scrollable-card-body-sm">
+                                        <table class="table table-sm mb-0">
+                                            <caption class="visually-hidden">Liste des sous-métiers</caption>
+                                            <thead class="table-light">
+                                                <tr>
+                                                    <th scope="col">Spécialité</th>
+                                                    <th scope="col">Métier parent</th>
+                                                    <th scope="col">Actions</th>
+                                                </tr>
+                                            </thead>
+                                            <tbody id="sous-metiers-tbody"><!-- Injected via JS --></tbody>
+                                        </table>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+
+                        <div class="col-lg-5 mb-4">
+                            <div class="card">
+                                <div class="card-header d-flex justify-content-between align-items-center flex-wrap gap-2">
+                                    <div>
+                                        <h4 class="card-title mb-0">Catégories d'actualités</h4>
+                                        <small class="text-muted">Alimente le sélecteur « Catégorie » du module Communication.</small>
+                                    </div>
+                                    <button type="button" class="btn btn-sm btn-primary" onclick="openCategorieForm()">
+                                        <i class="iconoir-plus me-1"></i>Nouvelle catégorie
+                                    </button>
+                                </div>
+                                <div class="card-body">
+                                    <div id="categorie-form" class="border rounded p-3 mb-3 d-none">
+                                        <input type="hidden" id="cat-form-id">
+                                        <div class="row g-2">
+                                            <div class="col-md-6">
+                                                <label for="cat-form-code" class="form-label">Code</label>
+                                                <input type="text" id="cat-form-code" class="form-control" placeholder="ex: evenement">
+                                            </div>
+                                            <div class="col-md-6">
+                                                <label for="cat-form-label" class="form-label">Libellé</label>
+                                                <input type="text" id="cat-form-label" class="form-control" placeholder="Ex: Événement">
+                                            </div>
+                                        </div>
+                                        <div class="mt-2">
+                                            <button type="button" class="btn btn-primary btn-sm" onclick="submitCategorieForm()">Enregistrer</button>
+                                            <button type="button" class="btn btn-light btn-sm" onclick="closeCategorieForm()">Annuler</button>
+                                        </div>
+                                        <div id="categorie-form-feedback" class="mt-2 small" role="status" aria-live="polite"></div>
+                                    </div>
+                                    <div class="table-responsive">
+                                        <table class="table table-sm mb-0">
+                                            <caption class="visually-hidden">Liste des catégories d'actualités</caption>
+                                            <thead class="table-light">
+                                                <tr>
+                                                    <th scope="col">Code</th>
+                                                    <th scope="col">Libellé</th>
+                                                    <th scope="col">Statut</th>
+                                                    <th scope="col">Actions</th>
+                                                </tr>
+                                            </thead>
+                                            <tbody id="categories-tbody"><!-- Injected via JS --></tbody>
+                                        </table>
+                                    </div>
                                 </div>
                             </div>
                         </div>

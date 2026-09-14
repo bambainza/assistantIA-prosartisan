@@ -30,6 +30,7 @@ from sqlalchemy.orm import selectinload
 from app.config import settings
 from app.db.session import async_session, get_db
 from app.middleware.auth import get_current_admin_user_id, require_permission
+from app.models.actualite import ActualiteCategorie
 from app.models.audit_log import AuditLog
 from app.models.document_config import DocumentConfig
 from app.models.metier import Metier
@@ -1189,6 +1190,27 @@ async def get_actualites_suggestions(
     """Suggère des sujets d'actualité à partir des conversations les plus mal notées."""
     suggestions = await actualite_service.suggested_topics_from_feedback(db)
     return {"suggestions": suggestions}
+
+
+@router.get("/actualites/categories")
+async def get_actualites_categories(
+    admin_id: uuid.UUID = Depends(require_permission("actualites.read")),
+    db: AsyncSession = Depends(get_db),
+) -> dict[str, Any]:
+    """Catégories actives disponibles pour créer/éditer une actualité.
+
+    Alimente le <select> du formulaire de création — la gestion complète
+    (créer/renommer/désactiver une catégorie) vit dans le module Paramètres
+    (`app.routers.parametres`, permission `parametres.write`).
+    """
+    stmt = (
+        select(ActualiteCategorie)
+        .where(ActualiteCategorie.is_active == True)
+        .order_by(ActualiteCategorie.label)
+    )
+    res = await db.execute(stmt)
+    categories = res.scalars().all()
+    return {"categories": [{"code": c.code, "label": c.label} for c in categories]}
 
 
 @router.post(

@@ -28,6 +28,7 @@ from app.routers import (
     finance,
     health,
     notification,
+    parametres,
     payment,
     quota,
 )
@@ -118,6 +119,7 @@ app.include_router(quota.router)
 app.include_router(notification.router)
 app.include_router(actualite.router)
 app.include_router(finance.router)
+app.include_router(parametres.router)
 app.include_router(admin.router)
 
 # ── Back-Office Admin Frontend ──

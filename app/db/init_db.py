@@ -7,6 +7,7 @@ from sqlalchemy.orm import selectinload
 
 from app.config import settings
 from app.db.session import async_session, check_database_connection, engine
+from app.models.actualite import ActualiteCategorie
 from app.models.base import Base
 from app.models.metier import Metier, SousMetier
 from app.models.package import Package
@@ -45,6 +46,14 @@ _PERMISSIONS_CATALOG: list[tuple[str, str]] = [
     ("actualites.read", "Consulter les actualités (y compris brouillons)"),
     ("actualites.write", "Créer, modifier, publier ou supprimer une actualité"),
     ("notifications.send", "Composer et diffuser une notification aux artisans"),
+    (
+        "parametres.read",
+        "Consulter le module Paramètres (métiers, sous-métiers, catégories de référence)",
+    ),
+    (
+        "parametres.write",
+        "Créer, modifier, désactiver ou supprimer une donnée de référence (métier, sous-métier, catégorie d'actualité)",
+    ),
 ]
 
 # Rôles pré-configurés et les codes de permission qui leur sont accordés.
@@ -417,6 +426,22 @@ async def seed_data() -> None:
             for perm_code in perm_codes:
                 if perm_code not in current_perm_codes:
                     existing_role.permissions.append(permission_by_code[perm_code])
+        await session.commit()
+
+        # 1ter. Grainage des catégories d'actualités (module Paramètres, idempotent
+        # par code) — mêmes valeurs que la migration Alembic dédiée, pour que le
+        # repli `Base.metadata.create_all` du dev/tests (AGENTS.md §9) parte lui
+        # aussi avec des données de référence utilisables.
+        for code, label in [
+            ("annonce", "Annonce"),
+            ("maintenance", "Maintenance"),
+            ("conseil", "Conseil"),
+            ("promotion", "Promotion"),
+        ]:
+            cat_stmt = select(ActualiteCategorie).where(ActualiteCategorie.code == code)
+            existing_cat = (await session.execute(cat_stmt)).scalar_one_or_none()
+            if existing_cat is None:
+                session.add(ActualiteCategorie(code=code, label=label))
         await session.commit()
 
         # 2. Grainage de l'administrateur par défaut
