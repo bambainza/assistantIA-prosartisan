@@ -9,7 +9,6 @@ from httpx import ASGITransport, AsyncClient
 from app.db.session import get_db
 from app.main import app
 from app.middleware.auth import create_access_token
-from app.models.document_config import DocumentConfig
 from app.models.metier import Metier
 from app.models.user import User
 from app.services.rag_service import rag_service
@@ -115,7 +114,9 @@ async def test_admin_get_and_toggle_metier_status(admin_user):
         session.execute = AsyncMock(
             return_value=MagicMock(
                 scalar_one_or_none=MagicMock(return_value=test_metier),
-                scalars=MagicMock(return_value=MagicMock(all=MagicMock(return_value=[test_metier]))),
+                scalars=MagicMock(
+                    return_value=MagicMock(all=MagicMock(return_value=[test_metier]))
+                ),
             )
         )
         session.commit = AsyncMock()
@@ -136,7 +137,9 @@ async def test_admin_get_and_toggle_metier_status(admin_user):
             assert len(data_list["metiers"]) > 0
 
             # 2. Basculer le statut du métier
-            res_toggle = await client.patch("/api/admin/metiers/99/toggle", headers=headers)
+            res_toggle = await client.patch(
+                "/api/admin/metiers/99/toggle", headers=headers
+            )
             assert res_toggle.status_code == 200
             data_toggle = res_toggle.json()
             assert data_toggle["status"] == "ok"
@@ -175,7 +178,9 @@ async def test_rag_search_context_excludes_inactive_document(monkeypatch):
 
     monkeypatch.setattr(rag_service.qdrant_client, "search", mock_qdrant_search)
     monkeypatch.setattr(rag_service, "get_inactive_document_names", mock_inactive_docs)
-    monkeypatch.setattr(rag_service, "get_embedding", AsyncMock(return_value=[0.1] * 1536))
+    monkeypatch.setattr(
+        rag_service, "get_embedding", AsyncMock(return_value=[0.1] * 1536)
+    )
 
     results = await rag_service.search_context(query="test", metier_id=1)
 
@@ -187,6 +192,7 @@ async def test_rag_search_context_excludes_inactive_document(monkeypatch):
 @pytest.mark.asyncio
 async def test_rag_generate_response_intercepts_inactive_metier(monkeypatch):
     """Vérifie que le RAG informe l'artisan si le métier demandé est désactivé."""
+
     async def mock_inactive_metier(metier_id):
         return False
 

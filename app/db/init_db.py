@@ -26,16 +26,46 @@ async def seed_data() -> None:
                 "slug": "batiment-construction",
                 "description": "Travaux de gros œuvre, maçonnerie, béton armé, charpente, VRD et second œuvre.",
                 "sous_metiers": [
-                    {"nom": "Maçonnerie, Fondations & Gros œuvre", "slug": "maconnerie-gros-oeuvre"},
-                    {"nom": "Ferraillage, Coffrage & Étayage", "slug": "ferraillage-coffrage-etayage"},
-                    {"nom": "Terrassement, VRD & Puisards", "slug": "terrassement-vrd-puisards"},
-                    {"nom": "Charpente, Couverture & Toiture", "slug": "charpente-couverture"},
-                    {"nom": "Étanchéité & Dalles Tropicales", "slug": "etancheite-dalles-tropicales"},
-                    {"nom": "Carrelage & Revêtement de Sol", "slug": "carrelage-revetement"},
-                    {"nom": "Plâtrerie, Staff & Faux-Plafonds", "slug": "platrerie-staff-plafonds"},
-                    {"nom": "Peinture Bâtiment & Ravalement", "slug": "peinture-ravalement"},
-                    {"nom": "Topographie & Implantation Chantier", "slug": "topographie-implantation"},
-                    {"nom": "Sécurité Chantier & Gestion Déchets", "slug": "securite-chantier-epi"},
+                    {
+                        "nom": "Maçonnerie, Fondations & Gros œuvre",
+                        "slug": "maconnerie-gros-oeuvre",
+                    },
+                    {
+                        "nom": "Ferraillage, Coffrage & Étayage",
+                        "slug": "ferraillage-coffrage-etayage",
+                    },
+                    {
+                        "nom": "Terrassement, VRD & Puisards",
+                        "slug": "terrassement-vrd-puisards",
+                    },
+                    {
+                        "nom": "Charpente, Couverture & Toiture",
+                        "slug": "charpente-couverture",
+                    },
+                    {
+                        "nom": "Étanchéité & Dalles Tropicales",
+                        "slug": "etancheite-dalles-tropicales",
+                    },
+                    {
+                        "nom": "Carrelage & Revêtement de Sol",
+                        "slug": "carrelage-revetement",
+                    },
+                    {
+                        "nom": "Plâtrerie, Staff & Faux-Plafonds",
+                        "slug": "platrerie-staff-plafonds",
+                    },
+                    {
+                        "nom": "Peinture Bâtiment & Ravalement",
+                        "slug": "peinture-ravalement",
+                    },
+                    {
+                        "nom": "Topographie & Implantation Chantier",
+                        "slug": "topographie-implantation",
+                    },
+                    {
+                        "nom": "Sécurité Chantier & Gestion Déchets",
+                        "slug": "securite-chantier-epi",
+                    },
                 ],
             },
             {
@@ -43,11 +73,23 @@ async def seed_data() -> None:
                 "slug": "electricite-energie",
                 "description": "Installations électriques bâtiment, solaire photovoltaïque, groupes électrogènes, bobinage et climatisation.",
                 "sous_metiers": [
-                    {"nom": "Électricité Bâtiment & Domotique", "slug": "electricite-batiment"},
-                    {"nom": "Installation Solaire & Photovoltaïque", "slug": "installation-solaire"},
-                    {"nom": "Groupes Électrogènes & Groupes de Secours", "slug": "groupes-electrogenes-secours"},
+                    {
+                        "nom": "Électricité Bâtiment & Domotique",
+                        "slug": "electricite-batiment",
+                    },
+                    {
+                        "nom": "Installation Solaire & Photovoltaïque",
+                        "slug": "installation-solaire",
+                    },
+                    {
+                        "nom": "Groupes Électrogènes & Groupes de Secours",
+                        "slug": "groupes-electrogenes-secours",
+                    },
                     {"nom": "Froid & Climatisation", "slug": "climatisation-froid"},
-                    {"nom": "Bobinage Moteurs & Transformateurs", "slug": "bobinage-moteurs-transfos"},
+                    {
+                        "nom": "Bobinage Moteurs & Transformateurs",
+                        "slug": "bobinage-moteurs-transfos",
+                    },
                 ],
             },
             {
@@ -55,10 +97,22 @@ async def seed_data() -> None:
                 "slug": "plomberie-sanitaire",
                 "description": "Tuyauterie, réseaux d'eau potable, assainissement autonome, fosses septiques et forages.",
                 "sous_metiers": [
-                    {"nom": "Plomberie Sanitaire & Réseaux d'Eau", "slug": "plomberie-sanitaire-spec"},
-                    {"nom": "Assainissement Autonome & Fosses Septiques", "slug": "assainissement-fosses-septiques"},
-                    {"nom": "Forages d'Eau & Pompes Immergées", "slug": "forages-pompes-immergees"},
-                    {"nom": "Traitement de l'Eau & Piscines", "slug": "traitement-eau-piscines"},
+                    {
+                        "nom": "Plomberie Sanitaire & Réseaux d'Eau",
+                        "slug": "plomberie-sanitaire-spec",
+                    },
+                    {
+                        "nom": "Assainissement Autonome & Fosses Septiques",
+                        "slug": "assainissement-fosses-septiques",
+                    },
+                    {
+                        "nom": "Forages d'Eau & Pompes Immergées",
+                        "slug": "forages-pompes-immergees",
+                    },
+                    {
+                        "nom": "Traitement de l'Eau & Piscines",
+                        "slug": "traitement-eau-piscines",
+                    },
                 ],
             },
             {
@@ -66,12 +120,30 @@ async def seed_data() -> None:
                 "slug": "mecanique-automobile",
                 "description": "Entretien, réparation mécanique diesel/essence, électricité auto, tôlerie, motos Jakarta et engins BTP.",
                 "sous_metiers": [
-                    {"nom": "Mécanique Auto Essence & Diesel", "slug": "mecanique-auto"},
-                    {"nom": "Électricité & Diagnostic Électronique Auto", "slug": "electricite-diagnostic-auto"},
-                    {"nom": "Tôlerie, Carrosserie & Peinture Auto", "slug": "tolerie-peinture-auto"},
-                    {"nom": "Motos, Tricycles & Deux-Roues (Jakarta)", "slug": "motos-tricycles-deux-roues"},
-                    {"nom": "Vulcanisation, Pneus & Train Avant", "slug": "vulcanisation-pneus"},
-                    {"nom": "Engins Lourds & Machinerie BTP", "slug": "engins-lourds-machinerie-btp"},
+                    {
+                        "nom": "Mécanique Auto Essence & Diesel",
+                        "slug": "mecanique-auto",
+                    },
+                    {
+                        "nom": "Électricité & Diagnostic Électronique Auto",
+                        "slug": "electricite-diagnostic-auto",
+                    },
+                    {
+                        "nom": "Tôlerie, Carrosserie & Peinture Auto",
+                        "slug": "tolerie-peinture-auto",
+                    },
+                    {
+                        "nom": "Motos, Tricycles & Deux-Roues (Jakarta)",
+                        "slug": "motos-tricycles-deux-roues",
+                    },
+                    {
+                        "nom": "Vulcanisation, Pneus & Train Avant",
+                        "slug": "vulcanisation-pneus",
+                    },
+                    {
+                        "nom": "Engins Lourds & Machinerie BTP",
+                        "slug": "engins-lourds-machinerie-btp",
+                    },
                 ],
             },
             {
@@ -79,13 +151,34 @@ async def seed_data() -> None:
                 "slug": "metiers-bouche-restauration",
                 "description": "Restauration traditionnelle (maquis, allocodromes), street-food garba, boulangerie, transformation agro-alimentaire et hygiène HACCP.",
                 "sous_metiers": [
-                    {"nom": "Restauration Traditionnelle & Maquis", "slug": "restauration-maquis"},
-                    {"nom": "Street-Food Locale (Garba, Alloco, Beignets)", "slug": "street-food-garba-alloco"},
-                    {"nom": "Boulangerie & Pâtisserie Artisanale", "slug": "boulangerie-patisserie-artisanale"},
-                    {"nom": "Transformation Agro-Alimentaire (Attiéké, Fumage Chorkor)", "slug": "transformation-agroalimentaire-attieke"},
-                    {"nom": "Boissons & Jus Locaux Artisanaux (Bissap, Gnamakoudji)", "slug": "boissons-jus-locaux"},
-                    {"nom": "Boucherie, Charcuterie & Choukouya Braisé", "slug": "boucherie-choukouya-grillades"},
-                    {"nom": "Hygiène Alimentaire & Normes HACCP Tropicales", "slug": "hygiene-haccp-tropicale"},
+                    {
+                        "nom": "Restauration Traditionnelle & Maquis",
+                        "slug": "restauration-maquis",
+                    },
+                    {
+                        "nom": "Street-Food Locale (Garba, Alloco, Beignets)",
+                        "slug": "street-food-garba-alloco",
+                    },
+                    {
+                        "nom": "Boulangerie & Pâtisserie Artisanale",
+                        "slug": "boulangerie-patisserie-artisanale",
+                    },
+                    {
+                        "nom": "Transformation Agro-Alimentaire (Attiéké, Fumage Chorkor)",
+                        "slug": "transformation-agroalimentaire-attieke",
+                    },
+                    {
+                        "nom": "Boissons & Jus Locaux Artisanaux (Bissap, Gnamakoudji)",
+                        "slug": "boissons-jus-locaux",
+                    },
+                    {
+                        "nom": "Boucherie, Charcuterie & Choukouya Braisé",
+                        "slug": "boucherie-choukouya-grillades",
+                    },
+                    {
+                        "nom": "Hygiène Alimentaire & Normes HACCP Tropicales",
+                        "slug": "hygiene-haccp-tropicale",
+                    },
                 ],
             },
             {
@@ -93,12 +186,30 @@ async def seed_data() -> None:
                 "slug": "metiers-art-maroquinerie",
                 "description": "Maroquinerie d'art, travail du cuir, sculpture sur bois, vannerie et confection textile traditionnelle.",
                 "sous_metiers": [
-                    {"nom": "Maroquinerie & Travail du Cuir", "slug": "maroquinerie-travail-cuir"},
-                    {"nom": "Menuiserie Ébénisterie & Sculpture Bois", "slug": "ebenisterie-vannerie-sculpture"},
-                    {"nom": "Vannerie, Rotin, Bambou & Tissage Déco", "slug": "vannerie-rotin-bambou"},
-                    {"nom": "Bijouterie, Joaillerie & Fonte de Métaux (Bronze/Or)", "slug": "bijouterie-fonte-metaux"},
-                    {"nom": "Poterie, Céramique & Décoration Argile", "slug": "poterie-ceramique-argile"},
-                    {"nom": "Ferronnerie d'Art & Forge Décorative", "slug": "ferronnerie-art-forge"},
+                    {
+                        "nom": "Maroquinerie & Travail du Cuir",
+                        "slug": "maroquinerie-travail-cuir",
+                    },
+                    {
+                        "nom": "Menuiserie Ébénisterie & Sculpture Bois",
+                        "slug": "ebenisterie-vannerie-sculpture",
+                    },
+                    {
+                        "nom": "Vannerie, Rotin, Bambou & Tissage Déco",
+                        "slug": "vannerie-rotin-bambou",
+                    },
+                    {
+                        "nom": "Bijouterie, Joaillerie & Fonte de Métaux (Bronze/Or)",
+                        "slug": "bijouterie-fonte-metaux",
+                    },
+                    {
+                        "nom": "Poterie, Céramique & Décoration Argile",
+                        "slug": "poterie-ceramique-argile",
+                    },
+                    {
+                        "nom": "Ferronnerie d'Art & Forge Décorative",
+                        "slug": "ferronnerie-art-forge",
+                    },
                 ],
             },
             {
@@ -106,11 +217,26 @@ async def seed_data() -> None:
                 "slug": "textile-habillement-mode",
                 "description": "Couture artisanale, confection wax, tissage traditionnel pagne Baoulé/Kente/Sénoufo, broderie et teinturerie batik.",
                 "sous_metiers": [
-                    {"nom": "Couture & Confection Homme/Femme (Wax/Pagne)", "slug": "couture-confection-habillement"},
-                    {"nom": "Tissage Traditionnel (Pagne Baoulé, Kente, Sénoufo)", "slug": "tissage-traditionnel-pagnes"},
-                    {"nom": "Modélisme, Stylisme & Patronage", "slug": "modelisme-stylisme-patronage"},
-                    {"nom": "Teinturerie Artisanale, Batiks & Bogolan", "slug": "teinturerie-batik-bogolan"},
-                    {"nom": "Broderie Artisanale & Industrielle", "slug": "broderie-artisanale"},
+                    {
+                        "nom": "Couture & Confection Homme/Femme (Wax/Pagne)",
+                        "slug": "couture-confection-habillement",
+                    },
+                    {
+                        "nom": "Tissage Traditionnel (Pagne Baoulé, Kente, Sénoufo)",
+                        "slug": "tissage-traditionnel-pagnes",
+                    },
+                    {
+                        "nom": "Modélisme, Stylisme & Patronage",
+                        "slug": "modelisme-stylisme-patronage",
+                    },
+                    {
+                        "nom": "Teinturerie Artisanale, Batiks & Bogolan",
+                        "slug": "teinturerie-batik-bogolan",
+                    },
+                    {
+                        "nom": "Broderie Artisanale & Industrielle",
+                        "slug": "broderie-artisanale",
+                    },
                 ],
             },
             {
@@ -118,10 +244,22 @@ async def seed_data() -> None:
                 "slug": "beaute-coiffure-soins",
                 "description": "Coiffure mixte, tresses et nattes africaines, soins corporels et cosmétique artisanale au karité.",
                 "sous_metiers": [
-                    {"nom": "Coiffure Mixte, Coupe & Barbe", "slug": "coiffure-mixte-coupe"},
-                    {"nom": "Tresses Africaines, Nattes & Coiffures Traditionnelles", "slug": "tresses-nattes-africaines"},
-                    {"nom": "Soins Esthétiques, Manucure & Onglerie", "slug": "soins-esthetiques-onglerie"},
-                    {"nom": "Cosmétique Artisanale (Beurre de Karité, Savon Noir)", "slug": "cosmetique-artisanale-karite"},
+                    {
+                        "nom": "Coiffure Mixte, Coupe & Barbe",
+                        "slug": "coiffure-mixte-coupe",
+                    },
+                    {
+                        "nom": "Tresses Africaines, Nattes & Coiffures Traditionnelles",
+                        "slug": "tresses-nattes-africaines",
+                    },
+                    {
+                        "nom": "Soins Esthétiques, Manucure & Onglerie",
+                        "slug": "soins-esthetiques-onglerie",
+                    },
+                    {
+                        "nom": "Cosmétique Artisanale (Beurre de Karité, Savon Noir)",
+                        "slug": "cosmetique-artisanale-karite",
+                    },
                 ],
             },
             {
@@ -129,10 +267,22 @@ async def seed_data() -> None:
                 "slug": "electronique-reparation-services",
                 "description": "Réparation smartphones, maintenance informatique, TV, petit électroménager et serrurerie.",
                 "sous_metiers": [
-                    {"nom": "Réparation Smartphones, Tablettes & Connectique", "slug": "reparation-smartphones-tablettes"},
-                    {"nom": "Maintenance Informatique, PC & Réseaux Locaux", "slug": "maintenance-informatique-pc"},
-                    {"nom": "Dépannage Téléviseurs, Audio & Électroménager", "slug": "depannage-tv-electromenager"},
-                    {"nom": "Serrurerie, Clés Minutes & Sécurité", "slug": "serrurerie-cles-minutes"},
+                    {
+                        "nom": "Réparation Smartphones, Tablettes & Connectique",
+                        "slug": "reparation-smartphones-tablettes",
+                    },
+                    {
+                        "nom": "Maintenance Informatique, PC & Réseaux Locaux",
+                        "slug": "maintenance-informatique-pc",
+                    },
+                    {
+                        "nom": "Dépannage Téléviseurs, Audio & Électroménager",
+                        "slug": "depannage-tv-electromenager",
+                    },
+                    {
+                        "nom": "Serrurerie, Clés Minutes & Sécurité",
+                        "slug": "serrurerie-cles-minutes",
+                    },
                 ],
             },
             {
@@ -140,10 +290,22 @@ async def seed_data() -> None:
                 "slug": "rural-environnement-recyclage",
                 "description": "Pépinières, espaces verts, pisciculture, recyclage plastiques/métaux et éco-matériaux de construction.",
                 "sous_metiers": [
-                    {"nom": "Pépinières, Paysagisme & Espaces Verts", "slug": "pepinieres-espaces-verts"},
-                    {"nom": "Pisciculture Artisanale & Élevage Volaille", "slug": "pisciculture-elevage-artisanal"},
-                    {"nom": "Recyclage Plastiques, Métaux & Déchets", "slug": "recyclage-plastiques-metaux"},
-                    {"nom": "Éco-Construction & Briques de Terre Compressée (BTC)", "slug": "eco-construction-btc"},
+                    {
+                        "nom": "Pépinières, Paysagisme & Espaces Verts",
+                        "slug": "pepinieres-espaces-verts",
+                    },
+                    {
+                        "nom": "Pisciculture Artisanale & Élevage Volaille",
+                        "slug": "pisciculture-elevage-artisanal",
+                    },
+                    {
+                        "nom": "Recyclage Plastiques, Métaux & Déchets",
+                        "slug": "recyclage-plastiques-metaux",
+                    },
+                    {
+                        "nom": "Éco-Construction & Briques de Terre Compressée (BTC)",
+                        "slug": "eco-construction-btc",
+                    },
                 ],
             },
         ]

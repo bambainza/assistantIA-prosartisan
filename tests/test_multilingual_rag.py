@@ -8,6 +8,7 @@ from app.services.rag_service import FALLBACK_MESSAGE, rag_service
 @pytest.fixture
 def mock_qdrant_context(monkeypatch):
     """Fournit un contexte documentaire simulé pour tester la synthèse RAG sans dépendance réseau."""
+
     async def _mock_search(query: str, metier_id: int | None = None, top_k: int = 4):
         return [
             {
@@ -105,6 +106,7 @@ async def test_rag_zero_hallucination_hors_sujet_strict(monkeypatch):
     Garde-fou AGENTS.md §3 : si aucun extrait pertinent n'est trouvé, le LLM n'est pas appelé
     et le message de repli codé en dur est retourné.
     """
+
     async def mock_empty_search(*args, **kwargs):
         return []
 

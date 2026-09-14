@@ -358,4 +358,3 @@ async def submit_feedback(
         message_id=feedback.message_id,
         conversation_id=feedback.conversation_id,
     )
-

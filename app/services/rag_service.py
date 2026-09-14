@@ -121,11 +121,14 @@ class RAGService:
         """Retourne l'ensemble des noms de fichiers désactivés par l'administration."""
         try:
             from sqlalchemy import select
+
             from app.db.session import async_session
             from app.models.document_config import DocumentConfig
 
             async with async_session() as session:
-                stmt = select(DocumentConfig.filename).where(DocumentConfig.is_active == False)
+                stmt = select(DocumentConfig.filename).where(
+                    DocumentConfig.is_active == False
+                )
                 res = await session.execute(stmt)
                 return {row[0] for row in res.all()}
         except Exception:
@@ -137,6 +140,7 @@ class RAGService:
             return True
         try:
             from sqlalchemy import select
+
             from app.db.session import async_session
             from app.models.metier import Metier
 
@@ -318,8 +322,10 @@ class RAGService:
     ) -> tuple[list[dict[str, Any]], Any]:
         """Recherche le contexte de connaissances puis retourne les fiches sources et le générateur du flux."""
         if metier_id is not None and not await self.is_metier_active(metier_id):
+
             async def _inactive_gen():
                 yield "Ce domaine métier est actuellement suspendu ou en cours d'actualisation technique par l'administration. "
+
             return [], _inactive_gen()
 
         docs = await self.search_context(query=question, metier_id=metier_id)

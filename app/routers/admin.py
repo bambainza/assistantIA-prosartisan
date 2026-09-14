@@ -22,8 +22,8 @@ from fastapi import (
     status,
 )
 from sqlalchemy import func, select
-from sqlalchemy.orm import selectinload
 from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy.orm import selectinload
 
 from app.config import settings
 from app.db.session import get_db
@@ -387,7 +387,9 @@ async def get_documents_list(
                     "metier_id": 1,
                     "chunks_count": 18,
                     "date_ingestion": "2026-08-10",
-                    "is_active": doc_configs.get("guide_dosage_beton_maconnerie.pdf", True),
+                    "is_active": doc_configs.get(
+                        "guide_dosage_beton_maconnerie.pdf", True
+                    ),
                 }
             ]
         }

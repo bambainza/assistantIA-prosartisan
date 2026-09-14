@@ -32,8 +32,12 @@ class Feedback(Base):
         nullable=True,
         index=True,
     )
-    message_id: Mapped[str | None] = mapped_column(String(100), nullable=True, index=True)
-    rating: Mapped[int] = mapped_column(Integer, nullable=False)  # 1 (positif) ou -1 (négatif)
+    message_id: Mapped[str | None] = mapped_column(
+        String(100), nullable=True, index=True
+    )
+    rating: Mapped[int] = mapped_column(
+        Integer, nullable=False
+    )  # 1 (positif) ou -1 (négatif)
     comment: Mapped[str | None] = mapped_column(Text, nullable=True)
 
     created_at: Mapped[datetime] = mapped_column(
