@@ -27,7 +27,13 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.db.session import get_db
 from app.middleware.auth import get_optional_user_id, get_user_id_from_token
-from app.schemas.chat import ChatResponse, WebSocketMessage
+from app.models.feedback import Feedback
+from app.schemas.chat import (
+    ChatResponse,
+    FeedbackCreate,
+    FeedbackResponse,
+    WebSocketMessage,
+)
 from app.schemas.quota import QuotaEpuiseResponse
 from app.services.audio_service import audio_service
 from app.services.chat_history_service import chat_history_service
@@ -188,7 +194,7 @@ async def chat_stream_endpoint(
     if not allowed:
         raise HTTPException(
             status_code=status.HTTP_402_PAYMENT_REQUIRED,
-            detail="Quota suffisant.",
+            detail="Quota insuffisant.",
         )
 
     # 2. Récupérer l'historique si la discussion existe (et appartient à l'artisan)
@@ -313,3 +319,43 @@ async def chat_websocket_endpoint(
             await websocket.send_text(end_msg.model_dump_json())
     except WebSocketDisconnect:
         pass
+
+
+@router.post(
+    "/chat/feedback",
+    response_model=FeedbackResponse,
+    status_code=status.HTTP_201_CREATED,
+    summary="Enregistrer l'évaluation d'une réponse de l'assistant (pouce haut / pouce bas)",
+)
+async def submit_feedback(
+    payload: FeedbackCreate,
+    db: AsyncSession = Depends(get_db),
+    user_id: uuid.UUID = Depends(get_optional_user_id),
+) -> FeedbackResponse:
+    """Enregistre le feedback de l'artisan sur une réponse (+1 pour pouce haut, -1 pour bas)."""
+    if payload.rating not in (1, -1):
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            detail="Le rating doit être égal à 1 (positif) ou -1 (négatif).",
+        )
+
+    feedback = Feedback(
+        id=uuid.uuid4(),
+        user_id=user_id,
+        conversation_id=payload.conversation_id,
+        message_id=payload.message_id,
+        rating=payload.rating,
+        comment=payload.comment,
+    )
+    db.add(feedback)
+    await db.commit()
+    await db.refresh(feedback)
+
+    return FeedbackResponse(
+        id=feedback.id,
+        status="ok",
+        rating=feedback.rating,
+        message_id=feedback.message_id,
+        conversation_id=feedback.conversation_id,
+    )
+

@@ -1,0 +1,192 @@
+{
+  "version": "2.0.0",
+  "options": {
+    "cwd": "${workspaceFolder}"
+  },
+  "tasks": [
+    // ── Qualité (reproduit la CI : .github/workflows/ci.yml) ────────
+    {
+      "label": "✅ CI locale (Ruff check + format + Pytest)",
+      "dependsOrder": "sequence",
+      "dependsOn": [
+        "Ruff: Vérifier (sans correction)",
+        "Ruff: Vérifier le formatage",
+        "Pytest: Lancer tous les tests"
+      ],
+      "problemMatcher": []
+    },
+    {
+      "label": "Pytest: Lancer tous les tests",
+      "type": "shell",
+      "command": "./.venv/Scripts/pytest.exe",
+      "args": ["tests/", "-q"],
+      "group": { "kind": "test", "isDefault": true },
+      "presentation": { "reveal": "always", "panel": "shared", "clear": true },
+      "problemMatcher": []
+    },
+    {
+      "label": "Pytest: Couverture (HTML dans htmlcov/)",
+      "type": "shell",
+      "command": "./.venv/Scripts/pytest.exe",
+      "args": ["tests/", "-q", "--cov=app", "--cov-report=term-missing:skip-covered", "--cov-report=html"],
+      "group": "test",
+      "presentation": { "reveal": "always", "panel": "shared", "clear": true },
+      "problemMatcher": []
+    },
+    {
+      "label": "Pytest: Fichier actif",
+      "type": "shell",
+      "command": "./.venv/Scripts/pytest.exe",
+      "args": ["${relativeFile}", "-v"],
+      "group": "test",
+      "presentation": { "reveal": "always", "panel": "shared", "clear": true },
+      "problemMatcher": []
+    },
+    {
+      "label": "Ruff: Vérifier (sans correction)",
+      "type": "shell",
+      "command": "./.venv/Scripts/ruff.exe",
+      "args": ["check", "--output-format", "concise", "app/", "tests/", "ingestion/"],
+      "presentation": { "reveal": "always", "panel": "shared", "clear": true },
+      "problemMatcher": {
+        "owner": "ruff",
+        "fileLocation": ["relative", "${workspaceFolder}"],
+        "pattern": {
+          "regexp": "^(.+?):(\\d+):(\\d+): ([A-Z]+\\d+) (.*)$",
+          "file": 1, "line": 2, "column": 3, "code": 4, "message": 5
+        }
+      }
+    },
+    {
+      "label": "Ruff: Vérifier et corriger (Lint & Fix)",
+      "type": "shell",
+      "command": "./.venv/Scripts/ruff.exe",
+      "args": ["check", "--fix", "--output-format", "concise", "app/", "tests/", "ingestion/"],
+      "group": { "kind": "build", "isDefault": true },
+      "presentation": { "reveal": "always", "panel": "shared", "clear": true },
+      "problemMatcher": {
+        "owner": "ruff",
+        "fileLocation": ["relative", "${workspaceFolder}"],
+        "pattern": {
+          "regexp": "^(.+?):(\\d+):(\\d+): ([A-Z]+\\d+) (.*)$",
+          "file": 1, "line": 2, "column": 3, "code": 4, "message": 5
+        }
+      }
+    },
+    {
+      "label": "Ruff: Vérifier le formatage",
+      "type": "shell",
+      "command": "./.venv/Scripts/ruff.exe",
+      "args": ["format", "--check", "app/", "tests/", "ingestion/"],
+      "presentation": { "reveal": "always", "panel": "shared" },
+      "problemMatcher": []
+    },
+    {
+      "label": "Ruff: Formater le code",
+      "type": "shell",
+      "command": "./.venv/Scripts/ruff.exe",
+      "args": ["format", "app/", "tests/", "ingestion/"],
+      "group": "build",
+      "presentation": { "reveal": "always", "panel": "shared" },
+      "problemMatcher": []
+    },
+
+    // ── Base de données (Alembic) ────────────────────────────────────
+    {
+      "label": "Alembic: upgrade head",
+      "type": "shell",
+      "command": "./.venv/Scripts/alembic.exe",
+      "args": ["upgrade", "head"],
+      "presentation": { "reveal": "always", "panel": "shared" },
+      "problemMatcher": []
+    },
+    {
+      "label": "Alembic: nouvelle révision (autogenerate)",
+      "type": "shell",
+      "command": "./.venv/Scripts/alembic.exe",
+      "args": ["revision", "--autogenerate", "-m", "${input:migrationMessage}"],
+      "presentation": { "reveal": "always", "panel": "shared" },
+      "problemMatcher": []
+    },
+    {
+      "label": "Alembic: downgrade -1",
+      "type": "shell",
+      "command": "./.venv/Scripts/alembic.exe",
+      "args": ["downgrade", "-1"],
+      "presentation": { "reveal": "always", "panel": "shared" },
+      "problemMatcher": []
+    },
+
+    // ── Docker ───────────────────────────────────────────────────────
+    {
+      "label": "Docker: Démarrer les services (DB, Redis, Qdrant)",
+      "type": "shell",
+      "command": "docker",
+      "args": ["compose", "up", "-d", "db", "redis", "qdrant"],
+      "presentation": { "reveal": "always", "panel": "shared" },
+      "problemMatcher": []
+    },
+    {
+      "label": "Docker: Stack complète (build + API)",
+      "type": "shell",
+      "command": "docker",
+      "args": ["compose", "up", "-d", "--build"],
+      "presentation": { "reveal": "always", "panel": "shared" },
+      "problemMatcher": []
+    },
+    {
+      "label": "Docker: Logs API",
+      "type": "shell",
+      "command": "docker",
+      "args": ["compose", "logs", "-f", "--tail", "200", "app"],
+      "isBackground": true,
+      "presentation": { "reveal": "always", "panel": "dedicated" },
+      "problemMatcher": []
+    },
+    {
+      "label": "Docker: Arrêter les services",
+      "type": "shell",
+      "command": "docker",
+      "args": ["compose", "down"],
+      "presentation": { "reveal": "always", "panel": "shared" },
+      "problemMatcher": []
+    },
+
+    // ── Flutter ──────────────────────────────────────────────────────
+    {
+      "label": "Flutter: pub get",
+      "type": "shell",
+      "command": "flutter",
+      "args": ["pub", "get"],
+      "options": { "cwd": "${workspaceFolder}/mobile_app_flutter" },
+      "presentation": { "reveal": "always", "panel": "shared" },
+      "problemMatcher": []
+    },
+    {
+      "label": "Flutter: analyze",
+      "type": "shell",
+      "command": "flutter",
+      "args": ["analyze", "--no-fatal-infos"],
+      "options": { "cwd": "${workspaceFolder}/mobile_app_flutter" },
+      "presentation": { "reveal": "always", "panel": "shared", "clear": true },
+      "problemMatcher": []
+    },
+    {
+      "label": "Flutter: test",
+      "type": "shell",
+      "command": "flutter",
+      "args": ["test"],
+      "options": { "cwd": "${workspaceFolder}/mobile_app_flutter" },
+      "group": "test",
+      "presentation": { "reveal": "always", "panel": "shared", "clear": true },
+      "problemMatcher": []
+    }
+  ],
+  "inputs": [
+    {
+      "id": "migrationMessage",
+      "type": "promptString",
+      "description": "Message de la migration Alembic (ex: add subscription table)"
+    }
+  ]
+}

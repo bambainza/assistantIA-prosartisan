@@ -10,6 +10,7 @@ router = APIRouter(tags=["Health"])
 
 
 @router.get("/health")
+@router.get("/api/health")
 async def health_check(db: AsyncSession = Depends(get_db)) -> dict:
     """Vérifie que le serveur et la base de données sont opérationnels."""
     db_status = "ok"

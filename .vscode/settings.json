@@ -1,0 +1,129 @@
+{
+  // ── Python : interpréteur uv (.venv) ─────────────────────────────
+  "python.defaultInterpreterPath": "${workspaceFolder}/.venv/Scripts/python.exe",
+  "python.terminal.activateEnvironment": true,
+  "python.envFile": "${workspaceFolder}/.env",
+
+  // ── Pylance ─────────────────────────────────────────────────────
+  "python.languageServer": "Pylance",
+  "python.analysis.typeCheckingMode": "standard",
+  "python.analysis.diagnosticMode": "openFilesOnly",
+  "python.analysis.autoImportCompletions": true,
+  "python.analysis.completeFunctionParens": true,
+  "python.analysis.inlayHints.functionReturnTypes": true,
+  "python.analysis.inlayHints.pytestParameters": true,
+  "python.analysis.exclude": [
+    "**/.venv",
+    "**/__pycache__",
+    "dastone-v2.1.0",
+    "mobile_app_flutter",
+    "admin_web",
+    "chat_web",
+    "scratch"
+  ],
+
+  // ── Tests (pytest, asyncio_mode=auto dans pyproject.toml) ───────
+  "python.testing.pytestEnabled": true,
+  "python.testing.unittestEnabled": false,
+  "python.testing.cwd": "${workspaceFolder}",
+  "python.testing.pytestArgs": ["tests"],
+
+  // ── Ruff : même binaire que la CI / les tâches (.venv) ───────────
+  "ruff.nativeServer": "on",
+  "ruff.importStrategy": "fromEnvironment",
+  "ruff.organizeImports": true,
+  "ruff.fixAll": true,
+
+  "[python]": {
+    "editor.defaultFormatter": "charliermarsh.ruff",
+    "editor.formatOnSave": true,
+    "editor.rulers": [88],
+    "editor.tabSize": 4,
+    "editor.codeActionsOnSave": {
+      "source.fixAll.ruff": "explicit",
+      "source.organizeImports.ruff": "explicit"
+    }
+  },
+
+  // ── Flutter / Dart ──────────────────────────────────────────────
+  "dart.lineLength": 80,
+  "dart.openDevTools": "flutter",
+  "dart.previewFlutterUiGuides": true,
+  "dart.debugExternalPackageLibraries": false,
+  "dart.debugSdkLibraries": false,
+  "[dart]": {
+    "editor.formatOnSave": true,
+    "editor.formatOnType": true,
+    "editor.rulers": [80],
+    "editor.selectionHighlight": false,
+    "editor.tabCompletion": "onlySnippets",
+    "editor.wordBasedSuggestions": "off",
+    "editor.suggest.snippetsPreventQuickSuggestions": false,
+    "editor.codeActionsOnSave": {
+      "source.fixAll": "explicit",
+      "source.organizeImports": "explicit"
+    }
+  },
+
+  // ── Éditeur (aligné sur .editorconfig) ──────────────────────────
+  "files.eol": "\n",
+  "files.encoding": "utf8",
+  "files.insertFinalNewline": true,
+  "files.trimTrailingWhitespace": true,
+  "editor.bracketPairColorization.enabled": true,
+  "editor.guides.bracketPairs": "active",
+  "[markdown]": {
+    "editor.wordWrap": "on",
+    "files.trimTrailingWhitespace": false
+  },
+  "[yaml]": {
+    "editor.tabSize": 2
+  },
+
+  // ── Fichiers masqués / non indexés ──────────────────────────────
+  "files.exclude": {
+    "**/.git": true,
+    "**/__pycache__": true,
+    "**/.pytest_cache": true,
+    "**/.ruff_cache": true,
+    "**/.coverage": true,
+    "**/htmlcov": true,
+    "mobile_app_flutter/.dart_tool": true,
+    "mobile_app_flutter/build": true
+  },
+  "search.exclude": {
+    "**/.venv": true,
+    "**/htmlcov": true,
+    "dastone-v2.1.0": true,
+    "mobile_app_flutter/.dart_tool": true,
+    "mobile_app_flutter/build": true,
+    "mobile_app_flutter/pubspec.lock": true,
+    "ingestion/documents/**/*.pdf": true
+  },
+  "files.watcherExclude": {
+    "**/.git/objects/**": true,
+    "**/.venv/**": true,
+    "**/__pycache__/**": true,
+    "**/.pytest_cache/**": true,
+    "**/.ruff_cache/**": true,
+    "dastone-v2.1.0/**": true,
+    "mobile_app_flutter/.dart_tool/**": true,
+    "mobile_app_flutter/build/**": true
+  },
+
+  // ── Java/Gradle : empêche l'import du dossier android de Flutter ─
+  "java.import.gradle.enabled": false,
+  "java.project.exclusionFilters": [
+    "**/mobile_app_flutter/**",
+    "**/node_modules/**",
+    "**/.venv/**"
+  ],
+  "gradle.autoDetect": "off",
+
+  "files.associations": {
+    "Caddyfile": "caddyfile",
+    "Dockerfile*": "dockerfile",
+    ".env*": "properties",
+    "system_prompt.txt": "markdown"
+  }
+}

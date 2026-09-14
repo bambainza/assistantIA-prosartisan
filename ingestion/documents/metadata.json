@@ -107,6 +107,30 @@
         "secteur_id": 1,
         "type_document": "guide_technique",
         "niveau_expertise": "avance"
+    },
+    "guide_restauration_maquis_hygiene_ci.md": {
+        "metier_id": 5,
+        "secteur_id": 2,
+        "type_document": "guide_technique",
+        "niveau_expertise": "intermédiaire"
+    },
+    "guide_mecanique_motos_tricycles_ci.md": {
+        "metier_id": 4,
+        "secteur_id": 1,
+        "type_document": "guide_technique",
+        "niveau_expertise": "intermédiaire"
+    },
+    "guide_btp_ferraillage_coffrage_ci.md": {
+        "metier_id": 1,
+        "secteur_id": 1,
+        "type_document": "guide_technique",
+        "niveau_expertise": "avance"
+    },
+    "guide_maroquinerie_cuir_artisanat.md": {
+        "metier_id": 6,
+        "secteur_id": 2,
+        "type_document": "guide_technique",
+        "niveau_expertise": "avance"
     }
 }
 

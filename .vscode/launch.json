@@ -1,0 +1,135 @@
+{
+  "version": "0.2.0",
+  "configurations": [
+    {
+      "name": "🚀 FastAPI: Serveur Backend (Uvicorn Reload)",
+      "type": "debugpy",
+      "request": "launch",
+      "module": "uvicorn",
+      "args": [
+        "app.main:app",
+        "--reload",
+        "--reload-dir",
+        "app",
+        "--reload-dir",
+        "prompts",
+        "--host",
+        "127.0.0.1",
+        "--port",
+        "8000"
+      ],
+      "console": "integratedTerminal",
+      "justMyCode": true,
+      "envFile": "${workspaceFolder}/.env"
+    },
+    {
+      "name": "🐞 FastAPI: Serveur Backend (sans reload, debug profond)",
+      "type": "debugpy",
+      "request": "launch",
+      "module": "uvicorn",
+      "args": ["app.main:app", "--host", "127.0.0.1", "--port", "8000"],
+      "console": "integratedTerminal",
+      "justMyCode": false,
+      "envFile": "${workspaceFolder}/.env"
+    },
+    {
+      "name": "🧪 Pytest: Tous les tests",
+      "type": "debugpy",
+      "request": "launch",
+      "module": "pytest",
+      "args": ["tests/", "-v"],
+      "console": "integratedTerminal",
+      "justMyCode": false
+    },
+    {
+      "name": "🧪 Pytest: Fichier de test actif",
+      "type": "debugpy",
+      "request": "launch",
+      "module": "pytest",
+      "args": ["${file}", "-v"],
+      "console": "integratedTerminal",
+      "justMyCode": false
+    },
+    {
+      "name": "🧪 Pytest: Filtrer par nom (-k)",
+      "type": "debugpy",
+      "request": "launch",
+      "module": "pytest",
+      "args": ["tests/", "-v", "-k", "${input:pytestFilter}"],
+      "console": "integratedTerminal",
+      "justMyCode": false
+    },
+    {
+      "name": "🐍 Python: Fichier actif",
+      "type": "debugpy",
+      "request": "launch",
+      "program": "${file}",
+      "cwd": "${workspaceFolder}",
+      "console": "integratedTerminal",
+      "envFile": "${workspaceFolder}/.env"
+    },
+    {
+      "name": "⚙️ Ingestion: Pipeline RAG (Documents)",
+      "type": "debugpy",
+      "request": "launch",
+      "module": "ingestion.pipeline",
+      "args": [
+        "--docs-dir",
+        "./ingestion/documents",
+        "--metier-id",
+        "${input:metierId}"
+      ],
+      "console": "integratedTerminal",
+      "justMyCode": false,
+      "envFile": "${workspaceFolder}/.env"
+    },
+    {
+      "name": "🗄️ Alembic: upgrade head",
+      "type": "debugpy",
+      "request": "launch",
+      "module": "alembic",
+      "args": ["upgrade", "head"],
+      "console": "integratedTerminal",
+      "envFile": "${workspaceFolder}/.env"
+    },
+    {
+      "name": "📱 Flutter: Application Mobile (debug)",
+      "type": "dart",
+      "request": "launch",
+      "cwd": "mobile_app_flutter",
+      "program": "lib/main.dart",
+      "flutterMode": "debug"
+    },
+    {
+      "name": "📱 Flutter: Application Mobile (profile)",
+      "type": "dart",
+      "request": "launch",
+      "cwd": "mobile_app_flutter",
+      "program": "lib/main.dart",
+      "flutterMode": "profile"
+    }
+  ],
+  "compounds": [
+    {
+      "name": "🔗 Backend + Flutter",
+      "configurations": [
+        "🚀 FastAPI: Serveur Backend (Uvicorn Reload)",
+        "📱 Flutter: Application Mobile (debug)"
+      ],
+      "stopAll": true
+    }
+  ],
+  "inputs": [
+    {
+      "id": "metierId",
+      "type": "promptString",
+      "description": "ID du métier à ingérer",
+      "default": "1"
+    },
+    {
+      "id": "pytestFilter",
+      "type": "promptString",
+      "description": "Expression pytest -k (ex: quota and not redis)"
+    }
+  ]
+}

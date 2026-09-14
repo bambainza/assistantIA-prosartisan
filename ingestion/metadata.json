@@ -1,0 +1,30 @@
+{
+    "guide_cuir_finitions.pdf": {
+        "secteur_id": 1,
+        "metier_id": 1,
+        "categorie": "finition",
+        "type_document": "fiche_technique",
+        "niveau_expertise": "avance"
+    },
+    "dtu_maconnerie_fondations.pdf": {
+        "secteur_id": 1,
+        "metier_id": 1,
+        "categorie": "gros_oeuvre",
+        "type_document": "norme_officielle",
+        "niveau_expertise": "intermediaire"
+    },
+    "normes_cablage_electrique.pdf": {
+        "secteur_id": 1,
+        "metier_id": 2,
+        "categorie": "installation",
+        "type_document": "norme_officielle",
+        "niveau_expertise": "debutant"
+    },
+    "financement_imf_artisans.pdf": {
+        "secteur_id": 1,
+        "metier_id": 1,
+        "categorie": "gestion_finance",
+        "type_document": "guide_pratique",
+        "niveau_expertise": "debutant"
+    }
+}

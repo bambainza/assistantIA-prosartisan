@@ -736,6 +736,8 @@ async function sendMessage() {
             <button class="action-icon-btn" onclick="copyMessageText('${escapedResponse}', this)">📋 Copier</button>
             <button class="action-icon-btn speak-btn" onclick="toggleSpeakMessage('${escapedResponse}', this)">🔊 Écouter</button>
             <button class="action-icon-btn" onclick="regenerateLastResponse()">🔄 Régénérer</button>
+            <button class="action-icon-btn feedback-btn" onclick="sendAssistantFeedback(1, '${assistantBubbleId}', this)" title="Réponse utile">👍 Utile</button>
+            <button class="action-icon-btn feedback-btn" onclick="sendAssistantFeedback(-1, '${assistantBubbleId}', this)" title="Réponse imprécise">👎 Inexact</button>
         `;
         bubble.querySelector('.msg-content').appendChild(actionsDiv);
         scrollToBottom();
@@ -770,11 +772,14 @@ function appendMessageBubble(role, content, imageSrc = null, sources = null) {
     let sourcesHtml = '';
     if (role === 'assistant') {
         const escapedContent = content.replace(/'/g, "\\'").replace(/"/g, '&quot;').replace(/\n/g, '\\n');
+        const bubbleMsgId = 'history_' + Math.random().toString(36).substring(2, 9);
         actionsHtml = `
             <div class="msg-actions">
                 <button class="action-icon-btn" onclick="copyMessageText('${escapedContent}', this)">📋 Copier</button>
                 <button class="action-icon-btn speak-btn" onclick="toggleSpeakMessage('${escapedContent}', this)">🔊 Écouter</button>
                 <button class="action-icon-btn" onclick="regenerateLastResponse()">🔄 Régénérer</button>
+                <button class="action-icon-btn feedback-btn" onclick="sendAssistantFeedback(1, '${bubbleMsgId}', this)" title="Réponse utile">👍 Utile</button>
+                <button class="action-icon-btn feedback-btn" onclick="sendAssistantFeedback(-1, '${bubbleMsgId}', this)" title="Réponse imprécise">👎 Inexact</button>
             </div>
         `;
         
@@ -809,6 +814,46 @@ function appendMessageBubble(role, content, imageSrc = null, sources = null) {
     `;
 
     messagesStream.appendChild(bubble);
+}
+
+// Envoyer un feedback sur une réponse (pouce haut / pouce bas)
+async function sendAssistantFeedback(rating, messageId, btn) {
+    try {
+        const payload = {
+            rating: rating,
+            message_id: messageId,
+            conversation_id: state.currentConversationId || null,
+        };
+        const headers = { 'Content-Type': 'application/json' };
+        if (state.isLoggedIn) {
+            const token = localStorage.getItem('prosartisan_token');
+            if (token) headers['Authorization'] = `Bearer ${token}`;
+        }
+        const res = await fetch('/api/chat/feedback', {
+            method: 'POST',
+            headers: headers,
+            body: JSON.stringify(payload)
+        });
+        if (res.ok) {
+            const parent = btn.parentElement;
+            if (parent) {
+                parent.querySelectorAll('.feedback-btn').forEach(b => {
+                    b.disabled = true;
+                    b.style.opacity = '0.5';
+                    b.style.cursor = 'default';
+                });
+            }
+            btn.style.opacity = '1';
+            btn.style.fontWeight = 'bold';
+            btn.style.color = rating === 1 ? '#4CAF50' : '#F44336';
+            showToast(rating === 1 ? 'Merci pour votre retour positif ! 👍' : 'Merci, nous allons améliorer cette réponse ! 🛠️');
+        } else {
+            showToast('⚠️ Impossible d\'enregistrer le feedback.');
+        }
+    } catch (e) {
+        console.error('Feedback error:', e);
+        showToast('⚠️ Erreur réseau lors de l\'envoi du feedback.');
+    }
 }
 
 // Format markdown elements using marked.js and highlight.js

@@ -29,3 +29,22 @@ class WebSocketMessage(BaseModel):
     chunk: str | None = None
     message: str | None = None
     action: str | None = None
+
+
+class FeedbackCreate(BaseModel):
+    """Schéma de création d'un feedback utilisateur (pouce haut/bas)."""
+
+    rating: int  # 1 ou -1
+    message_id: str | None = None
+    conversation_id: uuid.UUID | None = None
+    comment: str | None = None
+
+
+class FeedbackResponse(BaseModel):
+    """Schéma de réponse après enregistrement d'un feedback."""
+
+    id: uuid.UUID
+    status: str = "ok"
+    rating: int
+    message_id: str | None = None
+    conversation_id: uuid.UUID | None = None

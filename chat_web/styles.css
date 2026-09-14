@@ -620,6 +620,11 @@ h1, h2, h3, h4, h5, h6 {
     100% { transform: scale(1); box-shadow: 0 0 0 0 rgba(226, 160, 0, 0); }
 }
 
+.action-icon-btn.feedback-btn:hover {
+    border-color: var(--primary);
+    background-color: rgba(226, 160, 0, 0.1);
+}
+
 /* Chat Input Bar container */
 .chat-input-container {
     width: 100%;
