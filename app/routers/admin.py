@@ -718,6 +718,7 @@ async def toggle_package(
             "status": "success",
             "package_id": str(package_id),
             "est_actif": pkg.est_actif,
+            "is_active": pkg.est_actif,
             "message": f"Package '{pkg.nom}' {action_str} avec succès.",
         }
     except ValueError as err:

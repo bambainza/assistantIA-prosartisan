@@ -511,8 +511,8 @@ function renderPackagesList(packages) {
     }
 
     packages.forEach(pkg => {
-        const isActive = pkg.is_active;
-        const features = Array.isArray(pkg.features) ? pkg.features : [];
+        const isActive = (pkg.est_actif !== undefined) ? Boolean(pkg.est_actif) : (pkg.is_active !== undefined ? Boolean(pkg.is_active) : true);
+        const features = Array.isArray(pkg.fonctionnalites) ? pkg.fonctionnalites : (Array.isArray(pkg.features) ? pkg.features : []);
         const featuresHtml = features.map(f => `<li><i class="iconoir-check text-success me-1"></i>${f}</li>`).join('');
         
         let durationBadge = '';
@@ -843,7 +843,8 @@ async function openAssignPackageModal() {
     if (pkgSelect) {
         pkgSelect.innerHTML = '<option value="">-- Sélectionner une formule --</option>';
         allPackagesCache.forEach(p => {
-            const actifLabel = p.is_active ? '' : ' (inactif)';
+            const isAct = (p.est_actif !== undefined) ? Boolean(p.est_actif) : (p.is_active !== undefined ? Boolean(p.is_active) : true);
+            const actifLabel = isAct ? '' : ' (inactif)';
             pkgSelect.innerHTML += `<option value="${p.code}">${p.nom} - ${p.prix.toLocaleString()} F CFA${actifLabel}</option>`;
         });
     }
@@ -945,11 +946,12 @@ function openEditPackageModal(pkgId) {
     document.getElementById('package-edit-type').value = pkg.type_package;
     document.getElementById('package-edit-duration').value = pkg.duree_jours || '';
     document.getElementById('package-edit-quota').value = pkg.quota_requetes || '';
-    document.getElementById('package-edit-active').checked = pkg.is_active;
+    const isActive = (pkg.est_actif !== undefined) ? Boolean(pkg.est_actif) : (pkg.is_active !== undefined ? Boolean(pkg.is_active) : true);
+    document.getElementById('package-edit-active').checked = isActive;
     document.getElementById('package-edit-description').value = pkg.description || '';
     
-    const features = Array.isArray(pkg.features) ? pkg.features.join('\n') : '';
-    document.getElementById('package-edit-features').value = features;
+    const features = Array.isArray(pkg.fonctionnalites) ? pkg.fonctionnalites : (Array.isArray(pkg.features) ? pkg.features : []);
+    document.getElementById('package-edit-features').value = features.join('\n');
 
     if (!packageEditModalInstance) {
         const el = document.getElementById('modal-package-edit');
@@ -995,7 +997,9 @@ async function submitPackageForm() {
                 duree_jours: dureeJours,
                 quota_requetes: quota,
                 description: desc,
-                features,
+                fonctionnalites: features,
+                features: features,
+                est_actif: isActive,
                 is_active: isActive
             };
             const res = await adminFetch(`/api/admin/packages/${pkgId}`, {
@@ -1020,7 +1024,9 @@ async function submitPackageForm() {
                 duree_jours: dureeJours,
                 quota_requetes: quota,
                 description: desc,
-                features,
+                fonctionnalites: features,
+                features: features,
+                est_actif: isActive,
                 is_active: isActive
             };
             const res = await adminFetch('/api/admin/packages', {

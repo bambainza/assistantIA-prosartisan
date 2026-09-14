@@ -37,9 +37,17 @@ class PackageBase(BaseModel):
     auto_renouvelable: bool = Field(
         False, description="Renouvellement automatique par défaut"
     )
-    est_actif: bool = Field(True, description="Visible et souscriptible au catalogue")
+    model_config = ConfigDict(populate_by_name=True)
+
+    est_actif: bool = Field(
+        True,
+        alias="is_active",
+        description="Visible et souscriptible au catalogue",
+    )
     fonctionnalites: list[str] | None = Field(
-        default_factory=list, description="Liste des avantages inclus"
+        default_factory=list,
+        alias="features",
+        description="Liste des avantages inclus",
     )
 
 
@@ -50,6 +58,8 @@ class PackageCreate(PackageBase):
 class PackageUpdate(BaseModel):
     """Mise à jour partielle d'un package."""
 
+    model_config = ConfigDict(populate_by_name=True)
+
     nom: str | None = Field(None, min_length=2, max_length=100)
     description: str | None = None
     prix: int | None = Field(None, ge=0)
@@ -57,8 +67,8 @@ class PackageUpdate(BaseModel):
     duree_jours: int | None = Field(None, ge=1)
     quota_requetes: int | None = Field(None, ge=1)
     auto_renouvelable: bool | None = None
-    est_actif: bool | None = None
-    fonctionnalites: list[str] | None = None
+    est_actif: bool | None = Field(None, alias="is_active")
+    fonctionnalites: list[str] | None = Field(None, alias="features")
 
 
 class PackageResponse(PackageBase):
