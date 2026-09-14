@@ -22,6 +22,7 @@ from fastapi import (
     status,
 )
 from sqlalchemy import func, select
+from sqlalchemy.orm import selectinload
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.config import settings
@@ -416,7 +417,7 @@ async def toggle_document_status(
     else:
         new_status = not getattr(cfg, "is_active", True)
         cfg.is_active = new_status
-        cfg.updated_at = datetime.now(UTC)
+        cfg.updated_at = func.now()
 
     await db.commit()
 
@@ -434,7 +435,7 @@ async def get_metiers_list(
     db: AsyncSession = Depends(get_db),
 ) -> dict[str, Any]:
     """Retourne la liste des métiers et leur statut d'activation pour le chat."""
-    stmt = select(Metier).order_by(Metier.id)
+    stmt = select(Metier).options(selectinload(Metier.sous_metiers)).order_by(Metier.id)
     res = await db.execute(stmt)
     metiers = res.scalars().all()
     return {

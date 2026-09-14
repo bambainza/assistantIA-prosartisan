@@ -21,7 +21,7 @@ class Metier(Base):
 
     # Relations
     sous_metiers: Mapped[list["SousMetier"]] = relationship(
-        back_populates="metier", cascade="all, delete-orphan"
+        back_populates="metier", cascade="all, delete-orphan", lazy="selectin"
     )
 
 
