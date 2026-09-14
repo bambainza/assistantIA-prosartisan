@@ -37,13 +37,23 @@
                         <label for="admin-email" class="form-label text-muted fs-12">Adresse email</label>
                         <input type="email" class="form-control login-input" id="admin-email" placeholder="admin@prosartisan.ci" required>
                     </div>
-                    <div class="mb-4 text-start">
+                    <div class="mb-3 text-start">
                         <label for="admin-password" class="form-label text-muted fs-12">Mot de passe</label>
                         <input type="password" class="form-control login-input" id="admin-password" placeholder="••••••••" required>
                     </div>
-                    <button type="submit" class="btn btn-primary w-100 py-2 fw-semibold login-button" id="btn-login-submit">
+                    <div class="d-flex justify-content-between align-items-center mb-3">
+                        <span class="text-muted fs-12">Pré-remplissage rapide :</span>
+                        <button type="button" class="btn btn-sm btn-outline-info py-0 px-2 fs-11" onclick="fillDemoCredentials('admin123')">
+                            Remplir Démo
+                        </button>
+                    </div>
+                    <button type="submit" class="btn btn-primary w-100 py-2 fw-semibold login-button mb-3" id="btn-login-submit">
                         Se connecter
                     </button>
+                    <div class="p-2 rounded bg-dark border border-secondary text-start text-muted fs-11">
+                        <div><strong>Compte :</strong> <code>admin@prosartisan.ci</code></div>
+                        <div><strong>Mots de passe :</strong> <code>admin123</code> ou <code>dev_admin_password</code></div>
+                    </div>
                 </form>
             </div>
         </div>
@@ -162,6 +172,10 @@
                                         <small class="text-muted mb-0">ProsArtisan Super Admin</small>
                                     </div>
                                 </div>
+                                <div class="dropdown-divider my-0"></div>
+                                <a class="dropdown-item text-danger py-2" href="javascript:void(0);" onclick="logoutAdmin()">
+                                    <i class="iconoir-log-out me-2"></i> Déconnexion
+                                </a>
                             </div>
                         </li>
                     </ul>

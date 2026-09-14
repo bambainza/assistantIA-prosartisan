@@ -21,17 +21,23 @@ async function adminFetch(url, options = {}) {
     return res;
 }
 
-function logoutAdmin() {
+window.logoutAdmin = function() {
     localStorage.removeItem('prosartisan_admin_token');
     document.getElementById('login-container').classList.remove('d-none');
-}
+    window.location.reload();
+};
 
 document.addEventListener('DOMContentLoaded', () => {
+    if (window.location.search.includes('logout=1')) {
+        localStorage.removeItem('prosartisan_admin_token');
+        window.history.replaceState({}, document.title, window.location.pathname);
+    }
+
     initTabs();
     initLoginForm();
     initUploadForm();
     loadPromptInspector();
-    
+
     // Check if already authenticated
     const token = localStorage.getItem('prosartisan_admin_token');
     if (token) {
@@ -42,6 +48,16 @@ document.addEventListener('DOMContentLoaded', () => {
     }
 });
 
+// Helper pour pré-remplir les identifiants démo
+window.fillDemoCredentials = function(pwd = 'admin123') {
+    const emailInput = document.getElementById('admin-email');
+    const pwdInput = document.getElementById('admin-password');
+    if (emailInput) emailInput.value = 'admin@prosartisan.ci';
+    if (pwdInput) pwdInput.value = pwd;
+    const errMsg = document.getElementById('login-error-msg');
+    if (errMsg) errMsg.classList.add('d-none');
+};
+
 // Login Form handler
 function initLoginForm() {
     const form = document.getElementById('admin-login-form');
@@ -49,8 +65,8 @@ function initLoginForm() {
 
     form.addEventListener('submit', async (e) => {
         e.preventDefault();
-        const email = document.getElementById('admin-email').value;
-        const password = document.getElementById('admin-password').value;
+        const email = (document.getElementById('admin-email').value || '').trim();
+        const password = (document.getElementById('admin-password').value || '').trim();
         const errMsg = document.getElementById('login-error-msg');
         const submitBtn = document.getElementById('btn-login-submit');
 
