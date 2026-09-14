@@ -61,6 +61,8 @@ document.addEventListener('DOMContentLoaded', () => {
         updateQuotaUI();
     }
 
+    loadActualitesBanner();
+
     // Auto-expand textarea input
     chatInput.addEventListener('input', () => {
         chatInput.style.height = 'auto';
@@ -778,6 +780,8 @@ function appendMessageBubble(role, content, imageSrc = null, sources = null) {
                 <button class="action-icon-btn" onclick="copyMessageText('${escapedContent}', this)">📋 Copier</button>
                 <button class="action-icon-btn speak-btn" onclick="toggleSpeakMessage('${escapedContent}', this)">🔊 Écouter</button>
                 <button class="action-icon-btn" onclick="regenerateLastResponse()">🔄 Régénérer</button>
+                <button class="action-icon-btn" onclick="exportMessageAsPdf('${escapedContent}')" title="Exporter en PDF (impression navigateur)">🖨️ Exporter</button>
+                <button class="action-icon-btn" onclick="shareMessage('${escapedContent}')" title="Partager">📤 Partager</button>
                 <button class="action-icon-btn feedback-btn" onclick="sendAssistantFeedback(1, '${bubbleMsgId}', this)" title="Réponse utile">👍 Utile</button>
                 <button class="action-icon-btn feedback-btn" onclick="sendAssistantFeedback(-1, '${bubbleMsgId}', this)" title="Réponse imprécise">👎 Inexact</button>
             </div>
@@ -937,6 +941,55 @@ async function copyMessageText(text, btn) {
     } catch (err) {
         showToast("Échec de la copie.");
     }
+}
+
+// Export d'une réponse en PDF via l'impression navigateur (pas de dépendance
+// externe : l'artisan choisit "Enregistrer en PDF" dans la boîte de dialogue
+// d'impression, disponible nativement sur desktop comme sur mobile).
+function exportMessageAsPdf(text) {
+    const printWindow = window.open('', '_blank');
+    if (!printWindow) {
+        showToast("Autorisez les pop-ups pour exporter en PDF.");
+        return;
+    }
+    const safeHtml = formatMarkdownText(text);
+    printWindow.document.write(`
+        <!DOCTYPE html>
+        <html lang="fr">
+        <head>
+            <meta charset="UTF-8">
+            <title>Fiche technique ProsArtisan IA</title>
+            <style>
+                body { font-family: Arial, sans-serif; line-height: 1.5; padding: 24px; color: #1a1a1a; }
+                h1 { font-size: 18px; border-bottom: 2px solid #FF9800; padding-bottom: 8px; }
+                pre { background: #f5f5f5; padding: 10px; border-radius: 6px; overflow-x: auto; }
+                code { font-family: monospace; }
+            </style>
+        </head>
+        <body>
+            <h1>ProsArtisan IA — Fiche technique</h1>
+            <div>${safeHtml}</div>
+        </body>
+        </html>
+    `);
+    printWindow.document.close();
+    printWindow.onload = () => printWindow.print();
+}
+
+// Partage d'une réponse : Web Share API native si disponible (mobile),
+// repli sur un lien WhatsApp pré-rempli sinon.
+async function shareMessage(text) {
+    const shareText = `ProsArtisan IA — ${text}`.slice(0, 1000);
+    if (navigator.share) {
+        try {
+            await navigator.share({ title: 'ProsArtisan IA', text: shareText });
+            return;
+        } catch (_) {
+            // Partage annulé par l'utilisateur ou API indisponible : repli WhatsApp.
+        }
+    }
+    const waUrl = `https://wa.me/?text=${encodeURIComponent(shareText)}`;
+    window.open(waUrl, '_blank', 'noopener,noreferrer');
 }
 
 // Global Audio Player for TTS
@@ -1240,8 +1293,156 @@ function showToast(message) {
     
     toastText.textContent = message;
     toast.classList.remove('hidden');
-    
+
     setTimeout(() => {
         toast.classList.add('hidden');
     }, 3000);
+}
+
+// ==========================================================================
+// Bandeau Actualités (annonces/conseils publiés par l'équipe)
+// ==========================================================================
+
+async function loadActualitesBanner() {
+    try {
+        const headers = {};
+        if (state.isLoggedIn) {
+            const token = localStorage.getItem('prosartisan_token');
+            if (token) headers['Authorization'] = `Bearer ${token}`;
+        }
+        const res = await fetch('/api/actualites', { headers });
+        if (!res.ok) return;
+        const actualites = await res.json();
+        if (!actualites || actualites.length === 0) return;
+
+        const latest = actualites[0];
+        if (sessionStorage.getItem(`prosartisan_actu_dismissed_${latest.id}`)) return;
+
+        const banner = document.getElementById('actualites-banner');
+        const bannerText = document.getElementById('actualites-banner-text');
+        if (!banner || !bannerText) return;
+
+        bannerText.textContent = `📣 ${latest.titre}`;
+        banner.dataset.actualiteId = latest.id;
+        banner.classList.remove('hidden');
+    } catch (e) {
+        // Silencieux : le bandeau est un plus, jamais bloquant pour le chat.
+    }
+}
+
+// ==========================================================================
+// Web Push (abonnement navigateur, protocole VAPID)
+// ==========================================================================
+
+function urlBase64ToUint8Array(base64String) {
+    const padding = '='.repeat((4 - (base64String.length % 4)) % 4);
+    const base64 = (base64String + padding).replace(/-/g, '+').replace(/_/g, '/');
+    const rawData = atob(base64);
+    return Uint8Array.from([...rawData].map((c) => c.charCodeAt(0)));
+}
+
+async function toggleWebPushSubscription() {
+    if (!('serviceWorker' in navigator) || !('PushManager' in window)) {
+        showToast("Les notifications push ne sont pas supportées par ce navigateur.");
+        return;
+    }
+    if (!state.isLoggedIn) {
+        showToast("Connectez-vous pour activer les notifications.");
+        openLoginModal();
+        return;
+    }
+
+    try {
+        const registration = await navigator.serviceWorker.ready;
+        const existing = await registration.pushManager.getSubscription();
+
+        if (existing) {
+            await unsubscribeWebPush(existing);
+            return;
+        }
+
+        const permission = await Notification.requestPermission();
+        if (permission !== 'granted') {
+            showToast("Autorisation refusée pour les notifications.");
+            return;
+        }
+
+        const keyRes = await fetch('/api/notifications/vapid-public-key');
+        const { public_key } = await keyRes.json();
+
+        const subscription = await registration.pushManager.subscribe({
+            userVisibleOnly: true,
+            applicationServerKey: urlBase64ToUint8Array(public_key),
+        });
+
+        const token = localStorage.getItem('prosartisan_token');
+        await fetch('/api/notifications/web-push/subscribe', {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+                ...(token ? { Authorization: `Bearer ${token}` } : {}),
+            },
+            body: JSON.stringify(subscription.toJSON()),
+        });
+
+        updatePushNotifButtonState(true);
+        showToast("Notifications activées !");
+    } catch (e) {
+        console.error('Web Push subscribe error:', e);
+        showToast("Impossible d'activer les notifications.");
+    }
+}
+
+async function unsubscribeWebPush(subscription) {
+    try {
+        const endpoint = subscription.endpoint;
+        await subscription.unsubscribe();
+        const token = localStorage.getItem('prosartisan_token');
+        await fetch('/api/notifications/web-push/unsubscribe', {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+                ...(token ? { Authorization: `Bearer ${token}` } : {}),
+            },
+            body: JSON.stringify({ endpoint }),
+        });
+        updatePushNotifButtonState(false);
+        showToast("Notifications désactivées.");
+    } catch (e) {
+        console.error('Web Push unsubscribe error:', e);
+    }
+}
+
+function updatePushNotifButtonState(active) {
+    const btn = document.getElementById('push-notif-btn');
+    if (!btn) return;
+    btn.title = active ? "Désactiver les notifications" : "Activer les notifications";
+    btn.setAttribute('aria-label', btn.title);
+    btn.classList.toggle('active-push', active);
+}
+
+async function initWebPushButtonState() {
+    if (!('serviceWorker' in navigator) || !('PushManager' in window)) return;
+    try {
+        const registration = await navigator.serviceWorker.ready;
+        const existing = await registration.pushManager.getSubscription();
+        updatePushNotifButtonState(!!existing);
+    } catch (_) {
+        /* Pas grave : le bouton reste dans son état par défaut. */
+    }
+}
+
+if ('serviceWorker' in navigator) {
+    window.addEventListener('load', () => {
+        setTimeout(initWebPushButtonState, 1500);
+    });
+}
+
+function dismissActualitesBanner() {
+    const banner = document.getElementById('actualites-banner');
+    if (!banner) return;
+    if (banner.dataset.actualiteId) {
+        sessionStorage.setItem(`prosartisan_actu_dismissed_${banner.dataset.actualiteId}`, '1');
+    }
+    banner.classList.add('hidden');
 }

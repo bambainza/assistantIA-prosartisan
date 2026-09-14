@@ -15,9 +15,15 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.db.session import get_db
 from app.middleware.auth import get_current_user_id
 from app.schemas.payment import PaymentInitRequest, PaymentInitResponse, WebhookPayload
+from app.services.cache_service import cache_service
 from app.services.payment_service import TARIFS_PASS, payment_service
 
 router = APIRouter(prefix="/api/payment", tags=["Paiement Mobile Money"])
+
+# Compteur "glissant" (30 jours) des webhooks rejetés pour signature invalide,
+# exposé au dashboard sécurité admin (voir app.routers.admin.get_security_stats).
+_WEBHOOK_REJECTED_COUNTER_KEY = "prosartisan:security:webhook_rejected_total"
+_SECURITY_COUNTER_TTL_SECONDS = 30 * 86400
 
 
 @router.get("/tarifs")
@@ -63,6 +69,9 @@ async def handle_webhook(
     # La signature HMAC est obligatoire : un webhook non signé (ou mal signé)
     # est rejeté pour empêcher tout déblocage frauduleux de Pass premium.
     if not payment_service.verify_webhook_signature(raw_body, x_signature):
+        await cache_service.increment(
+            _WEBHOOK_REJECTED_COUNTER_KEY, _SECURITY_COUNTER_TTL_SECONDS
+        )
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail="Signature HMAC manquante ou invalide",

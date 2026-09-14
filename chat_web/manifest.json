@@ -1,0 +1,18 @@
+{
+  "name": "ProsArtisan IA Expert",
+  "short_name": "ProsArtisan",
+  "description": "Assistant IA conversationnel pour artisans du BTP et métiers d'art en Côte d'Ivoire.",
+  "start_url": "/chat/",
+  "scope": "/chat/",
+  "display": "standalone",
+  "background_color": "#0f0f17",
+  "theme_color": "#0f0f17",
+  "lang": "fr",
+  "icons": [
+    {
+      "src": "/admin/assets/images/favicon.ico",
+      "sizes": "48x48",
+      "type": "image/x-icon"
+    }
+  ]
+}

@@ -1081,6 +1081,10 @@ h1, h2, h3, h4, h5, h6 {
     transition: background 0.2s;
 }
 
+.theme-toggle-btn.active-push {
+    color: var(--primary);
+}
+
 #auth-buttons-header {
     display: flex;
     gap: 10px;
@@ -1127,4 +1131,33 @@ h1, h2, h3, h4, h5, h6 {
     color: var(--primary);
     text-decoration: none;
     font-weight: 600;
+}
+
+/* Bandeau Actualités */
+.actualites-banner {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 12px;
+    background: var(--primary-light);
+    border: 1px solid var(--primary);
+    color: var(--text-main);
+    border-radius: 10px;
+    padding: 10px 16px;
+    margin: 12px 16px 0;
+    font-size: 13.5px;
+}
+
+.actualites-banner-close {
+    background: none;
+    border: none;
+    color: var(--text-muted);
+    font-size: 18px;
+    line-height: 1;
+    cursor: pointer;
+    padding: 0 4px;
+}
+
+.actualites-banner-close:hover {
+    color: var(--text-main);
 }

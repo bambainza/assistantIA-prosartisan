@@ -4,6 +4,7 @@ import pytest
 from pydantic import ValidationError
 
 from app.config import Settings
+from app.main import docs_urls
 
 _CONFIG_PROD_FORTE = {
     "app_env": "production",
@@ -13,6 +14,7 @@ _CONFIG_PROD_FORTE = {
     "mobile_money_secret_key": "hmac-mobile-money-quarante-caracteres-xx",
     "db_password": "un-mot-de-passe-postgres-solide",
     "cors_allowed_origins": "https://app.prosartisan.ci",
+    "vapid_private_key": "propre-cle-vapid-generee-pour-la-production-xx",
 }
 
 
@@ -38,6 +40,22 @@ def test_prod_rejette_app_debug_actif() -> None:
         Settings(_env_file=None, **config)
 
 
+def test_prod_rejette_la_cle_vapid_de_dev() -> None:
+    config = {**_CONFIG_PROD_FORTE, "vapid_private_key": ""}
+    with pytest.raises(ValidationError, match="VAPID_PRIVATE_KEY"):
+        Settings(_env_file=None, **config)
+
+
 def test_prod_accepte_une_configuration_complete() -> None:
     settings = Settings(_env_file=None, **_CONFIG_PROD_FORTE)
     assert settings.is_production is True
+
+
+def test_docs_masques_en_production() -> None:
+    """Swagger UI/ReDoc/openapi.json doivent être désactivés en production."""
+    assert docs_urls(is_production=True) == (None, None, None)
+
+
+def test_docs_actifs_hors_production() -> None:
+    """Swagger UI/ReDoc restent accessibles en développement/test."""
+    assert docs_urls(is_production=False) == ("/docs", "/redoc", "/openapi.json")

@@ -14,6 +14,7 @@ _SECRETS_FAIBLES = {
     "placeholder_webhook_secret",
     "dev_secret_key_change_in_production",
     "dev_jwt_secret_change_in_production",
+    "BXOGEmSclzlZTkj7aufE7jUK2_-4XZvBW6GEFvR0X4E",  # clé VAPID de dev
     "",
 }
 
@@ -111,6 +112,23 @@ class Settings(BaseSettings):
     # ── Quotas Freemium ──
     max_questions_gratuites_par_jour: int = 5
 
+    # ── Notifications Push (Firebase Cloud Messaging — mobile, API HTTP v1) ──
+    # Chemin vers le fichier JSON du compte de service Firebase (Console Firebase
+    # > Paramètres du projet > Comptes de service > Générer une nouvelle clé
+    # privée). Jamais commité — voir .gitignore. Non configuré => le provider
+    # push est un no-op journalisé (voir app/services/notification_service.py).
+    fcm_service_account_path: str = ""
+
+    # ── Notifications Web Push (VAPID — chat_web) ──
+    # Paire de clés de développement générée localement (aucun compte tiers
+    # requis pour le Web Push, contrairement à FCM/Sentry). Fonctionnelle
+    # telle quelle en dev/test ; DOIT être régénérée en production (voir
+    # `_verifier_secrets_production` ci-dessous) — sinon tous les déploiements
+    # partageraient la même identité VAPID.
+    vapid_private_key: str = "BXOGEmSclzlZTkj7aufE7jUK2_-4XZvBW6GEFvR0X4E"
+    vapid_public_key: str = "BIKIhCN4RidtYT6C2gr5pwtkLw7cyeA3tf91OD19OjJzeWe5mX7o7FERIu62i8MesAoSTpyj8X8GMPnPTTt1Orw"
+    vapid_claims_email: str = "contact@prosartisan.ci"
+
     model_config = {"env_file": ".env", "env_file_encoding": "utf-8"}
 
     @property
@@ -132,6 +150,8 @@ class Settings(BaseSettings):
             erreurs.append("MOBILE_MONEY_SECRET_KEY")
         if self.db_password in _SECRETS_FAIBLES:
             erreurs.append("DB_PASSWORD")
+        if self.vapid_private_key in _SECRETS_FAIBLES:
+            erreurs.append("VAPID_PRIVATE_KEY")
         if self.cors_allowed_origins.strip() == "*":
             erreurs.append("CORS_ALLOWED_ORIGINS (le joker '*' est interdit)")
         if self.app_debug:

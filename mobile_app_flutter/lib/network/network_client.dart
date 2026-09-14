@@ -2,10 +2,20 @@ import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
 import 'package:flutter/foundation.dart';
+import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:dio/dio.dart';
 
 class NetworkClient {
+  // Le token JWT et l'email de session sont sensibles : ils sont stockés dans
+  // le Keychain (iOS) / Keystore (Android) via flutter_secure_storage, jamais
+  // dans SharedPreferences (fichier en clair, lisible sur un device
+  // rooté/jailbreaké). Seule l'URL du serveur (non sensible) reste dans
+  // SharedPreferences.
+  static const FlutterSecureStorage _secureStorage = FlutterSecureStorage();
+  static const String _kTokenKey = 'token';
+  static const String _kUserEmailKey = 'userEmail';
+
   String _baseUrl = 'https://assistantia-prosartisan.onrender.com';
   String? _token;
   String? _userEmail;
@@ -14,7 +24,7 @@ class NetworkClient {
   String get baseUrl => _baseUrl;
   set baseUrl(String url) {
     _baseUrl = url;
-    _saveSettings();
+    _saveBaseUrl();
   }
 
   String? get token => _token;
@@ -27,35 +37,42 @@ class NetworkClient {
   Future<void> _loadSettings() async {
     final prefs = await SharedPreferences.getInstance();
     _baseUrl = prefs.getString('baseUrl') ?? 'https://assistantia-prosartisan.onrender.com';
-    _token = prefs.getString('token');
-    _userEmail = prefs.getString('userEmail');
+    // Le stockage sécurisé n'est pas disponible partout (plateforme non
+    // supportée, tests sans plugin natif) : on dégrade en mode déconnecté
+    // plutôt que de faire planter le démarrage de l'app.
+    try {
+      _token = await _secureStorage.read(key: _kTokenKey);
+      _userEmail = await _secureStorage.read(key: _kUserEmailKey);
+    } catch (_) {
+      _token = null;
+      _userEmail = null;
+    }
   }
 
-  Future<void> _saveSettings() async {
+  Future<void> _saveBaseUrl() async {
     final prefs = await SharedPreferences.getInstance();
     await prefs.setString('baseUrl', _baseUrl);
-    if (_token != null) {
-      await prefs.setString('token', _token!);
-    } else {
-      await prefs.remove('token');
-    }
-    if (_userEmail != null) {
-      await prefs.setString('userEmail', _userEmail!);
-    } else {
-      await prefs.remove('userEmail');
-    }
   }
 
   Future<void> saveSession(String token, String email) async {
     _token = token;
     _userEmail = email;
-    await _saveSettings();
+    try {
+      await _secureStorage.write(key: _kTokenKey, value: token);
+      await _secureStorage.write(key: _kUserEmailKey, value: email);
+    } catch (_) {
+      // Session conservée en mémoire pour la durée du process même si la
+      // persistance sécurisée échoue (voir _loadSettings).
+    }
   }
 
   Future<void> clearSession() async {
     _token = null;
     _userEmail = null;
-    await _saveSettings();
+    try {
+      await _secureStorage.delete(key: _kTokenKey);
+      await _secureStorage.delete(key: _kUserEmailKey);
+    } catch (_) {}
   }
 
   // URL du serveur de production par défaut
@@ -408,6 +425,22 @@ class NetworkClient {
       } finally {
         client.close();
       }
+    }
+  }
+
+  // --- Notifications Push (enregistrement du device token FCM) ---
+  Future<bool> registerDevice(String fcmToken) async {
+    try {
+      final response = await _dio.post(
+        '$_baseUrl/api/notifications/register-device',
+        data: {'fcm_token': fcmToken},
+        options: Options(
+          headers: _token != null ? {'authorization': 'Bearer $_token'} : null,
+        ),
+      );
+      return response.statusCode == 204;
+    } catch (_) {
+      return false;
     }
   }
 

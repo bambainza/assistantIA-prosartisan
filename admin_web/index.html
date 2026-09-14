@@ -126,6 +126,18 @@
                                 <span>Journaux System</span>
                             </a>
                         </li>
+                        <li class="nav-item">
+                            <a class="nav-link nav-menu-item" href="javascript:void(0);" data-tab="tab-security">
+                                <i class="iconoir-shield-alert menu-icon"></i>
+                                <span>Sécurité (Rôles & Audit)</span>
+                            </a>
+                        </li>
+                        <li class="nav-item">
+                            <a class="nav-link nav-menu-item" href="javascript:void(0);" data-tab="tab-actualites">
+                                <i class="iconoir-megaphone menu-icon"></i>
+                                <span>Actualités & Notifications</span>
+                            </a>
+                        </li>
                     </ul>
                 </div>
             </div>
@@ -655,6 +667,168 @@
                         <div class="card-body">
                             <div class="logs-console" id="logs-console">
                                 <!-- Injected via JS -->
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Tab: Sécurité (RBAC & Journal d'audit) -->
+                <div id="tab-security" class="tab-page">
+                    <div class="row mt-4">
+                        <div class="col-md-6 col-lg-3 mb-3">
+                            <div class="card report-card">
+                                <div class="card-body">
+                                    <p class="text-muted mb-0 fw-semibold">Actions admin (24h)</p>
+                                    <h3 class="my-1 fs-20" id="sec-kpi-actions-24h">0</h3>
+                                </div>
+                            </div>
+                        </div>
+                        <div class="col-md-6 col-lg-3 mb-3">
+                            <div class="card report-card">
+                                <div class="card-body">
+                                    <p class="text-muted mb-0 fw-semibold">Connexions échouées (30j)</p>
+                                    <h3 class="my-1 fs-20" id="sec-kpi-login-failed">0</h3>
+                                </div>
+                            </div>
+                        </div>
+                        <div class="col-md-6 col-lg-3 mb-3">
+                            <div class="card report-card">
+                                <div class="card-body">
+                                    <p class="text-muted mb-0 fw-semibold">Webhooks rejetés (30j)</p>
+                                    <h3 class="my-1 fs-20" id="sec-kpi-webhooks-rejected">0</h3>
+                                </div>
+                            </div>
+                        </div>
+                        <div class="col-md-6 col-lg-3 mb-3">
+                            <div class="card report-card">
+                                <div class="card-body">
+                                    <p class="text-muted mb-0 fw-semibold">Tokens révoqués (30j)</p>
+                                    <h3 class="my-1 fs-20" id="sec-kpi-tokens-revoked">0</h3>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                    <div class="row">
+                        <div class="col-lg-5 mb-4">
+                            <div class="card">
+                                <div class="card-header">
+                                    <h4 class="card-title mb-0">Rôles RBAC</h4>
+                                    <small class="text-muted">Un admin sans rôle assigné garde l'accès complet historique.</small>
+                                </div>
+                                <div class="card-body">
+                                    <div id="roles-list" class="mb-3">
+                                        <!-- Injected via JS -->
+                                    </div>
+                                    <hr>
+                                    <h6 class="fw-semibold mb-2">Assigner un rôle à un compte admin</h6>
+                                    <div class="mb-2">
+                                        <label for="role-assign-user-id" class="form-label">ID de l'administrateur cible (UUID)</label>
+                                        <input type="text" id="role-assign-user-id" class="form-control" placeholder="ex: 3fa85f64-5717-4562-b3fc-2c963f66afa6">
+                                    </div>
+                                    <div class="mb-2">
+                                        <label for="role-assign-select" class="form-label">Rôle à assigner</label>
+                                        <select id="role-assign-select" class="form-select">
+                                            <option value="">-- Retirer le rôle (accès complet hérité) --</option>
+                                        </select>
+                                    </div>
+                                    <button type="button" class="btn btn-primary btn-sm" onclick="submitAssignRole()">
+                                        <i class="iconoir-check me-1"></i>Assigner
+                                    </button>
+                                    <div id="role-assign-feedback" class="mt-2 small"></div>
+                                </div>
+                            </div>
+                        </div>
+                        <div class="col-lg-7 mb-4">
+                            <div class="card">
+                                <div class="card-header d-flex justify-content-between align-items-center">
+                                    <h4 class="card-title mb-0">Journal d'audit</h4>
+                                    <button class="btn btn-sm btn-outline-primary" onclick="loadSecurityTab()" title="Actualiser" aria-label="Actualiser le journal d'audit">
+                                        <i class="iconoir-refresh me-1"></i>Actualiser
+                                    </button>
+                                </div>
+                                <div class="card-body p-0">
+                                    <div class="table-responsive">
+                                        <table class="table table-hover mb-0">
+                                            <thead>
+                                                <tr>
+                                                    <th>Date</th>
+                                                    <th>Acteur</th>
+                                                    <th>Action</th>
+                                                    <th>Ressource</th>
+                                                </tr>
+                                            </thead>
+                                            <tbody id="audit-log-tbody">
+                                                <!-- Injected via JS -->
+                                            </tbody>
+                                        </table>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Tab: Actualités & Centre de notifications -->
+                <div id="tab-actualites" class="tab-page">
+                    <div class="row mt-4">
+                        <div class="col-lg-7 mb-4">
+                            <div class="card">
+                                <div class="card-header d-flex justify-content-between align-items-center">
+                                    <h4 class="card-title mb-0">Actualités</h4>
+                                    <button class="btn btn-sm btn-primary" onclick="openCreateActualiteForm()">
+                                        <i class="iconoir-plus me-1"></i>Nouvelle actualité
+                                    </button>
+                                </div>
+                                <div class="card-body">
+                                    <div id="actualite-form" class="border rounded p-3 mb-3 d-none">
+                                        <div class="mb-2">
+                                            <label for="actu-titre" class="form-label">Titre</label>
+                                            <input type="text" id="actu-titre" class="form-control" placeholder="Titre de l'actualité">
+                                        </div>
+                                        <div class="mb-2">
+                                            <label for="actu-contenu" class="form-label">Contenu</label>
+                                            <textarea id="actu-contenu" class="form-control" rows="3" placeholder="Contenu..."></textarea>
+                                        </div>
+                                        <div class="mb-2">
+                                            <label for="actu-metier" class="form-label">Métier ciblé (optionnel)</label>
+                                            <input type="number" id="actu-metier" class="form-control" placeholder="Vide = tous les métiers">
+                                        </div>
+                                        <button type="button" class="btn btn-primary btn-sm" onclick="submitCreateActualite()">
+                                            <i class="iconoir-check me-1"></i>Créer (brouillon)
+                                        </button>
+                                        <button type="button" class="btn btn-light btn-sm" onclick="closeCreateActualiteForm()">Annuler</button>
+                                    </div>
+                                    <div id="actualites-list"><!-- Injected via JS --></div>
+                                </div>
+                            </div>
+                        </div>
+                        <div class="col-lg-5 mb-4">
+                            <div class="card">
+                                <div class="card-header">
+                                    <h4 class="card-title mb-0">Centre de notifications</h4>
+                                    <small class="text-muted">Composer et diffuser une notification in-app.</small>
+                                </div>
+                                <div class="card-body">
+                                    <div class="mb-2">
+                                        <label for="notif-title" class="form-label">Titre</label>
+                                        <input type="text" id="notif-title" class="form-control" placeholder="Ex: Nouvelle formule disponible">
+                                    </div>
+                                    <div class="mb-2">
+                                        <label for="notif-body" class="form-label">Message</label>
+                                        <textarea id="notif-body" class="form-control" rows="3" placeholder="Contenu de la notification..."></textarea>
+                                    </div>
+                                    <div class="mb-2">
+                                        <label for="notif-metier" class="form-label">Métier ciblé (optionnel)</label>
+                                        <input type="number" id="notif-metier" class="form-control" placeholder="Vide = tous les artisans">
+                                    </div>
+                                    <button type="button" class="btn btn-primary btn-sm" onclick="submitBroadcastNotification()">
+                                        <i class="iconoir-send me-1"></i>Diffuser
+                                    </button>
+                                    <div id="notif-broadcast-feedback" class="mt-2 small"></div>
+                                    <hr>
+                                    <h6 class="fw-semibold mb-2">Suggestions (conversations mal notées)</h6>
+                                    <div id="actualites-suggestions" class="small text-muted"><!-- Injected via JS --></div>
+                                </div>
                             </div>
                         </div>
                     </div>

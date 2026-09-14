@@ -3,18 +3,61 @@
 import logging
 
 from sqlalchemy import select, text
+from sqlalchemy.orm import selectinload
 
 from app.config import settings
 from app.db.session import async_session, check_database_connection, engine
 from app.models.base import Base
 from app.models.metier import Metier, SousMetier
 from app.models.package import Package
+from app.models.role import Permission, Role
 from app.models.user import User
 
 logger = logging.getLogger(__name__)
 
 # Mot de passe admin utilisé uniquement hors production quand aucun n'est fourni.
 _DEV_ADMIN_PASSWORD = "dev_admin_password"
+
+# Catalogue de départ des permissions granulaires du back-office (RBAC).
+_PERMISSIONS_CATALOG: list[tuple[str, str]] = [
+    ("packages.read", "Consulter le catalogue de packages"),
+    ("packages.write", "Créer, modifier, activer/désactiver un package"),
+    ("subscriptions.write", "Assigner, prolonger ou résilier un abonnement"),
+    ("users.read", "Consulter la liste des artisans"),
+    ("users.grant_pass", "Attribuer manuellement un Pass à un artisan"),
+    ("documents.write", "Ingérer un document technique"),
+    ("documents.delete", "Supprimer un document de la base de connaissances"),
+    ("transactions.read", "Consulter le journal des transactions Mobile Money"),
+    ("logs.read", "Consulter les journaux système"),
+    ("roles.read", "Consulter les rôles et permissions"),
+    ("roles.write", "Assigner un rôle RBAC à un administrateur"),
+    ("audit.read", "Consulter le journal d'audit"),
+    ("actualites.read", "Consulter les actualités (y compris brouillons)"),
+    ("actualites.write", "Créer, modifier, publier ou supprimer une actualité"),
+    ("notifications.send", "Composer et diffuser une notification aux artisans"),
+]
+
+# Rôles pré-configurés et les codes de permission qui leur sont accordés.
+_ROLES_CATALOG: dict[str, tuple[str, list[str]]] = {
+    "super_admin": (
+        "Super Administrateur",
+        [code for code, _ in _PERMISSIONS_CATALOG],
+    ),
+    "support": (
+        "Support Client",
+        ["packages.read", "subscriptions.write", "users.read", "users.grant_pass"],
+    ),
+    "moderateur_contenu": (
+        "Modérateur de Contenu",
+        [
+            "documents.write",
+            "documents.delete",
+            "logs.read",
+            "actualites.read",
+            "actualites.write",
+        ],
+    ),
+}
 
 
 async def seed_data() -> None:
@@ -335,6 +378,35 @@ async def seed_data() -> None:
                 else:
                     existing_sm.nom = sm["nom"]
                     existing_sm.metier_id = metier.id
+        await session.commit()
+
+        # 1bis. Grainage des permissions et rôles RBAC (idempotent par code)
+        permission_by_code: dict[str, Permission] = {}
+        for code, description in _PERMISSIONS_CATALOG:
+            perm_stmt = select(Permission).where(Permission.code == code)
+            existing_perm = (await session.execute(perm_stmt)).scalar_one_or_none()
+            if existing_perm is None:
+                existing_perm = Permission(code=code, description=description)
+                session.add(existing_perm)
+                await session.flush()
+            permission_by_code[code] = existing_perm
+
+        for role_code, (label, perm_codes) in _ROLES_CATALOG.items():
+            role_stmt = (
+                select(Role)
+                .options(selectinload(Role.permissions))
+                .where(Role.code == role_code)
+            )
+            existing_role = (await session.execute(role_stmt)).scalar_one_or_none()
+            if existing_role is None:
+                existing_role = Role(code=role_code, label=label)
+                session.add(existing_role)
+                await session.flush()
+            existing_role.label = label
+            current_perm_codes = {p.code for p in existing_role.permissions}
+            for perm_code in perm_codes:
+                if perm_code not in current_perm_codes:
+                    existing_role.permissions.append(permission_by_code[perm_code])
         await session.commit()
 
         # 2. Grainage de l'administrateur par défaut

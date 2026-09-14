@@ -6,6 +6,13 @@
 .env.*.local
 *.pem
 *.key
+secrets/
+# Credentials Firebase (compte de service backend, config native mobile) —
+# jamais versionnés, voir docs/PLAN_AMELIORATION.md (item 4.2).
+firebase-service-account*.json
+mobile_app_flutter/android/app/google-services.json
+mobile_app_flutter/ios/Runner/GoogleService-Info.plist
+mobile_app_flutter/lib/firebase_options.dart
 
 # =========================
 # PYTHON

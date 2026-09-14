@@ -297,3 +297,80 @@ async def test_refresh_rejette_un_token_invalide():
 
     assert response.status_code == 401
     assert "invalide ou expiré" in response.json()["detail"]
+
+
+@pytest.mark.asyncio
+async def test_logout_revoque_le_refresh_token():
+    """Régression sécurité : après /logout, le refresh token révoqué ne doit
+    plus jamais permettre de renouveler l'accès (sans ce garde-fou, un
+    attaquant en possession d'un refresh token volé pourrait continuer à
+    l'utiliser après que la victime se soit "déconnectée")."""
+    user_id = uuid.uuid4()
+    refresh_token = create_refresh_token(data={"sub": str(user_id)})
+    mock_user = User(id=user_id, email="logout@example.com", auth_provider="local")
+
+    async def custom_mock_db():
+        session = MagicMock()
+        session.execute = AsyncMock(
+            return_value=MagicMock(scalar_one_or_none=MagicMock(return_value=mock_user))
+        )
+        yield session
+
+    app.dependency_overrides[get_db] = custom_mock_db
+    try:
+        transport = ASGITransport(app=app)
+        async with AsyncClient(transport=transport, base_url="http://test") as client:
+            res_logout = await client.post(
+                "/api/auth/logout", json={"refresh_token": refresh_token}
+            )
+            assert res_logout.status_code == 204
+
+            res_refresh = await client.post(
+                "/api/auth/refresh", json={"refresh_token": refresh_token}
+            )
+        assert res_refresh.status_code == 401
+        assert "révoqué" in res_refresh.json()["detail"]
+    finally:
+        from tests.conftest import mock_get_db
+
+        app.dependency_overrides[get_db] = mock_get_db
+
+
+@pytest.mark.asyncio
+async def test_refresh_token_rotation_usage_unique():
+    """Un refresh token déjà utilisé une fois (rotation) ne peut pas resservir."""
+    user_id = uuid.uuid4()
+    refresh_token = create_refresh_token(data={"sub": str(user_id)})
+    mock_user = User(
+        id=user_id,
+        email="rotate@example.com",
+        auth_provider="local",
+        type_abonnement="FREE",
+    )
+
+    async def custom_mock_db():
+        session = MagicMock()
+        session.execute = AsyncMock(
+            return_value=MagicMock(scalar_one_or_none=MagicMock(return_value=mock_user))
+        )
+        yield session
+
+    app.dependency_overrides[get_db] = custom_mock_db
+    try:
+        transport = ASGITransport(app=app)
+        async with AsyncClient(transport=transport, base_url="http://test") as client:
+            res_first = await client.post(
+                "/api/auth/refresh", json={"refresh_token": refresh_token}
+            )
+            assert res_first.status_code == 200
+
+            # Rejouer le MÊME refresh token (déjà consommé) doit échouer.
+            res_replay = await client.post(
+                "/api/auth/refresh", json={"refresh_token": refresh_token}
+            )
+        assert res_replay.status_code == 401
+        assert "révoqué" in res_replay.json()["detail"]
+    finally:
+        from tests.conftest import mock_get_db
+
+        app.dependency_overrides[get_db] = mock_get_db

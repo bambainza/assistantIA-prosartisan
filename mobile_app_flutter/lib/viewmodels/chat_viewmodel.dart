@@ -1,19 +1,30 @@
 import 'dart:async';
 import 'dart:convert';
 import 'dart:typed_data';
+import 'package:connectivity_plus/connectivity_plus.dart';
 import 'package:flutter/material.dart';
 import 'package:image_picker/image_picker.dart';
 import '../network/network_client.dart';
 import '../services/audio_service.dart';
+import '../services/biometric_service.dart';
 import '../services/local_storage_service.dart';
+import '../services/offline_queue_service.dart';
 
-enum AppScreen { auth, main }
+enum AppScreen { auth, main, locked }
 
 class ChatViewModel extends ChangeNotifier {
   final NetworkClient client;
   final LocalStorageService localStorage = LocalStorageService();
   final AudioService audioService = AudioService();
+  final OfflineQueueService offlineQueue = OfflineQueueService();
+  final BiometricService biometricService = BiometricService();
   final ImagePicker _imagePicker = ImagePicker();
+  bool _biometricLockEnabled = false;
+  bool get biometricLockEnabled => _biometricLockEnabled;
+  StreamSubscription<List<ConnectivityResult>>? _connectivitySubscription;
+  bool _isFlushingQueue = false;
+
+  int get pendingOfflineCount => offlineQueue.pendingCount;
 
   // --- Écrans et Navigation ---
   AppScreen _currentScreen = AppScreen.auth;
@@ -92,19 +103,86 @@ class ChatViewModel extends ChangeNotifier {
     notifyListeners();
 
     await loadStarredSheets();
+    await offlineQueue.init();
 
     // Petit délai pour laisser SharedPreferences se charger dans client
     await Future.delayed(const Duration(milliseconds: 300));
-    
+
     // Attendre la détection automatique du serveur
     await autoDetectServer();
 
+    // Rejoue automatiquement les questions en file dès que le réseau revient.
+    _connectivitySubscription =
+        Connectivity().onConnectivityChanged.listen((results) {
+      final hasNetwork = results.any((r) => r != ConnectivityResult.none);
+      if (hasNetwork) {
+        flushOfflineQueue();
+      }
+    });
+
+    _biometricLockEnabled = await biometricService.isLockEnabled();
+
     _isAuthLoading = false;
     if (client.token != null && client.userEmail != null) {
-      _loadMainState(client.userEmail!);
+      if (_biometricLockEnabled) {
+        _currentScreen = AppScreen.locked;
+        notifyListeners();
+      } else {
+        _loadMainState(client.userEmail!);
+      }
     } else {
       _currentScreen = AppScreen.auth;
       notifyListeners();
+    }
+  }
+
+  /// Tente un déverrouillage biométrique ; révèle l'écran principal si réussi.
+  Future<bool> unlockWithBiometrics() async {
+    final success = await biometricService.authenticate();
+    if (success && client.userEmail != null) {
+      _loadMainState(client.userEmail!);
+    }
+    return success;
+  }
+
+  /// Active ou désactive le verrouillage biométrique (confirmation requise à l'activation).
+  Future<bool> toggleBiometricLock() async {
+    if (_biometricLockEnabled) {
+      _biometricLockEnabled = false;
+      await biometricService.setLockEnabled(false);
+      notifyListeners();
+      return true;
+    }
+
+    final supported = await biometricService.isDeviceSupported();
+    if (!supported) return false;
+
+    final confirmed = await biometricService.authenticate(
+      reason: 'Confirmez pour activer le verrouillage biométrique',
+    );
+    if (confirmed) {
+      _biometricLockEnabled = true;
+      await biometricService.setLockEnabled(true);
+      notifyListeners();
+    }
+    return confirmed;
+  }
+
+  /// Rejoue les questions mises en file d'attente hors-ligne, dans l'ordre.
+  /// S'arrête dès qu'une tentative échoue encore (pas d'acharnement en boucle).
+  Future<void> flushOfflineQueue() async {
+    if (_isFlushingQueue) return;
+    _isFlushingQueue = true;
+    try {
+      for (final entry in offlineQueue.getAll()) {
+        _activeConversationId = entry['conversationId'] as String?;
+        _activeMetierId = entry['metierId'] as int?;
+        await sendMessage(entry['question'] as String, isRetry: true);
+        if (_isOffline) break;
+        await offlineQueue.removeById(entry['id'] as String);
+      }
+    } finally {
+      _isFlushingQueue = false;
     }
   }
 
@@ -414,7 +492,7 @@ class ChatViewModel extends ChangeNotifier {
 
   // --- Envoi de message et SSE Streaming ---
 
-  Future<void> sendMessage(String question) async {
+  Future<void> sendMessage(String question, {bool isRetry = false}) async {
     if (_isStreaming || (question.trim().isEmpty && _attachedImageBytes == null)) return;
 
     audioService.stopSpeaking();
@@ -430,13 +508,17 @@ class ChatViewModel extends ChangeNotifier {
     // Réinitialiser la pièce jointe
     clearAttachedImage();
 
-    final userMsg = <String, dynamic>{
-      'id': DateTime.now().millisecondsSinceEpoch.toString(),
-      'role': 'user',
-      'content': question.trim(),
-      if (imageThumbnailBytes != null) 'image_bytes': imageThumbnailBytes,
-    };
-    _messages = [..._messages, userMsg];
+    // Une relecture depuis la file hors-ligne a déjà sa bulle affichée depuis
+    // la tentative initiale : ne pas la dupliquer dans le fil de discussion.
+    if (!isRetry) {
+      final userMsg = <String, dynamic>{
+        'id': DateTime.now().millisecondsSinceEpoch.toString(),
+        'role': 'user',
+        'content': question.trim(),
+        if (imageThumbnailBytes != null) 'image_bytes': imageThumbnailBytes,
+      };
+      _messages = [..._messages, userMsg];
+    }
     _isStreaming = true;
     _currentStreamText = '...';
     notifyListeners();
@@ -510,7 +592,17 @@ class ChatViewModel extends ChangeNotifier {
         _showPaywall = true;
       } else {
         _isOffline = true;
-        _chatError = "Réseau faible ou serveur injoignable : passage en mode hors-ligne";
+        if (!isRetry) {
+          await offlineQueue.enqueue(
+            question.trim(),
+            _activeMetierId,
+            _activeConversationId,
+          );
+          _chatError =
+              "Pas de réseau : la question a été mise en file d'attente et sera envoyée automatiquement dès la reconnexion.";
+        } else {
+          _chatError = "Réseau faible ou serveur injoignable : passage en mode hors-ligne";
+        }
       }
       notifyListeners();
     }
@@ -526,6 +618,7 @@ class ChatViewModel extends ChangeNotifier {
 
   @override
   void dispose() {
+    _connectivitySubscription?.cancel();
     audioService.dispose();
     super.dispose();
   }

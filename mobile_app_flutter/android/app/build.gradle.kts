@@ -6,7 +6,7 @@ plugins {
 }
 
 android {
-    namespace = "com.example.prosartisan"
+    namespace = "ci.prosartisan.app"
     compileSdk = flutter.compileSdkVersion
     ndkVersion = flutter.ndkVersion
 
@@ -20,8 +20,7 @@ android {
     }
 
     defaultConfig {
-        // TODO: Specify your own unique Application ID (https://developer.android.com/studio/build/application-id.html).
-        applicationId = "com.example.prosartisan"
+        applicationId = "ci.prosartisan.app"
         // You can update the following values to match your application needs.
         // For more information, see: https://flutter.dev/to/review-gradle-config.
         minSdk = flutter.minSdkVersion
@@ -41,4 +40,12 @@ android {
 
 flutter {
     source = "../.."
+}
+
+// Notifications push (FCM) : le plugin Google Services exige google-services.json
+// et échoue le build s'il est absent — on ne l'applique donc que s'il est présent,
+// pour que le projet reste compilable sans configuration Firebase (voir
+// docs/PLAN_AMELIORATION.md, item 4.2).
+if (file("google-services.json").exists()) {
+    apply(plugin = "com.google.gms.google-services")
 }

@@ -1,4 +1,4 @@
-package com.example.prosartisan
+package ci.prosartisan.app
 
 import io.flutter.embedding.android.FlutterActivity
 

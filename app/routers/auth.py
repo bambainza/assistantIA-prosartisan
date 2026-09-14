@@ -20,6 +20,8 @@ from app.middleware.auth import (
     decode_token,
     get_current_user_id,
     hash_password,
+    is_refresh_token_revoked,
+    revoke_refresh_token,
     verify_password,
 )
 from app.models.quota import QuotaUtilisateur
@@ -31,8 +33,17 @@ from app.schemas.auth import (
     RegisterRequest,
     RegisterResponse,
     TokenResponse,
+    TotpCodeRequest,
+    TotpSetupResponse,
     UserProfile,
 )
+from app.services.cache_service import cache_service
+from app.services.totp_service import totp_service
+
+# Compteur "glissant" (30 jours) des tentatives de connexion échouées, exposé
+# au dashboard sécurité admin (voir app.routers.admin.get_security_stats).
+_SECURITY_COUNTER_TTL_SECONDS = 30 * 86400
+_LOGIN_FAILED_COUNTER_KEY = "prosartisan:security:login_failed_total"
 
 router = APIRouter(prefix="/api/auth", tags=["Authentification"])
 
@@ -142,10 +153,31 @@ async def login(
         password_ok = True
 
     if not password_ok:
+        await cache_service.increment(
+            _LOGIN_FAILED_COUNTER_KEY, _SECURITY_COUNTER_TTL_SECONDS
+        )
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail="Identifiants incorrects.",
         )
+
+    if user.is_admin and user.totp_enabled:
+        if not payload.totp_code:
+            await cache_service.increment(
+                _LOGIN_FAILED_COUNTER_KEY, _SECURITY_COUNTER_TTL_SECONDS
+            )
+            raise HTTPException(
+                status_code=status.HTTP_401_UNAUTHORIZED,
+                detail="Code d'authentification à deux facteurs requis.",
+            )
+        if not totp_service.verify_code(user.totp_secret or "", payload.totp_code):
+            await cache_service.increment(
+                _LOGIN_FAILED_COUNTER_KEY, _SECURITY_COUNTER_TTL_SECONDS
+            )
+            raise HTTPException(
+                status_code=status.HTTP_401_UNAUTHORIZED,
+                detail="Code d'authentification à deux facteurs invalide.",
+            )
 
     access_token = create_access_token(data={"sub": str(user.id)})
     refresh_token = create_refresh_token(data={"sub": str(user.id)})
@@ -253,6 +285,12 @@ async def refresh(
             detail="Token de rafraîchissement requis.",
         )
 
+    if await is_refresh_token_revoked(decoded):
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Token de rafraîchissement révoqué (déconnexion effectuée).",
+        )
+
     user_id_str = decoded.get("sub")
     try:
         user_id = uuid.UUID(user_id_str) if user_id_str else None
@@ -275,6 +313,11 @@ async def refresh(
             detail="Utilisateur non trouvé.",
         )
 
+    # Rotation : l'ancien refresh token est révoqué dès qu'il a servi une fois,
+    # même s'il n'était pas encore expiré (usage unique — limite le rejeu en
+    # cas de vol du token).
+    await revoke_refresh_token(decoded)
+
     access_token = create_access_token(data={"sub": str(user.id)})
     refresh_token = create_refresh_token(data={"sub": str(user.id)})
 
@@ -284,6 +327,105 @@ async def refresh(
         "expires_in": settings.jwt_expiration_minutes * 60,
         "user": user,
     }
+
+
+@router.post("/logout", status_code=status.HTTP_204_NO_CONTENT, response_model=None)
+async def logout(payload: RefreshRequest) -> None:
+    """Révoque le refresh token fourni : il ne pourra plus servir à renouveler l'accès."""
+    try:
+        decoded = decode_token(payload.refresh_token)
+    except HTTPException:
+        # Un token déjà invalide/expiré n'a pas besoin d'être révoqué explicitement.
+        return
+    await revoke_refresh_token(decoded)
+    return
+
+
+@router.post("/totp/setup", response_model=TotpSetupResponse)
+async def totp_setup(
+    current_user_id: uuid.UUID = Depends(get_current_user_id),
+    db: AsyncSession = Depends(get_db),
+) -> Any:
+    """Génère un nouveau secret TOTP à provisionner (QR code côté client).
+
+    La 2FA n'est activée qu'après confirmation d'un code valide via
+    `/totp/enable` : générer un secret seul ne suffit pas à l'activer.
+    """
+    stmt = select(User).where(User.id == current_user_id)
+    res = await db.execute(stmt)
+    user = res.scalar_one_or_none()
+    if not user:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND, detail="Utilisateur introuvable."
+        )
+    if not user.is_admin:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="La 2FA est réservée aux comptes administrateur.",
+        )
+
+    secret = totp_service.generate_secret()
+    user.totp_secret = secret
+    user.totp_enabled = False
+    await db.commit()
+
+    return {
+        "secret": secret,
+        "otpauth_uri": totp_service.get_provisioning_uri(secret, user.email or ""),
+    }
+
+
+@router.post(
+    "/totp/enable", status_code=status.HTTP_204_NO_CONTENT, response_model=None
+)
+async def totp_enable(
+    payload: TotpCodeRequest,
+    current_user_id: uuid.UUID = Depends(get_current_user_id),
+    db: AsyncSession = Depends(get_db),
+) -> None:
+    """Confirme un code TOTP valide pour activer définitivement la 2FA."""
+    stmt = select(User).where(User.id == current_user_id)
+    res = await db.execute(stmt)
+    user = res.scalar_one_or_none()
+    if not user or not user.totp_secret:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Aucun secret TOTP en attente : lancez /totp/setup d'abord.",
+        )
+    if not totp_service.verify_code(user.totp_secret, payload.code):
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Code TOTP invalide.",
+        )
+    user.totp_enabled = True
+    await db.commit()
+
+
+@router.post(
+    "/totp/disable", status_code=status.HTTP_204_NO_CONTENT, response_model=None
+)
+async def totp_disable(
+    payload: TotpCodeRequest,
+    current_user_id: uuid.UUID = Depends(get_current_user_id),
+    db: AsyncSession = Depends(get_db),
+) -> None:
+    """Désactive la 2FA après confirmation d'un dernier code valide."""
+    stmt = select(User).where(User.id == current_user_id)
+    res = await db.execute(stmt)
+    user = res.scalar_one_or_none()
+    if not user or not user.totp_enabled:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="La 2FA n'est pas activée sur ce compte.",
+        )
+    if not totp_service.verify_code(user.totp_secret or "", payload.code):
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Code TOTP invalide.",
+        )
+    user.totp_enabled = False
+    user.totp_secret = None
+    await db.commit()
 
 
 @router.get("/me", response_model=UserProfile)

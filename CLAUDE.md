@@ -59,9 +59,9 @@ cd mobile_app_flutter && flutter pub get && flutter test && flutter analyze
 routes/api.py (implicite via routers FastAPI)
   → app/routers/          (chat, auth, payment, quota, conversation, admin, health)
       → app/schemas/       (validation Pydantic)
-      → app/services/      (logique métier : rag_service, payment_service, quota_service, cache_service, audio_service, chat_history_service)
-          → app/models/    (SQLAlchemy ORM async)
-      → app/middleware/    (auth JWT, rate_limiter Redis, logging)
+      → app/services/      (logique métier : rag_service, payment_service, quota_service, cache_service, audio_service, chat_history_service, audit_service)
+          → app/models/    (SQLAlchemy ORM async, dont role.py pour le RBAC et audit_log.py pour le journal d'audit)
+      → app/middleware/    (auth JWT + RBAC, rate_limiter Redis, logging, security_headers)
 ```
 
 Séparation stricte imposée : logique métier dans `app/services/`, jamais dans les routers.
@@ -72,12 +72,16 @@ Séparation stricte imposée : logique métier dans `app/services/`, jamais dans
 2. **Identité déduite du JWT, jamais du client** : aucun `user_id` n'est accepté depuis le corps/query/path d'une requête entrante — toujours `get_current_user_id` / `get_optional_user_id`. Mode non connecté → compte anonyme partagé documenté.
 3. **Isolation par propriétaire (anti-IDOR)** : toute ressource retrouvée par ID opaque (conversation, transaction, document) doit être filtrée par `WHERE user_id = ...`.
 4. **Webhooks Mobile Money** : signature `X-Signature` HMAC SHA-256 obligatoire ; absente ou invalide → `401` systématique, jamais optionnel.
-5. **Garde-fous de démarrage en production** (`APP_ENV=production`) : refus de démarrer si `APP_SECRET_KEY`, `JWT_SECRET_KEY`, `MOBILE_MONEY_SECRET_KEY`, `DB_PASSWORD` sont à leur valeur par défaut, si `CORS_ALLOWED_ORIGINS=*`, ou si `APP_DEBUG=true`.
+5. **Garde-fous de démarrage en production** (`APP_ENV=production`) : refus de démarrer si `APP_SECRET_KEY`, `JWT_SECRET_KEY`, `MOBILE_MONEY_SECRET_KEY`, `DB_PASSWORD`, `VAPID_PRIVATE_KEY` sont à leur valeur par défaut, si `CORS_ALLOWED_ORIGINS=*`, ou si `APP_DEBUG=true`.
 6. **Jamais de secrets en dur** — tout passe par `app.config.settings` / `.env`. Le compte admin seed exige `ADMIN_PASSWORD` en prod (pas de valeur par défaut).
 7. **État partagé entre workers** (quotas, rate-limit) → Redis obligatoire, jamais un attribut de classe Python.
 8. **Travaux longs hors requête HTTP** (ingestion, appel externe lourd) → `BackgroundTasks` + réponse `202 Accepted` immédiate.
 9. **Migrations Alembic obligatoires** pour toute évolution de modèle ORM déjà déployé — `Base.metadata.create_all` ne sert qu'au dev/tests.
 10. **Métadonnées d'ingestion obligatoires** : `metier_id`, `secteur_id`, `type_document`, `niveau_expertise` validées à l'ingestion, sinon document rejeté (jamais indexé silencieusement).
+11. **RBAC & journal d'audit** : toute route admin sensible protégée par une permission dédiée doit utiliser `require_permission(...)` (pas seulement `get_current_admin_user_id`), et toute mutation admin doit écrire une entrée via `audit_service.log_action(...)` avant son `commit()`. Un admin `is_admin=True` sans rôle assigné garde l'accès complet (compatibilité descendante) — ne jamais restreindre ce cas silencieusement.
+12. **2FA & refresh tokens** : un admin avec `totp_enabled=True` doit toujours fournir un code TOTP valide à la connexion. Les refresh tokens sont à usage unique (rotation via `jti` + liste noire) — `/auth/refresh` révoque l'ancien token à chaque renouvellement, `/auth/logout` permet une révocation explicite.
+13. **Notifications** : toujours passer par `notification_service.notify(...)` (écrit l'entrée in-app avant toute tentative de canal externe) — jamais d'appel direct à un provider externe (FCM...) depuis un router.
+14. **Diffusion de masse en tâche de fond** : toute diffusion vers potentiellement tous les artisans (composer de notifications, publication d'actualité) s'exécute via `BackgroundTasks` avec sa propre session DB — jamais dans la requête HTTP d'origine.
 
 ## Contexte marché
 

@@ -129,6 +129,12 @@ function initTabs() {
             if (targetTab === 'tab-packages') {
                 loadPackagesTab();
             }
+            if (targetTab === 'tab-security') {
+                loadSecurityTab();
+            }
+            if (targetTab === 'tab-actualites') {
+                loadActualitesTab();
+            }
         });
     });
 }
@@ -1047,3 +1053,334 @@ async function submitPackageForm() {
         alert('Erreur réseau');
     }
 }
+
+// =========================================================================
+// 8. MODULE RBAC (RÔLES) & JOURNAL D'AUDIT
+// =========================================================================
+
+let allRolesCache = [];
+
+async function loadSecurityTab() {
+    try {
+        const [rolesRes, auditRes, statsRes] = await Promise.all([
+            adminFetch('/api/admin/roles'),
+            adminFetch('/api/admin/audit-logs?limit=100'),
+            adminFetch('/api/admin/security-stats'),
+        ]);
+
+        if (statsRes.ok) {
+            const stats = await statsRes.json();
+            const setKpi = (id, val) => { const el = document.getElementById(id); if (el) el.textContent = (val || 0).toLocaleString(); };
+            setKpi('sec-kpi-actions-24h', stats.actions_admin_dernieres_24h);
+            setKpi('sec-kpi-login-failed', stats.tentatives_connexion_echouees_30j);
+            setKpi('sec-kpi-webhooks-rejected', stats.webhooks_rejetes_30j);
+            setKpi('sec-kpi-tokens-revoked', stats.tokens_revoques_30j);
+        }
+
+        if (rolesRes.ok) {
+            allRolesCache = await rolesRes.json();
+            renderRolesList(allRolesCache);
+            populateRoleAssignSelect(allRolesCache);
+        } else if (rolesRes.status === 403) {
+            const rolesList = document.getElementById('roles-list');
+            if (rolesList) {
+                rolesList.innerHTML = '<p class="text-muted mb-0">Votre rôle ne donne pas accès à la gestion des rôles.</p>';
+            }
+        }
+
+        if (auditRes.ok) {
+            const logs = await auditRes.json();
+            renderAuditLog(logs);
+        } else if (auditRes.status === 403) {
+            const tbody = document.getElementById('audit-log-tbody');
+            if (tbody) {
+                tbody.innerHTML = '<tr><td colspan="4" class="text-center text-muted py-3">Votre rôle ne donne pas accès au journal d\'audit.</td></tr>';
+            }
+        }
+    } catch (err) {
+        console.error('Erreur chargement onglet sécurité:', err);
+    }
+}
+
+function renderRolesList(roles) {
+    const container = document.getElementById('roles-list');
+    if (!container) return;
+
+    if (!roles || roles.length === 0) {
+        container.innerHTML = '<p class="text-muted mb-0">Aucun rôle configuré.</p>';
+        return;
+    }
+
+    container.innerHTML = roles.map(role => `
+        <div class="d-flex justify-content-between align-items-center border-bottom py-2">
+            <div>
+                <span class="fw-semibold">${role.label}</span>
+                <br><small class="text-muted font-monospace">${role.code}</small>
+            </div>
+            <span class="badge bg-primary-subtle text-primary">${role.permissions.length} permission(s)</span>
+        </div>
+    `).join('');
+}
+
+function populateRoleAssignSelect(roles) {
+    const select = document.getElementById('role-assign-select');
+    if (!select) return;
+    const placeholder = '<option value="">-- Retirer le rôle (accès complet hérité) --</option>';
+    select.innerHTML = placeholder + roles.map(r => `<option value="${r.code}">${r.label} (${r.code})</option>`).join('');
+}
+
+async function submitAssignRole() {
+    const userIdInput = document.getElementById('role-assign-user-id');
+    const select = document.getElementById('role-assign-select');
+    const feedback = document.getElementById('role-assign-feedback');
+    const userId = (userIdInput.value || '').trim();
+    const roleCode = select.value || null;
+
+    if (!userId) {
+        feedback.className = 'mt-2 small text-danger';
+        feedback.textContent = "Renseignez l'ID (UUID) de l'administrateur cible.";
+        return;
+    }
+
+    try {
+        const res = await adminFetch(`/api/admin/users/${userId}/role`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ role_code: roleCode }),
+        });
+        const data = await res.json().catch(() => ({}));
+        if (res.ok) {
+            feedback.className = 'mt-2 small text-success';
+            feedback.textContent = data.message || 'Rôle mis à jour avec succès.';
+            await loadSecurityTab();
+        } else {
+            feedback.className = 'mt-2 small text-danger';
+            feedback.textContent = data.detail || "Échec de l'assignation du rôle.";
+        }
+    } catch (err) {
+        feedback.className = 'mt-2 small text-danger';
+        feedback.textContent = 'Erreur réseau lors de l\'assignation.';
+    }
+}
+
+function renderAuditLog(logs) {
+    const tbody = document.getElementById('audit-log-tbody');
+    if (!tbody) return;
+
+    if (!logs || logs.length === 0) {
+        tbody.innerHTML = '<tr><td colspan="4" class="text-center text-muted py-3">Aucune action enregistrée pour le moment.</td></tr>';
+        return;
+    }
+
+    tbody.innerHTML = logs.map(entry => {
+        const date = entry.created_at ? new Date(entry.created_at).toLocaleString('fr-FR') : '—';
+        const actor = entry.actor_id ? entry.actor_id.slice(0, 8) + '…' : 'système';
+        const resource = entry.resource_type + (entry.resource_id ? ` (${entry.resource_id.slice(0, 8)}…)` : '');
+        return `
+            <tr>
+                <td class="text-muted small">${date}</td>
+                <td class="font-monospace small" title="${entry.actor_id || ''}">${actor}</td>
+                <td><span class="badge bg-light text-dark">${entry.action}</span></td>
+                <td class="text-muted small">${resource}</td>
+            </tr>
+        `;
+    }).join('');
+}
+
+// =========================================================================
+// 9. MODULE ACTUALITÉS & CENTRE DE NOTIFICATIONS
+// =========================================================================
+
+async function loadActualitesTab() {
+    try {
+        const [actuRes, suggestRes] = await Promise.all([
+            adminFetch('/api/admin/actualites'),
+            adminFetch('/api/admin/actualites/suggestions'),
+        ]);
+
+        if (actuRes.ok) {
+            const actualites = await actuRes.json();
+            renderActualitesList(actualites);
+        } else if (actuRes.status === 403) {
+            const list = document.getElementById('actualites-list');
+            if (list) list.innerHTML = '<p class="text-muted mb-0">Votre rôle ne donne pas accès aux actualités.</p>';
+        }
+
+        if (suggestRes.ok) {
+            const data = await suggestRes.json();
+            const container = document.getElementById('actualites-suggestions');
+            if (container) {
+                const suggestions = data.suggestions || [];
+                container.innerHTML = suggestions.length === 0
+                    ? '<em>Aucune suggestion pour le moment.</em>'
+                    : suggestions.map(s => `<div>Conversation ${s.conversation_id.slice(0, 8)}… — ${s.feedbacks_negatifs} retour(s) négatif(s)</div>`).join('');
+            }
+        }
+    } catch (err) {
+        console.error('Erreur chargement onglet actualités:', err);
+    }
+}
+
+function renderActualitesList(actualites) {
+    const container = document.getElementById('actualites-list');
+    if (!container) return;
+
+    if (!actualites || actualites.length === 0) {
+        container.innerHTML = '<p class="text-muted mb-0">Aucune actualité créée pour le moment.</p>';
+        return;
+    }
+
+    container.innerHTML = actualites.map(a => {
+        const isPublished = a.statut === 'publie';
+        const badge = isPublished
+            ? '<span class="badge bg-success-subtle text-success">Publiée</span>'
+            : '<span class="badge bg-secondary-subtle text-secondary">Brouillon</span>';
+        const metierLabel = a.metier_id ? `Métier #${a.metier_id}` : 'Tous métiers';
+
+        return `
+            <div class="border-bottom py-2">
+                <div class="d-flex justify-content-between align-items-start">
+                    <div>
+                        <span class="fw-semibold">${a.titre}</span> ${badge}
+                        <br><small class="text-muted">${metierLabel}</small>
+                    </div>
+                    <div>
+                        ${isPublished
+                            ? `<button class="btn btn-sm btn-outline-warning" onclick="unpublishActualite('${a.id}')">Dépublier</button>`
+                            : `<button class="btn btn-sm btn-outline-success" onclick="publishActualite('${a.id}')">Publier</button>`}
+                        <button class="btn btn-sm btn-outline-danger" onclick="deleteActualitePrompt('${a.id}')">
+                            <i class="iconoir-trash"></i>
+                        </button>
+                    </div>
+                </div>
+                <p class="mb-0 text-muted small mt-1">${a.contenu}</p>
+            </div>
+        `;
+    }).join('');
+}
+
+window.openCreateActualiteForm = function() {
+    document.getElementById('actualite-form').classList.remove('d-none');
+};
+
+window.closeCreateActualiteForm = function() {
+    document.getElementById('actualite-form').classList.add('d-none');
+    document.getElementById('actu-titre').value = '';
+    document.getElementById('actu-contenu').value = '';
+    document.getElementById('actu-metier').value = '';
+};
+
+window.submitCreateActualite = async function() {
+    const titre = document.getElementById('actu-titre').value.trim();
+    const contenu = document.getElementById('actu-contenu').value.trim();
+    const metierRaw = document.getElementById('actu-metier').value.trim();
+    if (!titre || !contenu) {
+        alert('Titre et contenu sont requis.');
+        return;
+    }
+    try {
+        const res = await adminFetch('/api/admin/actualites', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+                titre,
+                contenu,
+                metier_id: metierRaw ? parseInt(metierRaw, 10) : null,
+            }),
+        });
+        if (res.ok) {
+            closeCreateActualiteForm();
+            await loadActualitesTab();
+        } else {
+            const err = await res.json().catch(() => ({}));
+            alert(err.detail || 'Erreur lors de la création.');
+        }
+    } catch (e) {
+        alert('Erreur réseau');
+    }
+};
+
+window.publishActualite = async function(id) {
+    const notifier = confirm('Notifier les artisans concernés lors de la publication ?');
+    try {
+        const res = await adminFetch(`/api/admin/actualites/${id}/publish`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ notifier_artisans: notifier }),
+        });
+        if (res.ok) {
+            await loadActualitesTab();
+        } else {
+            alert("Échec de la publication.");
+        }
+    } catch (e) {
+        alert('Erreur réseau');
+    }
+};
+
+window.unpublishActualite = async function(id) {
+    try {
+        const res = await adminFetch(`/api/admin/actualites/${id}/unpublish`, { method: 'POST' });
+        if (res.ok) {
+            await loadActualitesTab();
+        } else {
+            alert('Échec de la dépublication.');
+        }
+    } catch (e) {
+        alert('Erreur réseau');
+    }
+};
+
+window.deleteActualitePrompt = async function(id) {
+    if (!confirm('Supprimer définitivement cette actualité ?')) return;
+    try {
+        const res = await adminFetch(`/api/admin/actualites/${id}`, { method: 'DELETE' });
+        if (res.ok) {
+            await loadActualitesTab();
+        } else {
+            alert('Échec de la suppression.');
+        }
+    } catch (e) {
+        alert('Erreur réseau');
+    }
+};
+
+window.submitBroadcastNotification = async function() {
+    const title = document.getElementById('notif-title').value.trim();
+    const body = document.getElementById('notif-body').value.trim();
+    const metierRaw = document.getElementById('notif-metier').value.trim();
+    const feedback = document.getElementById('notif-broadcast-feedback');
+
+    if (!title || !body) {
+        feedback.className = 'mt-2 small text-danger';
+        feedback.textContent = 'Titre et message sont requis.';
+        return;
+    }
+
+    try {
+        const res = await adminFetch('/api/admin/notifications/broadcast', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+                title,
+                body,
+                metier_id: metierRaw ? parseInt(metierRaw, 10) : null,
+                channel: 'in_app',
+            }),
+        });
+        const data = await res.json().catch(() => ({}));
+        if (res.ok) {
+            feedback.className = 'mt-2 small text-success';
+            feedback.textContent = `Diffusion lancée vers ${data.cible_count} artisan(s).`;
+            document.getElementById('notif-title').value = '';
+            document.getElementById('notif-body').value = '';
+            document.getElementById('notif-metier').value = '';
+        } else {
+            feedback.className = 'mt-2 small text-danger';
+            feedback.textContent = data.detail || 'Échec de la diffusion.';
+        }
+    } catch (e) {
+        feedback.className = 'mt-2 small text-danger';
+        feedback.textContent = 'Erreur réseau.';
+    }
+};

@@ -15,6 +15,7 @@ from app.models.base import Base
 if TYPE_CHECKING:
     from app.models.conversation import Conversation
     from app.models.quota import QuotaUtilisateur
+    from app.models.role import Role
     from app.models.subscription import UserSubscription
     from app.models.transaction import TransactionMobileMoney
 
@@ -55,6 +56,23 @@ class User(Base):
     is_admin: Mapped[bool] = mapped_column(
         default=False, server_default=false(), nullable=False
     )
+    # Rôle RBAC optionnel : affine les permissions d'un compte is_admin=True.
+    # Un admin sans rôle assigné conserve l'accès complet historique (compatibilité
+    # descendante) — voir app.middleware.auth.require_permission.
+    role_id: Mapped[uuid.UUID | None] = mapped_column(
+        ForeignKey("roles.id"), default=None
+    )
+
+    # Authentification à deux facteurs (TOTP) — réservée aux comptes admin.
+    totp_secret: Mapped[str | None] = mapped_column(String(64), default=None)
+    totp_enabled: Mapped[bool] = mapped_column(
+        default=False, server_default=false(), nullable=False
+    )
+
+    # Jeton de l'appareil pour les notifications push (Firebase Cloud Messaging).
+    # Un seul appareil par compte dans cette première version (voir
+    # docs/PLAN_AMELIORATION.md, item 4.2, pour le multi-device).
+    fcm_device_token: Mapped[str | None] = mapped_column(String(255), default=None)
 
     created_at: Mapped[datetime] = mapped_column(server_default=func.now())
     updated_at: Mapped[datetime] = mapped_column(
@@ -74,3 +92,4 @@ class User(Base):
     subscriptions: Mapped[list[UserSubscription]] = relationship(
         back_populates="user", cascade="all, delete-orphan"
     )
+    role: Mapped[Role | None] = relationship(back_populates="users")

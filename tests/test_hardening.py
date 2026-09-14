@@ -60,6 +60,23 @@ async def test_rate_limiter_blocks_abuse():
 
 
 @pytest.mark.asyncio
+async def test_security_headers_present():
+    """Vérifie que les en-têtes de sécurité HTTP sont présents sur chaque réponse."""
+    transport = ASGITransport(app=app)
+    async with AsyncClient(transport=transport, base_url="http://test") as client:
+        response = await client.get("/health")
+
+    assert response.status_code == 200
+    assert response.headers["X-Content-Type-Options"] == "nosniff"
+    assert response.headers["X-Frame-Options"] == "DENY"
+    assert response.headers["Referrer-Policy"] == "strict-origin-when-cross-origin"
+    assert "default-src 'self'" in response.headers["Content-Security-Policy"]
+    assert "Permissions-Policy" in response.headers
+    # HSTS ne doit apparaître qu'en production (jamais en dev, où HTTPS n'est pas garanti).
+    assert "Strict-Transport-Security" not in response.headers
+
+
+@pytest.mark.asyncio
 async def test_cors_headers():
     """Vérifie que les en-têtes CORS sont retournés correctement."""
     transport = ASGITransport(app=app)

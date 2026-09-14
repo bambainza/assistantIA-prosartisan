@@ -18,7 +18,18 @@ from app.db.init_db import init_db
 from app.db.session import engine
 from app.middleware.logging import LoggingAndRequestIdMiddleware
 from app.middleware.rate_limiter import RateLimitMiddleware
-from app.routers import admin, auth, chat, conversation, health, payment, quota
+from app.middleware.security_headers import SecurityHeadersMiddleware
+from app.routers import (
+    actualite,
+    admin,
+    auth,
+    chat,
+    conversation,
+    health,
+    notification,
+    payment,
+    quota,
+)
 from app.services.rag_service import rag_service
 
 
@@ -36,6 +47,20 @@ async def lifespan(application: FastAPI):
     await engine.dispose()
 
 
+def docs_urls(is_production: bool) -> tuple[str | None, str | None, str | None]:
+    """Retourne (docs_url, redoc_url, openapi_url) — masqués en production.
+
+    Swagger UI/ReDoc exposent le détail complet de l'API (schémas, routes
+    internes) : en production, seule une lecture directe de `openapi.json`
+    par un tiers autorisé a du sens, jamais l'UI interactive publique.
+    """
+    if is_production:
+        return None, None, None
+    return "/docs", "/redoc", "/openapi.json"
+
+
+_docs_url, _redoc_url, _openapi_url = docs_urls(settings.is_production)
+
 app = FastAPI(
     title="ProsArtisan IA Expert",
     description=(
@@ -45,10 +70,16 @@ app = FastAPI(
     ),
     version="0.1.0",
     lifespan=lifespan,
+    docs_url=_docs_url,
+    redoc_url=_redoc_url,
+    openapi_url=_openapi_url,
 )
 
 # ── Logging et Request ID Middleware ──
 app.add_middleware(LoggingAndRequestIdMiddleware)
+
+# ── En-têtes de sécurité HTTP (CSP, HSTS, X-Frame-Options...) ──
+app.add_middleware(SecurityHeadersMiddleware)
 
 # ── Rate Limiting Middleware ──
 app.add_middleware(RateLimitMiddleware)
@@ -83,6 +114,8 @@ app.include_router(chat.router)
 app.include_router(conversation.router)
 app.include_router(payment.router)
 app.include_router(quota.router)
+app.include_router(notification.router)
+app.include_router(actualite.router)
 app.include_router(admin.router)
 
 # ── Back-Office Admin Frontend ──

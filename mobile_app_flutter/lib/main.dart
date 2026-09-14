@@ -1,19 +1,47 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
+import 'package:sentry_flutter/sentry_flutter.dart';
 import 'network/network_client.dart';
+import 'services/push_notification_service.dart';
 import 'viewmodels/chat_viewmodel.dart';
 import 'views/auth_view.dart';
 import 'views/chat_view.dart';
 
-void main() {
+// Supervision d'erreurs (Sentry) : inactive tant qu'aucun DSN n'est fourni au
+// build (`flutter run --dart-define=SENTRY_DSN=https://...`). Sans cela,
+// SentryFlutter.init est simplement ignoré — voir docs/PLAN_AMELIORATION.md (4.5).
+const String _sentryDsn = String.fromEnvironment('SENTRY_DSN', defaultValue: '');
+
+Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
   final networkClient = NetworkClient();
 
-  runApp(
-    ChangeNotifierProvider(
-      create: (_) => ChatViewModel(networkClient),
-      child: const ProsArtisanApp(),
-    ),
+  Future<void> bootstrap() async {
+    // Notifications push : no-op silencieux si Firebase n'est pas configuré
+    // nativement (voir services/push_notification_service.dart).
+    unawaited(PushNotificationService(networkClient).initialize());
+
+    runApp(
+      ChangeNotifierProvider(
+        create: (_) => ChatViewModel(networkClient),
+        child: const ProsArtisanApp(),
+      ),
+    );
+  }
+
+  if (_sentryDsn.isEmpty) {
+    await bootstrap();
+    return;
+  }
+
+  await SentryFlutter.init(
+    (options) {
+      options.dsn = _sentryDsn;
+      options.tracesSampleRate = 0.2;
+    },
+    appRunner: bootstrap,
   );
 }
 
@@ -75,6 +103,9 @@ class MainLayoutWrapper extends StatelessWidget {
       case AppScreen.main:
         activeScreen = const ChatView();
         break;
+      case AppScreen.locked:
+        activeScreen = _BiometricLockScreen(isDark: isDark);
+        break;
     }
 
     return Container(
@@ -94,6 +125,48 @@ class MainLayoutWrapper extends StatelessWidget {
             key: ValueKey(viewModel.currentScreen),
             child: activeScreen,
           ),
+        ),
+      ),
+    );
+  }
+}
+
+/// Écran de verrouillage biométrique affiché au démarrage quand l'option est
+/// activée (voir `ChatViewModel.toggleBiometricLock`).
+class _BiometricLockScreen extends StatelessWidget {
+  final bool isDark;
+
+  const _BiometricLockScreen({required this.isDark});
+
+  @override
+  Widget build(BuildContext context) {
+    final viewModel = Provider.of<ChatViewModel>(context, listen: false);
+    final textColor = isDark ? Colors.white : const Color(0xFF1A1A1A);
+
+    return Center(
+      child: Padding(
+        padding: const EdgeInsets.all(24),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Icon(Icons.fingerprint, size: 72, color: const Color(0xFFE2A000)),
+            const SizedBox(height: 16),
+            Text(
+              'ProsArtisan IA est verrouillé',
+              style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold, color: textColor),
+            ),
+            const SizedBox(height: 24),
+            ElevatedButton.icon(
+              onPressed: () => viewModel.unlockWithBiometrics(),
+              icon: const Icon(Icons.lock_open),
+              label: const Text('Déverrouiller'),
+              style: ElevatedButton.styleFrom(
+                backgroundColor: const Color(0xFFE2A000),
+                foregroundColor: Colors.white,
+                padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 12),
+              ),
+            ),
+          ],
         ),
       ),
     );

@@ -6,6 +6,7 @@ Ingestion de PDF techniques, consultation des statistiques Qdrant et logs d'util
 
 from __future__ import annotations
 
+import logging
 import os
 import uuid
 from datetime import UTC, datetime, timedelta
@@ -18,6 +19,7 @@ from fastapi import (
     File,
     Form,
     HTTPException,
+    Request,
     UploadFile,
     status,
 )
@@ -26,19 +28,34 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
 from app.config import settings
-from app.db.session import get_db
-from app.middleware.auth import get_current_admin_user_id
+from app.db.session import async_session, get_db
+from app.middleware.auth import get_current_admin_user_id, require_permission
+from app.models.audit_log import AuditLog
 from app.models.document_config import DocumentConfig
 from app.models.metier import Metier
 from app.models.quota import QuotaUtilisateur
+from app.models.role import Permission, Role
 from app.models.transaction import TransactionMobileMoney
 from app.models.user import User
+from app.schemas.actualite import (
+    ActualiteCreate,
+    ActualiteOut,
+    ActualitePublishRequest,
+    ActualiteUpdate,
+)
+from app.schemas.audit_log import AuditLogOut
+from app.schemas.notification import NotificationBroadcastRequest
 from app.schemas.package import (
     PackageCreate,
     PackageUpdate,
     SubscriptionAssignRequest,
     SubscriptionExtendRequest,
 )
+from app.schemas.role import PermissionOut, RoleAssignRequest, RoleOut
+from app.services.actualite_service import actualite_service
+from app.services.audit_service import audit_service
+from app.services.cache_service import cache_service
+from app.services.notification_service import notification_service
 from app.services.subscription_service import subscription_service
 from ingestion.pipeline import run_ingestion
 
@@ -280,6 +297,7 @@ async def get_users_list(
 @router.post("/users/{user_id}/grant-pass")
 async def grant_pass_to_user(
     user_id: str,
+    request: Request,
     type_pass: str = "pass_24h",
     admin_id: uuid.UUID = Depends(get_current_admin_user_id),
     db: AsyncSession = Depends(get_db),
@@ -319,6 +337,15 @@ async def grant_pass_to_user(
         quota.date_fin_premium = None
         quota.requetes_restantes_gratuites = 5
 
+    await audit_service.log_action(
+        db,
+        actor_id=admin_id,
+        action="user.grant_pass",
+        resource_type="user",
+        resource_id=str(user_uuid),
+        after={"type_pass": type_pass},
+        request=request,
+    )
     await db.commit()
 
     return {
@@ -407,6 +434,7 @@ async def get_documents_list(
 @router.patch("/documents/{doc_name}/toggle")
 async def toggle_document_status(
     doc_name: str,
+    request: Request,
     admin_id: uuid.UUID = Depends(get_current_admin_user_id),
     db: AsyncSession = Depends(get_db),
 ) -> dict[str, Any]:
@@ -428,6 +456,15 @@ async def toggle_document_status(
         cfg.is_active = new_status
         cfg.updated_at = func.now()
 
+    await audit_service.log_action(
+        db,
+        actor_id=admin_id,
+        action="document.toggle",
+        resource_type="document",
+        resource_id=doc_name,
+        after={"is_active": new_status},
+        request=request,
+    )
     await db.commit()
 
     return {
@@ -465,6 +502,7 @@ async def get_metiers_list(
 @router.patch("/metiers/{metier_id}/toggle")
 async def toggle_metier_status(
     metier_id: int,
+    request: Request,
     admin_id: uuid.UUID = Depends(get_current_admin_user_id),
     db: AsyncSession = Depends(get_db),
 ) -> dict[str, Any]:
@@ -479,6 +517,15 @@ async def toggle_metier_status(
 
     new_status = not getattr(metier, "is_active", True)
     metier.is_active = new_status
+    await audit_service.log_action(
+        db,
+        actor_id=admin_id,
+        action="metier.toggle",
+        resource_type="metier",
+        resource_id=str(metier_id),
+        after={"is_active": new_status},
+        request=request,
+    )
     await db.commit()
 
     return {
@@ -493,9 +540,20 @@ async def toggle_metier_status(
 @router.delete("/documents/{doc_id}")
 async def delete_document(
     doc_id: str,
+    request: Request,
     admin_id: uuid.UUID = Depends(get_current_admin_user_id),
+    db: AsyncSession = Depends(get_db),
 ) -> dict[str, Any]:
     """Supprime un document technique de la base de connaissances Qdrant."""
+    await audit_service.log_action(
+        db,
+        actor_id=admin_id,
+        action="document.delete",
+        resource_type="document",
+        resource_id=doc_id,
+        request=request,
+    )
+    await db.commit()
     try:
         from qdrant_client import AsyncQdrantClient
         from qdrant_client.http.models import FieldCondition, Filter, MatchValue
@@ -635,12 +693,23 @@ async def get_packages_list(
 @router.post("/packages", status_code=status.HTTP_201_CREATED)
 async def create_package(
     payload: PackageCreate,
+    request: Request,
     admin_id: uuid.UUID = Depends(get_current_admin_user_id),
     db: AsyncSession = Depends(get_db),
 ) -> dict[str, Any]:
     """Crée une nouvelle offre commerciale."""
     try:
         pkg = await subscription_service.create_package(db, payload)
+        await audit_service.log_action(
+            db,
+            actor_id=admin_id,
+            action="package.create",
+            resource_type="package",
+            resource_id=str(pkg.id),
+            after={"code": pkg.code, "nom": pkg.nom, "prix": pkg.prix},
+            request=request,
+        )
+        await db.commit()
         return {
             "status": "success",
             "package": {
@@ -669,12 +738,23 @@ async def create_package(
 async def update_package(
     package_id: uuid.UUID,
     payload: PackageUpdate,
+    request: Request,
     admin_id: uuid.UUID = Depends(get_current_admin_user_id),
     db: AsyncSession = Depends(get_db),
 ) -> dict[str, Any]:
     """Met à jour une offre commerciale existante."""
     try:
         pkg = await subscription_service.update_package(db, package_id, payload)
+        await audit_service.log_action(
+            db,
+            actor_id=admin_id,
+            action="package.update",
+            resource_type="package",
+            resource_id=str(package_id),
+            after=payload.model_dump(exclude_unset=True, by_alias=False),
+            request=request,
+        )
+        await db.commit()
         return {
             "status": "success",
             "package": {
@@ -702,6 +782,7 @@ async def update_package(
 @router.patch("/packages/{package_id}/toggle")
 async def toggle_package(
     package_id: uuid.UUID,
+    request: Request,
     active: bool | None = None,
     admin_id: uuid.UUID = Depends(get_current_admin_user_id),
     db: AsyncSession = Depends(get_db),
@@ -709,6 +790,16 @@ async def toggle_package(
     """Bascule ou définit l'état actif/inactif d'un package dans le catalogue."""
     try:
         pkg = await subscription_service.toggle_package(db, package_id, active=active)
+        await audit_service.log_action(
+            db,
+            actor_id=admin_id,
+            action="package.toggle",
+            resource_type="package",
+            resource_id=str(package_id),
+            after={"est_actif": pkg.est_actif},
+            request=request,
+        )
+        await db.commit()
         action_str = (
             "activé (mis en vente)"
             if pkg.est_actif
@@ -731,6 +822,7 @@ async def toggle_package(
 @router.delete("/packages/{package_id}")
 async def delete_package(
     package_id: uuid.UUID,
+    request: Request,
     force: bool = False,
     admin_id: uuid.UUID = Depends(get_current_admin_user_id),
     db: AsyncSession = Depends(get_db),
@@ -738,6 +830,16 @@ async def delete_package(
     """Supprime un package du catalogue (vérifie les abonnements actifs si force=False)."""
     try:
         res = await subscription_service.delete_package(db, package_id, force=force)
+        await audit_service.log_action(
+            db,
+            actor_id=admin_id,
+            action="package.delete",
+            resource_type="package",
+            resource_id=str(package_id),
+            after={"force": force},
+            request=request,
+        )
+        await db.commit()
         return res
     except ValueError as err:
         detail = str(err)
@@ -770,12 +872,23 @@ async def get_subscriptions_list(
 @router.post("/subscriptions/assign")
 async def assign_subscription(
     payload: SubscriptionAssignRequest,
+    request: Request,
     admin_id: uuid.UUID = Depends(get_current_admin_user_id),
     db: AsyncSession = Depends(get_db),
 ) -> dict[str, Any]:
     """Assigne ou renouvelle manuellement un package à un artisan."""
     try:
         sub = await subscription_service.assign_subscription(db, payload)
+        await audit_service.log_action(
+            db,
+            actor_id=admin_id,
+            action="subscription.assign",
+            resource_type="subscription",
+            resource_id=str(sub.id),
+            after={"user_id": str(payload.user_id), "package_id": str(sub.package_id)},
+            request=request,
+        )
+        await db.commit()
         return {
             "status": "success",
             "message": "Abonnement assigné avec succès.",
@@ -792,6 +905,7 @@ async def assign_subscription(
 async def extend_subscription(
     sub_id: uuid.UUID,
     payload: SubscriptionExtendRequest,
+    request: Request,
     admin_id: uuid.UUID = Depends(get_current_admin_user_id),
     db: AsyncSession = Depends(get_db),
 ) -> dict[str, Any]:
@@ -800,6 +914,16 @@ async def extend_subscription(
         sub = await subscription_service.extend_subscription(
             db, sub_id, payload.jours_supplementaires
         )
+        await audit_service.log_action(
+            db,
+            actor_id=admin_id,
+            action="subscription.extend",
+            resource_type="subscription",
+            resource_id=str(sub_id),
+            after={"jours_supplementaires": payload.jours_supplementaires},
+            request=request,
+        )
+        await db.commit()
         return {
             "status": "success",
             "message": f"Abonnement prolongé de {payload.jours_supplementaires} jours.",
@@ -816,12 +940,22 @@ async def extend_subscription(
 @router.post("/subscriptions/{sub_id}/cancel")
 async def cancel_subscription(
     sub_id: uuid.UUID,
+    request: Request,
     admin_id: uuid.UUID = Depends(get_current_admin_user_id),
     db: AsyncSession = Depends(get_db),
 ) -> dict[str, Any]:
     """Résilie un abonnement et réinitialise l'artisan en formule gratuite."""
     try:
         sub = await subscription_service.cancel_subscription(db, sub_id)
+        await audit_service.log_action(
+            db,
+            actor_id=admin_id,
+            action="subscription.cancel",
+            resource_type="subscription",
+            resource_id=str(sub_id),
+            request=request,
+        )
+        await db.commit()
         return {
             "status": "success",
             "message": "Abonnement résilié avec succès.",
@@ -842,3 +976,394 @@ async def get_subscription_stats(
     """Indicateurs clés et KPIs du module packages."""
     kpis = await subscription_service.get_subscription_kpis(db)
     return {"kpis": kpis}
+
+
+# ============================================================================
+# MODULE RBAC — RÔLES & PERMISSIONS
+# ============================================================================
+
+
+@router.get("/roles", response_model=list[RoleOut])
+async def get_roles_list(
+    admin_id: uuid.UUID = Depends(require_permission("roles.read")),
+    db: AsyncSession = Depends(get_db),
+) -> list[Role]:
+    """Retourne la liste des rôles RBAC disponibles avec leurs permissions."""
+    stmt = select(Role).options(selectinload(Role.permissions)).order_by(Role.code)
+    res = await db.execute(stmt)
+    return list(res.scalars().all())
+
+
+@router.get("/permissions", response_model=list[PermissionOut])
+async def get_permissions_list(
+    admin_id: uuid.UUID = Depends(require_permission("roles.read")),
+    db: AsyncSession = Depends(get_db),
+) -> list[Permission]:
+    """Retourne le catalogue complet des permissions granulaires."""
+    stmt = select(Permission).order_by(Permission.code)
+    res = await db.execute(stmt)
+    return list(res.scalars().all())
+
+
+@router.post("/users/{user_id}/role")
+async def assign_role_to_user(
+    user_id: uuid.UUID,
+    payload: RoleAssignRequest,
+    request: Request,
+    admin_id: uuid.UUID = Depends(require_permission("roles.write")),
+    db: AsyncSession = Depends(get_db),
+) -> dict[str, Any]:
+    """Assigne (ou retire, si `role_code` est nul) un rôle RBAC à un compte admin."""
+    user_stmt = select(User).where(User.id == user_id)
+    user_res = await db.execute(user_stmt)
+    user = user_res.scalar_one_or_none()
+    if not user:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND, detail="Utilisateur introuvable."
+        )
+
+    before_role_id = str(user.role_id) if user.role_id else None
+    new_role = None
+    if payload.role_code is not None:
+        role_stmt = select(Role).where(Role.code == payload.role_code)
+        role_res = await db.execute(role_stmt)
+        new_role = role_res.scalar_one_or_none()
+        if not new_role:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail=f"Rôle '{payload.role_code}' introuvable.",
+            )
+        user.role_id = new_role.id
+    else:
+        user.role_id = None
+
+    await audit_service.log_action(
+        db,
+        actor_id=admin_id,
+        action="role.assign",
+        resource_type="user",
+        resource_id=str(user_id),
+        before={"role_id": before_role_id},
+        after={"role_id": str(new_role.id) if new_role else None},
+        request=request,
+    )
+    await db.commit()
+
+    return {
+        "status": "success",
+        "user_id": str(user_id),
+        "role_code": payload.role_code,
+        "message": (
+            f"Rôle '{payload.role_code}' assigné avec succès."
+            if payload.role_code
+            else "Rôle retiré : accès admin hérité (non restreint) restauré."
+        ),
+    }
+
+
+# ============================================================================
+# MODULE AUDIT — JOURNAL DES ACTIONS ADMINISTRATEUR
+# ============================================================================
+
+
+@router.get("/security-stats")
+async def get_security_stats(
+    admin_id: uuid.UUID = Depends(require_permission("audit.read")),
+    db: AsyncSession = Depends(get_db),
+) -> dict[str, Any]:
+    """Indicateurs sécurité pour le dashboard admin (fenêtre glissante de 30 jours)."""
+    since_24h = datetime.now(UTC).replace(tzinfo=None) - timedelta(hours=24)
+    stmt = select(func.count(AuditLog.id)).where(AuditLog.created_at >= since_24h)
+    res = await db.execute(stmt)
+    actions_24h = res.scalar() or 0
+
+    async def _counter(key: str) -> int:
+        value = await cache_service.get(f"prosartisan:security:{key}")
+        return int(value) if value else 0
+
+    return {
+        "actions_admin_dernieres_24h": actions_24h,
+        "tentatives_connexion_echouees_30j": await _counter("login_failed_total"),
+        "webhooks_rejetes_30j": await _counter("webhook_rejected_total"),
+        "tokens_revoques_30j": await _counter("revoked_tokens_total"),
+    }
+
+
+@router.get("/audit-logs", response_model=list[AuditLogOut])
+async def get_audit_logs(
+    actor_id: uuid.UUID | None = None,
+    action: str | None = None,
+    resource_type: str | None = None,
+    limit: int = 50,
+    offset: int = 0,
+    admin_id: uuid.UUID = Depends(require_permission("audit.read")),
+    db: AsyncSession = Depends(get_db),
+) -> list[Any]:
+    """Retourne le journal d'audit des actions administrateur, filtrable et paginé."""
+    return await audit_service.list_logs(
+        db,
+        actor_id=actor_id,
+        action=action,
+        resource_type=resource_type,
+        limit=min(limit, 200),
+        offset=offset,
+    )
+
+
+# ============================================================================
+# MODULE ACTUALITÉS
+# ============================================================================
+
+
+@router.get("/actualites", response_model=list[ActualiteOut])
+async def get_actualites_list(
+    statut: str | None = None,
+    admin_id: uuid.UUID = Depends(require_permission("actualites.read")),
+    db: AsyncSession = Depends(get_db),
+) -> list[Any]:
+    """Liste toutes les actualités (y compris brouillons), filtrable par statut."""
+    return await actualite_service.list_all(db, statut=statut)
+
+
+@router.get("/actualites/suggestions")
+async def get_actualites_suggestions(
+    admin_id: uuid.UUID = Depends(require_permission("actualites.read")),
+    db: AsyncSession = Depends(get_db),
+) -> dict[str, Any]:
+    """Suggère des sujets d'actualité à partir des conversations les plus mal notées."""
+    suggestions = await actualite_service.suggested_topics_from_feedback(db)
+    return {"suggestions": suggestions}
+
+
+@router.post(
+    "/actualites", status_code=status.HTTP_201_CREATED, response_model=ActualiteOut
+)
+async def create_actualite(
+    payload: ActualiteCreate,
+    request: Request,
+    admin_id: uuid.UUID = Depends(require_permission("actualites.write")),
+    db: AsyncSession = Depends(get_db),
+) -> Any:
+    """Crée une actualité en brouillon (non visible tant qu'elle n'est pas publiée)."""
+    actualite = await actualite_service.create(
+        db,
+        titre=payload.titre,
+        contenu=payload.contenu,
+        metier_id=payload.metier_id,
+        created_by=admin_id,
+    )
+    await audit_service.log_action(
+        db,
+        actor_id=admin_id,
+        action="actualite.create",
+        resource_type="actualite",
+        resource_id=str(actualite.id),
+        after={"titre": actualite.titre, "metier_id": actualite.metier_id},
+        request=request,
+    )
+    await db.commit()
+    await db.refresh(actualite)
+    return actualite
+
+
+@router.put("/actualites/{actualite_id}", response_model=ActualiteOut)
+async def update_actualite(
+    actualite_id: uuid.UUID,
+    payload: ActualiteUpdate,
+    request: Request,
+    admin_id: uuid.UUID = Depends(require_permission("actualites.write")),
+    db: AsyncSession = Depends(get_db),
+) -> Any:
+    """Met à jour le titre/contenu/ciblage métier d'une actualité."""
+    actualite = await actualite_service.update(
+        db,
+        actualite_id,
+        titre=payload.titre,
+        contenu=payload.contenu,
+        metier_id=payload.metier_id,
+    )
+    if actualite is None:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND, detail="Actualité introuvable."
+        )
+    await audit_service.log_action(
+        db,
+        actor_id=admin_id,
+        action="actualite.update",
+        resource_type="actualite",
+        resource_id=str(actualite_id),
+        after=payload.model_dump(exclude_unset=True),
+        request=request,
+    )
+    await db.commit()
+    await db.refresh(actualite)
+    return actualite
+
+
+@router.post("/actualites/{actualite_id}/publish", response_model=ActualiteOut)
+async def publish_actualite(
+    actualite_id: uuid.UUID,
+    payload: ActualitePublishRequest,
+    request: Request,
+    background_tasks: BackgroundTasks,
+    admin_id: uuid.UUID = Depends(require_permission("actualites.write")),
+    db: AsyncSession = Depends(get_db),
+) -> Any:
+    """Publie une actualité, avec notification in-app optionnelle des artisans ciblés
+    (envoi en tâche de fond, potentiellement vers de nombreux artisans)."""
+    actualite = await actualite_service.publish(db, actualite_id)
+    if actualite is None:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND, detail="Actualité introuvable."
+        )
+
+    if payload.notifier_artisans:
+        target_ids = await actualite_service.target_user_ids(
+            db, metier_id=actualite.metier_id
+        )
+        background_tasks.add_task(
+            _broadcast_notifications_task,
+            target_ids,
+            actualite.titre,
+            actualite.contenu[:500],
+            "in_app",
+        )
+
+    await audit_service.log_action(
+        db,
+        actor_id=admin_id,
+        action="actualite.publish",
+        resource_type="actualite",
+        resource_id=str(actualite_id),
+        after={"notifier_artisans": payload.notifier_artisans},
+        request=request,
+    )
+    await db.commit()
+    await db.refresh(actualite)
+    return actualite
+
+
+@router.post("/actualites/{actualite_id}/unpublish", response_model=ActualiteOut)
+async def unpublish_actualite(
+    actualite_id: uuid.UUID,
+    request: Request,
+    admin_id: uuid.UUID = Depends(require_permission("actualites.write")),
+    db: AsyncSession = Depends(get_db),
+) -> Any:
+    """Repasse une actualité publiée en brouillon (la retire de la diffusion)."""
+    actualite = await actualite_service.unpublish(db, actualite_id)
+    if actualite is None:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND, detail="Actualité introuvable."
+        )
+    await audit_service.log_action(
+        db,
+        actor_id=admin_id,
+        action="actualite.unpublish",
+        resource_type="actualite",
+        resource_id=str(actualite_id),
+        request=request,
+    )
+    await db.commit()
+    await db.refresh(actualite)
+    return actualite
+
+
+@router.delete("/actualites/{actualite_id}")
+async def delete_actualite(
+    actualite_id: uuid.UUID,
+    request: Request,
+    admin_id: uuid.UUID = Depends(require_permission("actualites.write")),
+    db: AsyncSession = Depends(get_db),
+) -> dict[str, Any]:
+    """Supprime définitivement une actualité."""
+    deleted = await actualite_service.delete(db, actualite_id)
+    if not deleted:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND, detail="Actualité introuvable."
+        )
+    await audit_service.log_action(
+        db,
+        actor_id=admin_id,
+        action="actualite.delete",
+        resource_type="actualite",
+        resource_id=str(actualite_id),
+        request=request,
+    )
+    await db.commit()
+    return {"status": "success", "message": "Actualité supprimée."}
+
+
+# ============================================================================
+# MODULE NOTIFICATIONS (CENTRE DE DIFFUSION)
+# ============================================================================
+
+
+async def _broadcast_notifications_task(
+    user_ids: list[uuid.UUID], title: str, body: str, channel: str
+) -> None:
+    """Tâche de fond : crée une notification pour chaque artisan ciblé (session dédiée,
+    indépendante de la requête HTTP d'origine — voir AGENTS.md §1). Une erreur ici
+    (base momentanément indisponible...) est journalisée sans jamais remonter : la
+    requête HTTP d'origine a déjà répondu 202, il n'y a personne pour la recevoir."""
+    try:
+        async with async_session() as session:
+            stmt = select(User).where(User.id.in_(user_ids))
+            res = await session.execute(stmt)
+            for artisan in res.scalars().all():
+                await notification_service.notify(
+                    session, user=artisan, title=title, body=body, channel=channel
+                )
+            await session.commit()
+    except Exception:
+        logging.getLogger("app").exception(
+            "Échec de la diffusion de notification en tâche de fond."
+        )
+
+
+@router.post("/notifications/broadcast", status_code=status.HTTP_202_ACCEPTED)
+async def broadcast_notification(
+    payload: NotificationBroadcastRequest,
+    background_tasks: BackgroundTasks,
+    request: Request,
+    admin_id: uuid.UUID = Depends(require_permission("notifications.send")),
+    db: AsyncSession = Depends(get_db),
+) -> dict[str, Any]:
+    """Compose et diffuse une notification aux artisans (tous, ou ciblés par métier).
+
+    L'envoi effectif est exécuté en tâche de fond (potentiellement de
+    nombreux artisans) ; la réponse est immédiate (202 Accepted).
+    """
+    stmt = select(User.id).where(User.is_admin == False)
+    if payload.metier_id is not None:
+        stmt = stmt.where(User.metier_id == payload.metier_id)
+    res = await db.execute(stmt)
+    target_ids = [row[0] for row in res.all()]
+
+    background_tasks.add_task(
+        _broadcast_notifications_task,
+        target_ids,
+        payload.title,
+        payload.body,
+        payload.channel,
+    )
+
+    await audit_service.log_action(
+        db,
+        actor_id=admin_id,
+        action="notification.broadcast",
+        resource_type="notification",
+        after={
+            "metier_id": payload.metier_id,
+            "cible_count": len(target_ids),
+            "titre": payload.title,
+        },
+        request=request,
+    )
+    await db.commit()
+
+    return {
+        "status": "accepted",
+        "cible_count": len(target_ids),
+        "message": f"Diffusion lancée en arrière-plan vers {len(target_ids)} artisan(s).",
+    }

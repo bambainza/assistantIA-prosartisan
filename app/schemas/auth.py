@@ -67,6 +67,10 @@ class LoginRequest(BaseModel):
 
     email: EmailStr
     password: str
+    totp_code: str | None = Field(
+        None,
+        description="Code TOTP à 6 chiffres, requis si le compte a activé la 2FA.",
+    )
 
 
 class TokenResponse(BaseModel):
@@ -92,3 +96,19 @@ class GoogleAuthRequest(BaseModel):
     """Corps de requête pour l'authentification Google OAuth 2.0."""
 
     credential: str  # Google ID Token (JWT from Google Sign-In)
+
+
+# ── Authentification à deux facteurs (TOTP) ──
+
+
+class TotpSetupResponse(BaseModel):
+    """Secret TOTP à provisionner dans une app d'authentification (Google Authenticator...)."""
+
+    secret: str
+    otpauth_uri: str
+
+
+class TotpCodeRequest(BaseModel):
+    """Code TOTP à 6 chiffres pour activer ou désactiver la 2FA."""
+
+    code: str = Field(..., min_length=6, max_length=6)

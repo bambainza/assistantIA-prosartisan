@@ -122,6 +122,23 @@ class _ChatViewState extends State<ChatView> {
         iconTheme: IconThemeData(color: textColor),
         actions: [
           IconButton(
+            icon: Icon(
+              Icons.fingerprint,
+              color: viewModel.biometricLockEnabled ? const Color(0xFFE2A000) : textColor,
+            ),
+            tooltip: viewModel.biometricLockEnabled
+                ? "Verrouillage biométrique activé (appuyer pour désactiver)"
+                : "Activer le verrouillage biométrique",
+            onPressed: () async {
+              final success = await viewModel.toggleBiometricLock();
+              if (!success && context.mounted) {
+                ScaffoldMessenger.of(context).showSnackBar(
+                  const SnackBar(content: Text("Biométrie indisponible ou refusée sur cet appareil.")),
+                );
+              }
+            },
+          ),
+          IconButton(
             icon: const Icon(Icons.bookmark_border, color: Color(0xFFE2A000)),
             tooltip: "Fiches Chantier Hors-Ligne",
             onPressed: () {
