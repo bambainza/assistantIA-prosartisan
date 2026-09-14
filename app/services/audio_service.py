@@ -1,5 +1,6 @@
 """
-Service de Transcription Audio (Speech-to-Text) via OpenAI Whisper.
+Service de Transcription Audio (Speech-to-Text) et de synthèse vocale (TTS)
+via Mistral Voxtral.
 
 Permet aux artisans d'enregistrer vocalement leurs questions sur le chantier
 dans les langues locales ou français, et de les convertir en texte pour le RAG.
@@ -7,13 +8,14 @@ dans les langues locales ou français, et de les convertir en texte pour le RAG.
 
 from __future__ import annotations
 
-import io
+import base64
 import logging
 import os
 import re
 
 from fastapi import HTTPException, status
-from openai import AsyncOpenAI
+from mistralai.client import Mistral
+from mistralai.client.models import File
 
 from app.config import settings
 
@@ -34,10 +36,10 @@ SUPPORTED_AUDIO_EXTENSIONS = {
 
 
 class AudioService:
-    """Service audio pour la transcription (Whisper) et la synthèse vocale (TTS)."""
+    """Service audio pour la transcription (Voxtral STT) et la synthèse vocale (Voxtral TTS)."""
 
     def __init__(self) -> None:
-        self.openai_client = AsyncOpenAI(api_key=settings.openai_api_key)
+        self.mistral_client = Mistral(api_key=settings.mistral_api_key)
 
     def validate_audio_file(self, filename: str) -> str:
         """Valide l'extension du fichier audio fourni."""
@@ -58,7 +60,7 @@ class AudioService:
         filename: str = "audio.wav",
         prompt: str | None = None,
     ) -> str:
-        """Transcrit un flux audio binaire en texte via OpenAI Whisper."""
+        """Transcrit un flux audio binaire en texte via Mistral Voxtral (STT)."""
         self.validate_audio_file(filename)
 
         if not file_bytes:
@@ -69,8 +71,8 @@ class AudioService:
 
         # Mode mock en environnement de développement ou test sans clé réelle
         if (
-            settings.openai_api_key.startswith("sk-placeholder")
-            or settings.openai_api_key == "sk-placeholder"
+            settings.mistral_api_key.startswith("sk-placeholder")
+            or settings.mistral_api_key == "sk-placeholder"
         ):
             return (
                 "Bonjour l'expert, j'ai une fissure importante sur un mur porteur "
@@ -78,19 +80,19 @@ class AudioService:
             )
 
         try:
-            # Créer un fichier mémoire en mode binaire avec nom pour OpenAI
-            audio_buffer = io.BytesIO(file_bytes)
-            audio_buffer.name = filename
-
-            transcription = await self.openai_client.audio.transcriptions.create(
-                model=settings.whisper_model,
-                file=audio_buffer,
-                prompt=prompt
-                or "Vocabulaire BTP chantier ivoirien nouchi maçonnerie plomberie électricité",
+            transcription = await self.mistral_client.audio.transcriptions.complete_async(
+                model=settings.stt_model,
+                file=File(file_name=filename, content=file_bytes),
+                # Voxtral n'a pas de paramètre "prompt" libre comme Whisper : le
+                # vocabulaire attendu se fournit en indices contextuels (liste).
+                context_bias=[
+                    prompt
+                    or "Vocabulaire BTP chantier ivoirien nouchi maçonnerie plomberie électricité"
+                ],
             )
             return transcription.text.strip()
         except Exception as e:
-            logger.error("Erreur lors de la transcription audio Whisper : %s", e)
+            logger.error("Erreur lors de la transcription audio Voxtral : %s", e)
             raise HTTPException(
                 status_code=status.HTTP_502_BAD_GATEWAY,
                 detail=f"Échec de la transcription audio : {e!s}",
@@ -102,7 +104,15 @@ class AudioService:
         voice: str | None = None,
         model: str | None = None,
     ) -> bytes:
-        """Génère un flux audio MP3 à partir d'un texte via OpenAI TTS."""
+        """Génère un flux audio MP3 à partir d'un texte via Mistral Voxtral TTS.
+
+        Contrairement à OpenAI (voix prêtes à l'emploi comme "alloy"), Voxtral
+        TTS fonctionne par clonage de voix : `voice` doit être le `voice_id`
+        d'une voix créée au préalable via la console Mistral
+        (`settings.tts_voice_id` si non fourni à l'appel). Sans voice_id
+        configuré, la synthèse échoue explicitement plutôt que d'utiliser une
+        voix par défaut arbitraire.
+        """
         cleaned_text = text.strip()
         if not cleaned_text:
             raise HTTPException(
@@ -116,19 +126,31 @@ class AudioService:
 
         # Mode mock en environnement de développement ou test sans clé réelle
         if (
-            settings.openai_api_key.startswith("sk-placeholder")
-            or settings.openai_api_key == "sk-placeholder"
+            settings.mistral_api_key.startswith("sk-placeholder")
+            or settings.mistral_api_key == "sk-placeholder"
         ):
             # Octets audio MP3 simulés
             return b"\xff\xfb\x90d\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00ProsArtisanAudioMock"
 
-        try:
-            response = await self.openai_client.audio.speech.create(
-                model=model or settings.tts_model,
-                voice=voice or settings.tts_voice,
-                input=cleaned_text[:4096],
+        voice_id = voice or settings.tts_voice_id
+        if not voice_id:
+            raise HTTPException(
+                status_code=status.HTTP_502_BAD_GATEWAY,
+                detail=(
+                    "Synthèse vocale indisponible : aucune voix Voxtral TTS "
+                    "configurée (TTS_VOICE_ID). Créez une voix via la console "
+                    "Mistral puis renseignez son identifiant."
+                ),
             )
-            return response.content
+
+        try:
+            response = await self.mistral_client.audio.speech.complete_async(
+                model=model or settings.tts_model,
+                voice_id=voice_id,
+                input=cleaned_text[:4096],
+                response_format="mp3",
+            )
+            return base64.b64decode(response.audio_data)
         except Exception as e:
             logger.error("Erreur lors de la synthèse vocale TTS : %s", e)
             raise HTTPException(

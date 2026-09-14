@@ -48,7 +48,7 @@ services:
           type: redis
           name: prosartisan-redis
           property: port
-      - key: OPENAI_API_KEY
+      - key: MISTRAL_API_KEY
         sync: false
 
   - type: redis

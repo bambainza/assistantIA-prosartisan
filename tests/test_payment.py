@@ -76,9 +76,19 @@ async def test_webhook_hmac_validation():
 
     transport = ASGITransport(app=app)
     async with AsyncClient(transport=transport, base_url="http://test") as client:
-        # 1. Sans signature (devrait passer si facultatif ou tester avec signature)
+        # `content=raw_body` (pas `json=payload`) : le serveur vérifie la
+        # signature sur les octets bruts réellement reçus, qui doivent donc
+        # être exactement ceux signés ici — `json=` laisserait httpx
+        # re-sérialiser le payload (séparateurs compacts depuis httpx 0.28),
+        # produisant des octets différents et une signature qui ne correspond
+        # plus.
         response = await client.post(
-            "/api/payment/webhook", json=payload, headers={"X-Signature": valid_sig}
+            "/api/payment/webhook",
+            content=raw_body,
+            headers={
+                "X-Signature": valid_sig,
+                "Content-Type": "application/json",
+            },
         )
 
     assert response.status_code in [

@@ -4,7 +4,7 @@ Ce fichier guide Claude Code pour ce dépôt précis. **Il prévaut sur tout CLA
 
 ## Vue d'ensemble
 
-**ProsArtisan IA Expert** — assistant IA conversationnel (RAG) pour artisans du BTP et métiers d'art en Côte d'Ivoire (maçonnerie, électricité, plomberie, menuiserie, mécanique...). Multilingue (français + Nouchi, Dioula, Baoulé, Bété), multimodal (photos de chantier via GPT-4o Vision, vocal via Whisper), monétisé en Mobile Money (Wave, Orange Money).
+**ProsArtisan IA Expert** — assistant IA conversationnel (RAG) pour artisans du BTP et métiers d'art en Côte d'Ivoire (maçonnerie, électricité, plomberie, menuiserie, mécanique...). Multilingue (français + Nouchi, Dioula, Baoulé, Bété), multimodal (photos de chantier via la vision Mistral, vocal via Voxtral), monétisé en Mobile Money (Wave, Orange Money).
 
 **Ce n'est pas un marketplace** (pas de clients/artisans/fournisseurs mis en relation, pas de J-Code, pas de séquestre) — c'est un copilot technique conversationnel avec freemium par quota de questions.
 
@@ -17,8 +17,8 @@ Documents de référence à consulter en priorité : `AGENTS.md` (règles d'ing�
 | Backend | Python 3.12, FastAPI, Pydantic v2 |
 | BDD relationnelle | PostgreSQL 16, SQLAlchemy 2.0 (async), asyncpg, Alembic |
 | Cache / quotas / rate-limit | Redis 7 (jamais d'état en mémoire par worker) |
-| Base vectorielle (RAG) | Qdrant, embeddings OpenAI `text-embedding-3-small` |
-| IA | OpenAI GPT-4o / GPT-4o-mini (texte + vision), Whisper (vocal) |
+| Base vectorielle (RAG) | Qdrant, embeddings Mistral `mistral-embed` |
+| IA | Mistral Small / Medium (texte + vision), Voxtral (vocal STT/TTS) |
 | Paiement | Wave Business API, Orange Money API (webhooks signés HMAC SHA-256) |
 | Mobile | Flutter (`mobile_app_flutter/`, Android prioritaire) |
 | Web statique | `admin_web/` (back-office, template Dastone v2.1.0), `chat_web/` (front chat) |

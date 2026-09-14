@@ -28,7 +28,7 @@ Fournit des réponses techniques précises via **RAG** (Retrieval-Augmented Gene
 2. **Configurer l'environnement** :
    ```bash
    cp .env.example .env
-   # Éditez .env avec vos clés (OpenAI, Wave, etc.)
+   # Éditez .env avec vos clés (Mistral, Wave, etc.)
    ```
 
 3. **Lancer avec Docker** :

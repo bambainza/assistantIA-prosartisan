@@ -2,7 +2,8 @@
 Service RAG (Retrieval-Augmented Generation) & Multimodal.
 
 Gère la recherche sémantique dans Qdrant (avec filtre metier_id),
-l'assemblage du prompt système multilingue et l'appel à l'API LLM (OpenAI GPT-4o / GPT-4o-mini).
+l'assemblage du prompt système multilingue et l'appel à l'API LLM
+(Mistral Small/Medium — vision intégrée nativement dans les modèles 3.x).
 """
 
 from __future__ import annotations
@@ -12,7 +13,7 @@ import logging
 import os
 from typing import Any
 
-from openai import AsyncOpenAI
+from mistralai.client import Mistral
 from qdrant_client import AsyncQdrantClient
 from qdrant_client.http.models import (
     Distance,
@@ -55,7 +56,7 @@ class RAGService:
     """Service de recherche vectorielle et de génération de réponse LLM."""
 
     def __init__(self) -> None:
-        self.openai_client = AsyncOpenAI(api_key=settings.openai_api_key)
+        self.mistral_client = Mistral(api_key=settings.mistral_api_key)
         self.qdrant_client = AsyncQdrantClient(
             host=settings.qdrant_host,
             port=settings.qdrant_port,
@@ -101,17 +102,17 @@ class RAGService:
             return cached
 
         if (
-            settings.openai_api_key.startswith("sk-placeholder")
-            or settings.openai_api_key == "sk-placeholder"
+            settings.mistral_api_key.startswith("sk-placeholder")
+            or settings.mistral_api_key == "sk-placeholder"
         ):
             # Mode mock pour développement/test local sans clé API valide
-            vec = [0.0] * 1536
+            vec = [0.0] * settings.qdrant_vector_size
             await cache_service.cache_embedding(text, vec)
             return vec
 
-        response = await self.openai_client.embeddings.create(
+        response = await self.mistral_client.embeddings.create_async(
             model=settings.embedding_model,
-            input=text,
+            inputs=[text],
         )
         vec = response.data[0].embedding
         await cache_service.cache_embedding(text, vec)
@@ -251,8 +252,8 @@ class RAGService:
         )
 
         if (
-            settings.openai_api_key.startswith("sk-placeholder")
-            or settings.openai_api_key == "sk-placeholder"
+            settings.mistral_api_key.startswith("sk-placeholder")
+            or settings.mistral_api_key == "sk-placeholder"
         ):
             # Mode mock / test
             mock_reply = (
@@ -272,7 +273,8 @@ class RAGService:
                 )
             return mock_res
 
-        # Construction du message utilisateur (avec support vision GPT-4o si image)
+        # Construction du message utilisateur (avec support vision si image —
+        # même format `image_url` qu'OpenAI, la SDK Mistral l'accepte tel quel).
         messages: list[dict[str, Any]] = [
             {"role": "system", "content": prompt_formatted}
         ]
@@ -296,7 +298,7 @@ class RAGService:
             messages.append({"role": "user", "content": question})
             model_to_use = settings.llm_model
 
-        completion = await self.openai_client.chat.completions.create(
+        completion = await self.mistral_client.chat.complete_async(
             model=model_to_use,
             messages=messages,
             temperature=settings.llm_temperature,
@@ -353,8 +355,8 @@ class RAGService:
             )
 
             if (
-                settings.openai_api_key.startswith("sk-placeholder")
-                or settings.openai_api_key == "sk-placeholder"
+                settings.mistral_api_key.startswith("sk-placeholder")
+                or settings.mistral_api_key == "sk-placeholder"
             ):
                 # Mode mock / test streaming
                 mock_reply = (
@@ -369,7 +371,8 @@ class RAGService:
                     await asyncio.sleep(0.04)
                 return
 
-            # Construction du message utilisateur (avec support vision GPT-4o si image)
+            # Construction du message utilisateur (avec support vision si image —
+            # même format `image_url` qu'OpenAI, la SDK Mistral l'accepte tel quel).
             messages: list[dict[str, Any]] = [
                 {"role": "system", "content": prompt_formatted}
             ]
@@ -396,14 +399,13 @@ class RAGService:
                 messages.append({"role": "user", "content": question})
                 model_to_use = settings.llm_model
 
-            completion = await self.openai_client.chat.completions.create(
+            stream = await self.mistral_client.chat.stream_async(
                 model=model_to_use,
                 messages=messages,
                 temperature=settings.llm_temperature,
-                stream=True,
             )
-            async for chunk in completion:
-                content = chunk.choices[0].delta.content
+            async for event in stream:
+                content = event.data.choices[0].delta.content
                 if content:
                     yield content
 

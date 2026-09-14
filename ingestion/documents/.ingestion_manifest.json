@@ -2,7 +2,7 @@
   "guide_assainissement_fosse_septique_ci.md": {
     "sha256": "c91b5cdd121378175d549a5954f50bdcd00b753936df00149b300a86c6fd2202",
     "chunks_count": 6,
-    "last_ingested_at": "2026-09-06T22:34:28.638231+00:00",
+    "last_ingested_at": "2026-09-14T22:49:53.563097+00:00",
     "metadata": {
       "metier_id": 3,
       "secteur_id": 1,
@@ -13,9 +13,9 @@
   "guide_carrelage_revetement_dtu52.md": {
     "sha256": "b92c36b41178cd8f0af4bb2e1ce5fb9bc20353baa4b2295d4d716ac0b96058d8",
     "chunks_count": 8,
-    "last_ingested_at": "2026-09-06T22:34:28.687272+00:00",
+    "last_ingested_at": "2026-09-14T22:49:58.253141+00:00",
     "metadata": {
-      "metier_id": 1,
+      "metier_id": 13,
       "secteur_id": 1,
       "type_document": "guide_technique",
       "niveau_expertise": "intermédiaire"
@@ -24,7 +24,7 @@
   "guide_climatisation_froid_installation_entretien.md": {
     "sha256": "367c75400b4e6c7b2c98ca79bd9dcb1a39ede2c7bb045bcfe7b6c00bda1861fa",
     "chunks_count": 6,
-    "last_ingested_at": "2026-09-06T22:34:28.723619+00:00",
+    "last_ingested_at": "2026-09-14T22:49:59.779553+00:00",
     "metadata": {
       "metier_id": 3,
       "secteur_id": 1,
@@ -35,7 +35,7 @@
   "guide_depannage_electrique_domestique_securite.md": {
     "sha256": "f7676c037ba547de38bc0f21b990745367321e03e55132d96c81afb99b2d5088",
     "chunks_count": 6,
-    "last_ingested_at": "2026-09-06T22:34:28.759593+00:00",
+    "last_ingested_at": "2026-09-14T22:50:01.419932+00:00",
     "metadata": {
       "metier_id": 2,
       "secteur_id": 1,
@@ -46,9 +46,9 @@
   "guide_diagnostic_fissures_pathologies_batiment.md": {
     "sha256": "ec636ed08f4d6cecf32aa16ff59e39280540d59380228675da6e229e9e81b61f",
     "chunks_count": 5,
-    "last_ingested_at": "2026-09-06T22:34:28.792540+00:00",
+    "last_ingested_at": "2026-09-14T22:50:03.324498+00:00",
     "metadata": {
-      "metier_id": 1,
+      "metier_id": 13,
       "secteur_id": 1,
       "type_document": "guide_technique",
       "niveau_expertise": "avance"
@@ -57,7 +57,7 @@
   "guide_diagnostic_pannes_electroniques_auto.md": {
     "sha256": "248443f3c0526e9ee5936c9bd87fd34428712fcba24b0f1b8ed7539fb03e2ac9",
     "chunks_count": 5,
-    "last_ingested_at": "2026-09-06T22:34:28.823200+00:00",
+    "last_ingested_at": "2026-09-14T22:50:05.695701+00:00",
     "metadata": {
       "metier_id": 4,
       "secteur_id": 1,
@@ -68,9 +68,9 @@
   "guide_fondations_terrassement_geotechnique_ci.md": {
     "sha256": "1d072856e7247790258af27af29645b2c1748fdfc70da8a0b1712578a95880b5",
     "chunks_count": 7,
-    "last_ingested_at": "2026-09-06T22:34:28.859559+00:00",
+    "last_ingested_at": "2026-09-14T22:50:08.536607+00:00",
     "metadata": {
-      "metier_id": 1,
+      "metier_id": 13,
       "secteur_id": 1,
       "type_document": "guide_technique",
       "niveau_expertise": "avance"
@@ -79,7 +79,7 @@
   "guide_installation_solaire_photovoltaique_ci.md": {
     "sha256": "9c4519bcde67346e5960b12ea4e3f4f529b3c0aad4f50f39e0f4d33131c865a2",
     "chunks_count": 6,
-    "last_ingested_at": "2026-09-06T22:34:28.892597+00:00",
+    "last_ingested_at": "2026-09-14T22:50:10.238420+00:00",
     "metadata": {
       "metier_id": 2,
       "secteur_id": 1,
@@ -90,9 +90,9 @@
   "guide_maconnerie_dtu_20_1_ci.md": {
     "sha256": "15aaa78ac4f697b83c30f50a195c46cc097d6390782ec61b6b31a55babf59fc3",
     "chunks_count": 8,
-    "last_ingested_at": "2026-09-06T22:34:28.943005+00:00",
+    "last_ingested_at": "2026-09-14T22:50:12.354290+00:00",
     "metadata": {
-      "metier_id": 1,
+      "metier_id": 13,
       "secteur_id": 1,
       "type_document": "guide_technique",
       "niveau_expertise": "intermédiaire"
@@ -101,7 +101,7 @@
   "guide_mecanique_auto_diesel_essence.md": {
     "sha256": "54e97ee691a25f1ceaef85c341c22ca450f55c178bcef3699bddd552a8c03e99",
     "chunks_count": 5,
-    "last_ingested_at": "2026-09-06T22:34:28.980675+00:00",
+    "last_ingested_at": "2026-09-14T22:50:16.150707+00:00",
     "metadata": {
       "metier_id": 4,
       "secteur_id": 1,
@@ -112,9 +112,9 @@
   "guide_menuiserie_charpente_bois_tropical.md": {
     "sha256": "f901a9fcfe259fe71bd32f53ac251e7446e99d429f8f48518ab9ece628055de9",
     "chunks_count": 5,
-    "last_ingested_at": "2026-09-06T22:34:29.014785+00:00",
+    "last_ingested_at": "2026-09-14T22:50:20.859770+00:00",
     "metadata": {
-      "metier_id": 1,
+      "metier_id": 13,
       "secteur_id": 1,
       "type_document": "guide_technique",
       "niveau_expertise": "intermédiaire"
@@ -172,6 +172,50 @@
       "metier_id": 2,
       "secteur_id": 1,
       "type_document": "norme_officielle",
+      "niveau_expertise": "intermédiaire"
+    }
+  },
+  "guide_btp_ferraillage_coffrage_ci.md": {
+    "sha256": "a3f7a7ac0d65db5fd3169cd83c61b72d389541473de6845953df9f5b27dc26df",
+    "chunks_count": 7,
+    "last_ingested_at": "2026-09-14T22:49:55.736774+00:00",
+    "metadata": {
+      "metier_id": 13,
+      "secteur_id": 1,
+      "type_document": "guide_technique",
+      "niveau_expertise": "avance"
+    }
+  },
+  "guide_maroquinerie_cuir_artisanat.md": {
+    "sha256": "4a7579b7348b097cf78d49c6da8964020ea9eefe957e1eaf70fe7d8659c15112",
+    "chunks_count": 7,
+    "last_ingested_at": "2026-09-14T22:50:14.588563+00:00",
+    "metadata": {
+      "metier_id": 6,
+      "secteur_id": 2,
+      "type_document": "guide_technique",
+      "niveau_expertise": "avance"
+    }
+  },
+  "guide_mecanique_motos_tricycles_ci.md": {
+    "sha256": "e2cff059859a1061f018ca4e639701abc87c8215d1bbfb5cc7e051f06703d2ce",
+    "chunks_count": 7,
+    "last_ingested_at": "2026-09-14T22:50:19.442205+00:00",
+    "metadata": {
+      "metier_id": 4,
+      "secteur_id": 1,
+      "type_document": "guide_technique",
+      "niveau_expertise": "intermédiaire"
+    }
+  },
+  "guide_restauration_maquis_hygiene_ci.md": {
+    "sha256": "9fd7c2b96f4d4f4aab022d277d2379af5ec5c7404cf332b7facec4e87a04bb47",
+    "chunks_count": 7,
+    "last_ingested_at": "2026-09-14T22:51:10.116203+00:00",
+    "metadata": {
+      "metier_id": 5,
+      "secteur_id": 2,
+      "type_document": "guide_technique",
       "niveau_expertise": "intermédiaire"
     }
   }

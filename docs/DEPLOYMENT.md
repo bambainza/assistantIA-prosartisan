@@ -20,7 +20,7 @@ En production (`APP_ENV=production`), l'application refuse de démarrer si les v
 | `DB_DATABASE`, `DB_USERNAME`, `DB_PASSWORD` | Identifiants PostgreSQL | Mot de passe complexe non par défaut |
 | `REDIS_HOST`, `REDIS_PORT`, `REDIS_PASSWORD` | Instance Redis (Cache & Rate-limit) | Instance managée ou conteneur avec mot de passe |
 | `QDRANT_HOST`, `QDRANT_PORT` | Base vectorielle Qdrant | Port 6333 |
-| `OPENAI_API_KEY` | Clé API OpenAI (Modèles GPT & Embeddings) | Clé de production `sk-...` |
+| `MISTRAL_API_KEY` | Clé API Mistral (chat/vision, embeddings, Voxtral STT/TTS) | Clé de production |
 | `CORS_ALLOWED_ORIGINS` | Origines autorisées (CORS) | `https://prosartisan.ci` (interdiction stricte de `*`) |
 
 ---

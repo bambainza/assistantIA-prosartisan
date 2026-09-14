@@ -80,22 +80,28 @@ class Settings(BaseSettings):
     qdrant_port: int = 6333
     qdrant_collection: str = "connaissances_prosartisan"
     # Dimension des vecteurs de la collection (doit correspondre à embedding_model :
-    # 1536 pour text-embedding-3-small).
-    qdrant_vector_size: int = 1536
+    # 1024 pour mistral-embed).
+    qdrant_vector_size: int = 1024
     # Score de similarité minimal (cosinus) pour qu'un extrait retrouvé soit
     # considéré pertinent. En dessous, on déclenche le repli "zéro hallucination"
     # plutôt que de laisser le LLM broder sur un contexte hors sujet.
     rag_min_score: float = 0.15
 
-    # ── LLM (OpenAI) & Vision / Audio ──
-    openai_api_key: str = "sk-placeholder"
-    llm_model: str = "gpt-4o-mini"
-    llm_vision_model: str = "gpt-4o"
-    whisper_model: str = "whisper-1"
-    tts_model: str = "tts-1"
-    tts_voice: str = "alloy"
+    # ── LLM (Mistral) & Vision / Audio ──
+    mistral_api_key: str = "sk-placeholder"
+    llm_model: str = "mistral-small-latest"
+    # Modèle utilisé pour l'analyse de photos de chantier (vision) — depuis les
+    # familles Mistral 3.x/Magistral, la vision est intégrée nativement, plus
+    # besoin d'un modèle multimodal séparé et surtaxé comme l'ancien Pixtral.
+    llm_vision_model: str = "mistral-medium-latest"
+    stt_model: str = "voxtral-mini-latest"
+    tts_model: str = "voxtral-mini-tts-2603"
+    # Identifiant de la voix Voxtral TTS (clonée via la console Mistral) —
+    # sans lui, la synthèse vocale échoue explicitement (pas de repli mock en
+    # production). Non requis pour la transcription (STT) ni le chat/vision.
+    tts_voice_id: str | None = None
     llm_temperature: float = 0.2
-    embedding_model: str = "text-embedding-3-small"
+    embedding_model: str = "mistral-embed"
 
     # ── Stockage Fichiers ──
     upload_dir: str = "./uploads"

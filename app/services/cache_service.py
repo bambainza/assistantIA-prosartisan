@@ -2,7 +2,7 @@
 Service de Caching Hybride : Redis (primaire) + In-Memory (fallback gracieux).
 
 Permet de mettre en cache les embeddings vectoriels et les réponses RAG fréquentes
-afin de réduire la latence et minimiser les coûts d'appels à l'API OpenAI.
+afin de réduire la latence et minimiser les coûts d'appels à l'API Mistral.
 """
 
 from __future__ import annotations

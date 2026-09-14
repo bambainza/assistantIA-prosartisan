@@ -55,7 +55,7 @@ async def transcribe_audio_endpoint(
     file: UploadFile = File(...),
     current_user_id: uuid.UUID | None = Depends(get_optional_user_id),
 ) -> TranscribeResponse:
-    """Transcrit une note vocale enregistrée sur le chantier via OpenAI Whisper."""
+    """Transcrit une note vocale enregistrée sur le chantier via Mistral Voxtral (STT)."""
     audio_bytes = await file.read()
     filename = file.filename or "audio.wav"
     text = await audio_service.transcribe_audio(
@@ -118,7 +118,7 @@ async def chat_endpoint(
             for m in sorted_msgs[-10:]:
                 history_messages.append({"role": m.role, "content": m.content})
 
-    # 3. Génération RAG / Vision via OpenAI avec historique
+    # 3. Génération RAG / Vision via Mistral avec historique
     rag_result = await rag_service.generate_response(
         question=payload.question,
         metier_id=payload.metier_id,

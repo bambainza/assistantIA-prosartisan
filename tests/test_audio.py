@@ -1,4 +1,4 @@
-"""Tests pour le service audio Whisper et l'endpoint /api/chat/transcribe."""
+"""Tests pour le service audio Voxtral (STT) et l'endpoint /api/chat/transcribe."""
 
 import pytest
 from fastapi import HTTPException

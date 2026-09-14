@@ -41,7 +41,7 @@ services:
       - REDIS_PASSWORD=${REDIS_PASSWORD}
       - QDRANT_HOST=qdrant
       - QDRANT_PORT=6333
-      - OPENAI_API_KEY=${OPENAI_API_KEY}
+      - MISTRAL_API_KEY=${MISTRAL_API_KEY}
     depends_on:
       db:
         condition: service_healthy

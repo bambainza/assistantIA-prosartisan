@@ -474,7 +474,7 @@ function fillInput(text) {
     chatInput.focus();
 }
 
-// --- Speech-to-Text & Audio Recording via OpenAI Whisper ---
+// --- Speech-to-Text & Audio Recording via Mistral Voxtral ---
 let mediaRecorder = null;
 let audioChunks = [];
 let isVoiceRecording = false;
@@ -513,7 +513,7 @@ async function toggleVoiceRecording() {
             const extension = mimeType.includes('webm') ? 'webm' : (mimeType.includes('ogg') ? 'ogg' : 'wav');
             const audioBlob = new Blob(audioChunks, { type: mimeType });
             
-            showToast("⏳ Transcription Whisper en cours...");
+            showToast("⏳ Transcription en cours...");
             try {
                 const formData = new FormData();
                 formData.append('file', audioBlob, `vocal_${Date.now()}.${extension}`);
@@ -540,7 +540,7 @@ async function toggleVoiceRecording() {
                 }
             } catch (err) {
                 console.error("Erreur transcription :", err);
-                showToast("⚠️ Échec de la transcription Whisper.");
+                showToast("⚠️ Échec de la transcription.");
             }
         };
 
@@ -572,7 +572,7 @@ function setMicButtonRecordingState(recording) {
     micBtn.setAttribute('aria-pressed', recording ? 'true' : 'false');
     const label = recording ? "Arrêter l'enregistrement" : "Entrée vocale";
     micBtn.setAttribute('aria-label', label);
-    micBtn.title = recording ? "Arrêter l'enregistrement" : "Entrée Vocale (Whisper)";
+    micBtn.title = recording ? "Arrêter l'enregistrement" : "Entrée Vocale";
 }
 
 function startSpeechRecognitionFallback() {

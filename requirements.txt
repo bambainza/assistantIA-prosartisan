@@ -1,7 +1,9 @@
 # === Core ===
 fastapi==0.115.14
 uvicorn[standard]==0.30.0
-pydantic==2.9.0
+# pydantic>=2.11.2 requis par mistralai==2.10.0 (bump depuis 2.9.0, 2026-09-14) —
+# pydantic-settings==2.5.0 reste compatible, suite de tests complète revérifiée.
+pydantic==2.13.5
 pydantic-settings==2.5.0
 
 # === Base de données ===
@@ -13,7 +15,7 @@ alembic==1.13.2
 redis[hiredis]==5.0.8
 
 # === IA / RAG ===
-# Le RAG appelle directement `openai` (AsyncOpenAI) et `qdrant-client`
+# Le RAG appelle directement `mistralai` (Mistral) et `qdrant-client`
 # (AsyncQdrantClient) — voir app/services/rag_service.py. Le framework
 # langchain n'est jamais importé ; les paquets langchain*/langsmith ont été
 # retirés (2026-09-14) car inutilisés et porteurs de CVE connues.
@@ -23,11 +25,15 @@ qdrant-client==1.11.0
 pypdf==6.16.1
 tiktoken==0.7.0
 
-# === Embeddings ===
-openai==1.43.0
+# === IA (Mistral) : chat/vision, embeddings, Voxtral STT/TTS ===
+# Migré depuis openai==1.43.0 (2026-09-14) — voir app/services/rag_service.py
+# et app/services/audio_service.py. mistralai>=2.10.0 exige httpx>=0.28.1.
+mistralai==2.10.0
 
 # === HTTP Client (pour Wave API) ===
-httpx==0.27.0
+# httpx>=0.28.1 requis par mistralai (le pin <0.28 hérité d'openai==1.43.0,
+# qui bloquait firebase-admin, est donc levé — non exploité pour l'instant).
+httpx==0.28.1
 
 # === Sécurité ===
 # Note : pip signale un conflit pyasn1 entre python-jose (<0.5.0) et la chaîne
