@@ -14,7 +14,6 @@ from app.models.base import Base
 
 if TYPE_CHECKING:
     from app.models.package import Package
-    from app.models.payment_incident import PaymentIncident
     from app.models.user import User
 
 
@@ -39,7 +38,7 @@ class UserSubscription(Base):
         index=True,
     )
 
-    # États possibles : 'ACTIVE', 'EXPIRED', 'GRACE_PERIOD', 'CANCELED', 'PAYMENT_INCIDENT'
+    # États possibles : 'ACTIVE', 'EXPIRED', 'GRACE_PERIOD', 'CANCELED'
     statut: Mapped[str] = mapped_column(String(20), default="ACTIVE", index=True)
 
     date_debut: Mapped[datetime] = mapped_column(server_default=func.now())
@@ -60,9 +59,6 @@ class UserSubscription(Base):
     # Relations
     user: Mapped[User] = relationship(back_populates="subscriptions")
     package: Mapped[Package] = relationship(back_populates="subscriptions")
-    incidents: Mapped[list[PaymentIncident]] = relationship(
-        back_populates="subscription", cascade="all, delete-orphan"
-    )
 
     @property
     def quota_restant(self) -> int | None:
@@ -70,3 +66,32 @@ class UserSubscription(Base):
         if self.quota_initial is None:
             return None
         return max(0, self.quota_initial - self.quota_consomme)
+
+    @property
+    def jours_restants(self) -> int | None:
+        """Nombre de jours restants avant expiration."""
+        if not self.date_fin:
+            return None
+        from datetime import UTC, datetime
+
+        now = datetime.now(UTC).replace(tzinfo=None)
+        end = self.date_fin.replace(tzinfo=None) if self.date_fin.tzinfo else self.date_fin
+        delta = end - now
+        return max(0, delta.days)
+
+    @property
+    def est_actif(self) -> bool:
+        """Indique si l'abonnement est actif et non expiré."""
+        if self.statut != "ACTIVE":
+            return False
+        if self.date_fin is not None:
+            from datetime import UTC, datetime
+
+            now = datetime.now(UTC).replace(tzinfo=None)
+            end = self.date_fin.replace(tzinfo=None) if self.date_fin.tzinfo else self.date_fin
+            if end < now:
+                return False
+        if self.quota_initial is not None and self.quota_restant is not None:
+            if self.quota_restant <= 0:
+                return False
+        return True

@@ -33,6 +33,13 @@ from app.models.metier import Metier
 from app.models.quota import QuotaUtilisateur
 from app.models.transaction import TransactionMobileMoney
 from app.models.user import User
+from app.schemas.package import (
+    PackageCreate,
+    PackageUpdate,
+    SubscriptionAssignRequest,
+    SubscriptionExtendRequest,
+)
+from app.services.subscription_service import subscription_service
 from ingestion.pipeline import run_ingestion
 
 router = APIRouter(prefix="/api/admin", tags=["Back-Office Admin"])
@@ -607,3 +614,201 @@ async def get_system_logs(
             },
         ]
     }
+
+
+# ============================================================================
+# MODULE PACKAGES & ABONNEMENTS
+# ============================================================================
+
+
+@router.get("/packages")
+async def get_packages_list(
+    only_active: bool = False,
+    admin_id: uuid.UUID = Depends(get_current_admin_user_id),
+    db: AsyncSession = Depends(get_db),
+) -> dict[str, Any]:
+    """Retourne la liste des packages commerciaux avec le nombre d'abonnés actifs."""
+    packages = await subscription_service.list_packages(db, only_active=only_active)
+    return {"packages": packages}
+
+
+@router.post("/packages", status_code=status.HTTP_201_CREATED)
+async def create_package(
+    payload: PackageCreate,
+    admin_id: uuid.UUID = Depends(get_current_admin_user_id),
+    db: AsyncSession = Depends(get_db),
+) -> dict[str, Any]:
+    """Crée une nouvelle offre commerciale."""
+    try:
+        pkg = await subscription_service.create_package(db, payload)
+        return {
+            "status": "success",
+            "package": {
+                "id": str(pkg.id),
+                "code": pkg.code,
+                "nom": pkg.nom,
+                "description": pkg.description,
+                "prix": pkg.prix,
+                "devise": pkg.devise,
+                "type_package": pkg.type_package,
+                "duree_jours": pkg.duree_jours,
+                "quota_requetes": pkg.quota_requetes,
+                "auto_renouvelable": pkg.auto_renouvelable,
+                "est_actif": pkg.est_actif,
+                "fonctionnalites": pkg.fonctionnalites or [],
+            },
+        }
+    except ValueError as err:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=str(err),
+        )
+
+
+@router.put("/packages/{package_id}")
+async def update_package(
+    package_id: uuid.UUID,
+    payload: PackageUpdate,
+    admin_id: uuid.UUID = Depends(get_current_admin_user_id),
+    db: AsyncSession = Depends(get_db),
+) -> dict[str, Any]:
+    """Met à jour une offre commerciale existante."""
+    try:
+        pkg = await subscription_service.update_package(db, package_id, payload)
+        return {
+            "status": "success",
+            "package": {
+                "id": str(pkg.id),
+                "code": pkg.code,
+                "nom": pkg.nom,
+                "description": pkg.description,
+                "prix": pkg.prix,
+                "devise": pkg.devise,
+                "type_package": pkg.type_package,
+                "duree_jours": pkg.duree_jours,
+                "quota_requetes": pkg.quota_requetes,
+                "auto_renouvelable": pkg.auto_renouvelable,
+                "est_actif": pkg.est_actif,
+                "fonctionnalites": pkg.fonctionnalites or [],
+            },
+        }
+    except ValueError as err:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=str(err),
+        )
+
+
+@router.patch("/packages/{package_id}/toggle")
+async def toggle_package(
+    package_id: uuid.UUID,
+    admin_id: uuid.UUID = Depends(get_current_admin_user_id),
+    db: AsyncSession = Depends(get_db),
+) -> dict[str, Any]:
+    """Bascule l'état actif/inactif d'un package dans le catalogue."""
+    try:
+        pkg = await subscription_service.toggle_package(db, package_id)
+        return {
+            "status": "success",
+            "package_id": str(package_id),
+            "est_actif": pkg.est_actif,
+            "message": f"Package '{pkg.nom}' {'activé' if pkg.est_actif else 'désactivé'}.",
+        }
+    except ValueError as err:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=str(err),
+        )
+
+
+@router.get("/subscriptions")
+async def get_subscriptions_list(
+    statut: str | None = None,
+    package: str | None = None,
+    q: str | None = None,
+    admin_id: uuid.UUID = Depends(get_current_admin_user_id),
+    db: AsyncSession = Depends(get_db),
+) -> dict[str, Any]:
+    """Retourne la liste des inscrits et abonnements souscrits avec filtres."""
+    subs = await subscription_service.list_subscriptions(
+        db, status_filter=statut, package_code=package, query=q
+    )
+    return {"subscriptions": subs}
+
+
+@router.post("/subscriptions/assign")
+async def assign_subscription(
+    payload: SubscriptionAssignRequest,
+    admin_id: uuid.UUID = Depends(get_current_admin_user_id),
+    db: AsyncSession = Depends(get_db),
+) -> dict[str, Any]:
+    """Assigne ou renouvelle manuellement un package à un artisan."""
+    try:
+        sub = await subscription_service.assign_subscription(db, payload)
+        return {
+            "status": "success",
+            "message": "Abonnement assigné avec succès.",
+            "subscription_id": str(sub.id),
+        }
+    except ValueError as err:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=str(err),
+        )
+
+
+@router.post("/subscriptions/{sub_id}/extend")
+async def extend_subscription(
+    sub_id: uuid.UUID,
+    payload: SubscriptionExtendRequest,
+    admin_id: uuid.UUID = Depends(get_current_admin_user_id),
+    db: AsyncSession = Depends(get_db),
+) -> dict[str, Any]:
+    """Prolonge la durée d'un abonnement existant."""
+    try:
+        sub = await subscription_service.extend_subscription(
+            db, sub_id, payload.jours_supplementaires
+        )
+        return {
+            "status": "success",
+            "message": f"Abonnement prolongé de {payload.jours_supplementaires} jours.",
+            "subscription_id": str(sub.id),
+            "date_fin": sub.date_fin.isoformat() if sub.date_fin else None,
+        }
+    except ValueError as err:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=str(err),
+        )
+
+
+@router.post("/subscriptions/{sub_id}/cancel")
+async def cancel_subscription(
+    sub_id: uuid.UUID,
+    admin_id: uuid.UUID = Depends(get_current_admin_user_id),
+    db: AsyncSession = Depends(get_db),
+) -> dict[str, Any]:
+    """Résilie un abonnement et réinitialise l'artisan en formule gratuite."""
+    try:
+        sub = await subscription_service.cancel_subscription(db, sub_id)
+        return {
+            "status": "success",
+            "message": "Abonnement résilié avec succès.",
+            "subscription_id": str(sub.id),
+        }
+    except ValueError as err:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=str(err),
+        )
+
+
+@router.get("/subscriptions/stats")
+async def get_subscription_stats(
+    admin_id: uuid.UUID = Depends(get_current_admin_user_id),
+    db: AsyncSession = Depends(get_db),
+) -> dict[str, Any]:
+    """Indicateurs clés et KPIs du module packages."""
+    kpis = await subscription_service.get_subscription_kpis(db)
+    return {"kpis": kpis}
+

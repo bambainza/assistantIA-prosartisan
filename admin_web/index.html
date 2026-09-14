@@ -109,6 +109,12 @@
                             </a>
                         </li>
                         <li class="nav-item">
+                            <a class="nav-link nav-menu-item" href="javascript:void(0);" data-tab="tab-packages">
+                                <i class="iconoir-box-iso menu-icon"></i>
+                                <span>Packages & Abonnements</span>
+                            </a>
+                        </li>
+                        <li class="nav-item">
                             <a class="nav-link nav-menu-item" href="javascript:void(0);" data-tab="tab-playground">
                                 <i class="iconoir-open-book menu-icon"></i>
                                 <span>RAG & Vision Studio</span>
@@ -439,6 +445,169 @@
                     </div>
                 </div>
 
+                <!-- Tab: Packages & Abonnements -->
+                <div id="tab-packages" class="tab-page">
+                    <!-- Bandeau KPIs Abonnements -->
+                    <div class="row mt-4">
+                        <div class="col-md-6 col-lg-3 mb-4">
+                            <div class="card report-card">
+                                <div class="card-body">
+                                    <div class="row d-flex justify-content-center">
+                                        <div class="col">
+                                            <p class="text-muted mb-0 fw-semibold">Abonnés Actifs</p>
+                                            <h3 class="my-1 fs-20" id="kpi-pkg-active">0</h3>
+                                            <p class="mb-0 text-truncate text-muted"><span class="text-success"><i class="iconoir-check-circle fs-12"></i> En cours</span> sur la plateforme</p>
+                                        </div>
+                                        <div class="col-auto align-self-center">
+                                            <div class="flex-shrink-0 bg-success-subtle text-success thumb-md rounded-circle d-flex align-items-center justify-content-center kpi-icon-circle">
+                                                <i class="iconoir-user-badge-check fs-4"></i>
+                                            </div>
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+
+                        <div class="col-md-6 col-lg-3 mb-4">
+                            <div class="card report-card">
+                                <div class="card-body">
+                                    <div class="row d-flex justify-content-center">
+                                        <div class="col">
+                                            <p class="text-muted mb-0 fw-semibold">MRR Estimé (F CFA)</p>
+                                            <h3 class="my-1 fs-20" id="kpi-pkg-mrr">0 F</h3>
+                                            <p class="mb-0 text-truncate text-muted"><span class="text-info">Revenu récurrent</span> mensuel</p>
+                                        </div>
+                                        <div class="col-auto align-self-center">
+                                            <div class="flex-shrink-0 bg-primary-subtle text-primary thumb-md rounded-circle d-flex align-items-center justify-content-center kpi-icon-circle">
+                                                <i class="iconoir-wallet fs-4"></i>
+                                            </div>
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+
+                        <div class="col-md-6 col-lg-3 mb-4">
+                            <div class="card report-card">
+                                <div class="card-body">
+                                    <div class="row d-flex justify-content-center">
+                                        <div class="col">
+                                            <p class="text-muted mb-0 fw-semibold">Échéances &lt; 7 Jours</p>
+                                            <h3 class="my-1 fs-20" id="kpi-pkg-expiring">0</h3>
+                                            <p class="mb-0 text-truncate text-muted"><span class="text-warning">À renouveler</span> prochainement</p>
+                                        </div>
+                                        <div class="col-auto align-self-center">
+                                            <div class="flex-shrink-0 bg-warning-subtle text-warning thumb-md rounded-circle d-flex align-items-center justify-content-center kpi-icon-circle">
+                                                <i class="iconoir-hourglass fs-4"></i>
+                                            </div>
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+
+                        <div class="col-md-6 col-lg-3 mb-4">
+                            <div class="card report-card">
+                                <div class="card-body">
+                                    <div class="row d-flex justify-content-center">
+                                        <div class="col">
+                                            <p class="text-muted mb-0 fw-semibold">Total Souscriptions</p>
+                                            <h3 class="my-1 fs-20" id="kpi-pkg-total">0</h3>
+                                            <p class="mb-0 text-truncate text-muted"><span class="text-secondary">Historique cumulé</span></p>
+                                        </div>
+                                        <div class="col-auto align-self-center">
+                                            <div class="flex-shrink-0 bg-secondary-subtle text-secondary thumb-md rounded-circle d-flex align-items-center justify-content-center kpi-icon-circle">
+                                                <i class="iconoir-box-iso fs-4"></i>
+                                            </div>
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Section 1 : Catalogue des Packages / Offres -->
+                    <div class="card mb-4">
+                        <div class="card-header d-flex justify-content-between align-items-center">
+                            <div>
+                                <h4 class="card-title mb-1">Catalogue des Packages & Formules</h4>
+                                <p class="text-muted fs-12 mb-0">Gestion dynamique des offres commerciales, tarifs, durées et quotas de requêtes</p>
+                            </div>
+                            <button type="button" class="btn btn-sm btn-primary" onclick="openCreatePackageModal()">
+                                <i class="iconoir-plus-circle me-1"></i> Créer une Offre
+                            </button>
+                        </div>
+                        <div class="card-body">
+                            <div class="row" id="packages-cards-grid">
+                                <!-- Cartes de packages injectées via JS -->
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Section 2 : Tableau des Inscrits & Abonnements Souscrits -->
+                    <div class="card">
+                        <div class="card-header d-flex flex-wrap justify-content-between align-items-center gap-2">
+                            <div>
+                                <h4 class="card-title mb-1">Inscrits & Abonnements souscrits</h4>
+                                <p class="text-muted fs-12 mb-0">Suivi des artisans abonnés, durées restantes, quotas et gestion des renouvellements</p>
+                            </div>
+                            <button type="button" class="btn btn-sm btn-success" onclick="openAssignPackageModal()">
+                                <i class="iconoir-user-plus me-1"></i> Assigner / Renouveler
+                            </button>
+                        </div>
+                        <div class="card-body">
+                            <!-- Barre d'outils de filtres -->
+                            <div class="row g-2 mb-3 align-items-center">
+                                <div class="col-md-5">
+                                    <div class="input-group">
+                                        <span class="input-group-text bg-light border-end-0"><i class="iconoir-search fs-14"></i></span>
+                                        <input type="text" id="sub-search-input" class="form-control border-start-0" placeholder="Rechercher par artisan, téléphone, email..." oninput="handleSubscriptionFilter()">
+                                    </div>
+                                </div>
+                                <div class="col-md-3">
+                                    <select id="sub-filter-package" class="form-select" onchange="handleSubscriptionFilter()">
+                                        <option value="ALL">Toutes les formules</option>
+                                    </select>
+                                </div>
+                                <div class="col-md-2">
+                                    <select id="sub-filter-status" class="form-select" onchange="handleSubscriptionFilter()">
+                                        <option value="ALL">Tous les statuts</option>
+                                        <option value="ACTIVE">Actifs uniquement</option>
+                                        <option value="EXPIRED">Expirés uniquement</option>
+                                    </select>
+                                </div>
+                                <div class="col-md-2 text-end">
+                                    <button class="btn btn-outline-secondary w-100" onclick="loadPackagesTab()">
+                                        <i class="iconoir-refresh me-1"></i> Actualiser
+                                    </button>
+                                </div>
+                            </div>
+
+                            <!-- Tableau -->
+                            <div class="table-responsive">
+                                <table class="table mb-0 table-centered table-hover">
+                                    <thead class="table-light">
+                                        <tr>
+                                            <th>Artisan</th>
+                                            <th>Contact</th>
+                                            <th>Métier</th>
+                                            <th>Package Souscrit</th>
+                                            <th>Date Début</th>
+                                            <th>Durée & Échéance</th>
+                                            <th>Quotas</th>
+                                            <th>Statut</th>
+                                            <th class="text-end">Actions</th>
+                                        </tr>
+                                    </thead>
+                                    <tbody id="subscriptions-table-body">
+                                        <!-- Injected via JS -->
+                                    </tbody>
+                                </table>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
                 <!-- Tab 5: RAG & Vision Studio Playground -->
                 <div id="tab-playground" class="tab-page">
                     <div class="row mt-4">
@@ -533,6 +702,111 @@
                 <div class="modal-footer">
                     <button type="button" class="btn btn-secondary" onclick="closeModal()">Annuler</button>
                     <button type="button" class="btn btn-primary" onclick="submitGrantPass()">Confirmer l'attribution</button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Modal Assigner un Package -->
+    <div class="modal fade" id="modal-assign-package" tabindex="-1" role="dialog" aria-labelledby="modal-assign-package-title" aria-hidden="true">
+        <div class="modal-dialog modal-dialog-centered" role="document">
+            <div class="modal-content">
+                <div class="modal-header">
+                    <h5 class="modal-title" id="modal-assign-package-title"><i class="ri-user-star-line me-2 text-primary"></i>Souscrire / Assigner un Package</h5>
+                    <button type="button" class="btn-close" onclick="closeAssignPackageModal()" aria-label="Close"></button>
+                </div>
+                <div class="modal-body">
+                    <div class="mb-3">
+                        <label for="assign-user-select" class="form-label fw-semibold">Artisan bénéficiaire <span class="text-danger">*</span></label>
+                        <select id="assign-user-select" class="form-select">
+                            <option value="">-- Sélectionner un artisan --</option>
+                        </select>
+                    </div>
+                    <div class="mb-3">
+                        <label for="assign-package-select" class="form-label fw-semibold">Package / Formule <span class="text-danger">*</span></label>
+                        <select id="assign-package-select" class="form-select">
+                            <option value="">-- Sélectionner une formule --</option>
+                        </select>
+                    </div>
+                    <div class="mb-3">
+                        <label for="assign-duration-days" class="form-label">Durée spécifique en jours (optionnel)</label>
+                        <input type="number" id="assign-duration-days" class="form-control" placeholder="Par défaut : durée de base de l'offre" min="1">
+                        <small class="text-muted">Laisser vide pour appliquer la durée standard du forfait.</small>
+                    </div>
+                    <div class="form-check form-switch mb-2">
+                        <input class="form-check-input" type="checkbox" id="assign-auto-renew">
+                        <label class="form-check-label" for="assign-auto-renew">Activer le renouvellement automatique</label>
+                    </div>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-light" onclick="closeAssignPackageModal()">Annuler</button>
+                    <button type="button" class="btn btn-primary" onclick="submitAssignPackage()"><i class="ri-check-line me-1"></i>Confirmer l'affectation</button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Modal Édition / Création Package -->
+    <div class="modal fade" id="modal-package-edit" tabindex="-1" role="dialog" aria-labelledby="modal-package-edit-title" aria-hidden="true">
+        <div class="modal-dialog modal-dialog-centered modal-lg" role="document">
+            <div class="modal-content">
+                <div class="modal-header">
+                    <h5 class="modal-title" id="modal-package-edit-title"><i class="ri-gift-line me-2 text-primary"></i>Configurer une Formule / Package</h5>
+                    <button type="button" class="btn-close" onclick="closePackageEditModal()" aria-label="Close"></button>
+                </div>
+                <div class="modal-body">
+                    <input type="hidden" id="package-edit-id">
+                    <div class="row g-3">
+                        <div class="col-md-6">
+                            <label for="package-edit-code" class="form-label fw-semibold">Code unique <span class="text-danger">*</span></label>
+                            <input type="text" id="package-edit-code" class="form-control" placeholder="ex: pass_semaine, pro_max" required>
+                            <small class="text-muted">Minuscules, chiffres et tirets du bas uniquement.</small>
+                        </div>
+                        <div class="col-md-6">
+                            <label for="package-edit-name" class="form-label fw-semibold">Nom commercial <span class="text-danger">*</span></label>
+                            <input type="text" id="package-edit-name" class="form-control" placeholder="ex: Pass Hebdo Chantier" required>
+                        </div>
+                        <div class="col-md-4">
+                            <label for="package-edit-price" class="form-label fw-semibold">Prix (XOF / FCFA) <span class="text-danger">*</span></label>
+                            <input type="number" id="package-edit-price" class="form-control" placeholder="ex: 1500" min="0" required>
+                        </div>
+                        <div class="col-md-4">
+                            <label for="package-edit-type" class="form-label fw-semibold">Type de Package</label>
+                            <select id="package-edit-type" class="form-select">
+                                <option value="pass_temporel">Pass Temporel (Accès illimité / jours)</option>
+                                <option value="pack_requetes">Pack Quota de Requêtes</option>
+                                <option value="abonnement_recurrent">Abonnement Récurrent</option>
+                                <option value="gratuit">Gratuit / Découverte</option>
+                            </select>
+                        </div>
+                        <div class="col-md-4">
+                            <label for="package-edit-duration" class="form-label">Durée de validité (jours)</label>
+                            <input type="number" id="package-edit-duration" class="form-control" placeholder="ex: 30" min="0">
+                        </div>
+                        <div class="col-md-6">
+                            <label for="package-edit-quota" class="form-label">Quota de requêtes (si applicable)</label>
+                            <input type="number" id="package-edit-quota" class="form-control" placeholder="ex: 50">
+                        </div>
+                        <div class="col-md-6 d-flex align-items-center pt-3">
+                            <div class="form-check form-switch mt-3">
+                                <input class="form-check-input" type="checkbox" id="package-edit-active" checked>
+                                <label class="form-check-label fw-semibold" for="package-edit-active">Package actif (visible et souscriptible)</label>
+                            </div>
+                        </div>
+                        <div class="col-12">
+                            <label for="package-edit-description" class="form-label">Description commerciale</label>
+                            <textarea id="package-edit-description" class="form-control" rows="2" placeholder="Description courte mise en avant auprès de l'artisan..."></textarea>
+                        </div>
+                        <div class="col-12">
+                            <label for="package-edit-features" class="form-label">Avantages inclus (un par ligne)</label>
+                            <textarea id="package-edit-features" class="form-control font-monospace" rows="4" placeholder="Accès illimité à l'expert IA 24/7&#10;Génération de devis chiffrés&#10;Support WhatsApp prioritaire"></textarea>
+                            <small class="text-muted">Chaque ligne sera affichée comme un point clé avec une coche verte.</small>
+                        </div>
+                    </div>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-light" onclick="closePackageEditModal()">Annuler</button>
+                    <button type="button" class="btn btn-primary" onclick="submitPackageForm()"><i class="ri-save-line me-1"></i>Enregistrer</button>
                 </div>
             </div>
         </div>

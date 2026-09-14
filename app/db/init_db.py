@@ -8,6 +8,8 @@ from app.config import settings
 from app.db.session import async_session, check_database_connection, engine
 from app.models.base import Base
 from app.models.metier import Metier, SousMetier
+from app.models.package import Package
+from app.models.subscription import UserSubscription
 from app.models.user import User
 
 logger = logging.getLogger(__name__)
@@ -372,6 +374,96 @@ async def seed_data() -> None:
                     type_abonnement="FREE",
                 )
                 session.add(admin_user)
+
+        # 3. Grainage des Packages / Formules d'abonnement (idempotent par code)
+        packages_catalog = [
+            {
+                "code": "free",
+                "nom": "Pass Gratuit Découverte",
+                "prix": 0,
+                "type_package": "CREDITS",
+                "quota_requetes": 5,
+                "duree_jours": None,
+                "description": "5 requêtes d'assistance technique offertes par jour avec accès à la base standard.",
+                "fonctionnalites": [
+                    "5 questions / jour",
+                    "Recherche DTU & fiches standard",
+                    "Support communautaire",
+                ],
+            },
+            {
+                "code": "pass_24h",
+                "nom": "Pass 24H Urgence Chantier",
+                "prix": 500,
+                "type_package": "DURATION",
+                "duree_jours": 1,
+                "quota_requetes": 999999,
+                "description": "Accès illimité pendant 24 heures pour débloquer un incident critique sur chantier.",
+                "fonctionnalites": [
+                    "Questions illimitées 24h",
+                    "Calculateur de dosage & métrés",
+                    "Assistance dépannage express",
+                ],
+            },
+            {
+                "code": "pass_mois",
+                "nom": "Pass Mensuel Pro",
+                "prix": 3000,
+                "type_package": "DURATION",
+                "duree_jours": 30,
+                "quota_requetes": 999999,
+                "description": "Formule complète pour l'artisan en activité continue avec support technique prioritaire.",
+                "fonctionnalites": [
+                    "Questions illimitées 30 jours",
+                    "Diagnostic visuel photos chantier",
+                    "Téléchargement fiches techniques",
+                    "Support prioritaire WhatsApp",
+                ],
+            },
+            {
+                "code": "pass_annuel",
+                "nom": "Pass Annuel Excellence",
+                "prix": 30000,
+                "type_package": "DURATION",
+                "duree_jours": 365,
+                "quota_requetes": 999999,
+                "description": "Abonnement annuel tout compris avec 2 mois offerts et certification artisan vérifié.",
+                "fonctionnalites": [
+                    "Accès illimité 365 jours",
+                    "2 mois offerts (économie 6 000 F)",
+                    "Badge Artisan Vérifié",
+                    "Export PDF devis personnalisés",
+                ],
+            },
+            {
+                "code": "pack_50_requetes",
+                "nom": "Pack 50 Requêtes",
+                "prix": 1500,
+                "type_package": "CREDITS",
+                "quota_requetes": 50,
+                "duree_jours": None,
+                "description": "Crédit de 50 questions techniques utilisables sans date d'expiration.",
+                "fonctionnalites": [
+                    "50 questions sans expiration",
+                    "Accès à tous les 10 pôles métiers",
+                    "Rechargeable à tout moment",
+                ],
+            },
+        ]
+
+        for pkg in packages_catalog:
+            pkg_stmt = select(Package).where(Package.code == pkg["code"])
+            existing_pkg = (await session.execute(pkg_stmt)).scalar_one_or_none()
+            if existing_pkg is None:
+                session.add(Package(**pkg))
+            else:
+                existing_pkg.nom = pkg["nom"]
+                existing_pkg.prix = pkg["prix"]
+                existing_pkg.type_package = pkg["type_package"]
+                existing_pkg.duree_jours = pkg["duree_jours"]
+                existing_pkg.quota_requetes = pkg["quota_requetes"]
+                existing_pkg.description = pkg["description"]
+                existing_pkg.fonctionnalites = pkg["fonctionnalites"]
 
         await session.commit()
 

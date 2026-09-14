@@ -6,7 +6,9 @@ from app.models.document_config import DocumentConfig
 from app.models.feedback import Feedback
 from app.models.message import Message
 from app.models.metier import Metier, SousMetier
+from app.models.package import Package
 from app.models.quota import QuotaUtilisateur
+from app.models.subscription import UserSubscription
 from app.models.transaction import TransactionMobileMoney
 from app.models.user import User
 
@@ -17,8 +19,10 @@ __all__ = [
     "Feedback",
     "Message",
     "Metier",
+    "Package",
     "QuotaUtilisateur",
     "SousMetier",
     "TransactionMobileMoney",
     "User",
+    "UserSubscription",
 ]

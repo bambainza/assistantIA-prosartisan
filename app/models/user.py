@@ -15,6 +15,7 @@ from app.models.base import Base
 if TYPE_CHECKING:
     from app.models.conversation import Conversation
     from app.models.quota import QuotaUtilisateur
+    from app.models.subscription import UserSubscription
     from app.models.transaction import TransactionMobileMoney
 
 
@@ -68,5 +69,8 @@ class User(Base):
         back_populates="user", cascade="all, delete-orphan"
     )
     conversations: Mapped[list[Conversation]] = relationship(
+        back_populates="user", cascade="all, delete-orphan"
+    )
+    subscriptions: Mapped[list[UserSubscription]] = relationship(
         back_populates="user", cascade="all, delete-orphan"
     )
