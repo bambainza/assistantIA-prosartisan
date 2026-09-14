@@ -96,10 +96,12 @@ class Settings(BaseSettings):
     llm_vision_model: str = "mistral-medium-latest"
     stt_model: str = "voxtral-mini-latest"
     tts_model: str = "voxtral-mini-tts-2603"
-    # Identifiant de la voix Voxtral TTS (clonée via la console Mistral) —
-    # sans lui, la synthèse vocale échoue explicitement (pas de repli mock en
-    # production). Non requis pour la transcription (STT) ni le chat/vision.
-    tts_voice_id: str | None = None
+    # Identifiant de la voix Voxtral TTS. Par défaut : "Marie - Neutral", une
+    # voix française prête à l'emploi (préréglage Mistral, pas de clonage
+    # requis — voir `GET /v1/audio/voices?type=preset` pour la liste complète,
+    # dont 6 voix "fr_marie_*" à différents tons). Sans valeur, la synthèse
+    # vocale échoue explicitement plutôt que d'utiliser une voix arbitraire.
+    tts_voice_id: str | None = "5a271406-039d-46fe-835b-fbbb00eaf08d"
     llm_temperature: float = 0.2
     embedding_model: str = "mistral-embed"
 

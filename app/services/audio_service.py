@@ -34,6 +34,10 @@ SUPPORTED_AUDIO_EXTENSIONS = {
     "webm",
 }
 
+_DEFAULT_VOCABULAIRE_CHANTIER = (
+    "Vocabulaire BTP chantier ivoirien nouchi maçonnerie plomberie électricité"
+)
+
 
 class AudioService:
     """Service audio pour la transcription (Voxtral STT) et la synthèse vocale (Voxtral TTS)."""
@@ -80,15 +84,18 @@ class AudioService:
             )
 
         try:
-            transcription = await self.mistral_client.audio.transcriptions.complete_async(
-                model=settings.stt_model,
-                file=File(file_name=filename, content=file_bytes),
-                # Voxtral n'a pas de paramètre "prompt" libre comme Whisper : le
-                # vocabulaire attendu se fournit en indices contextuels (liste).
-                context_bias=[
-                    prompt
-                    or "Vocabulaire BTP chantier ivoirien nouchi maçonnerie plomberie électricité"
-                ],
+            transcription = (
+                await self.mistral_client.audio.transcriptions.complete_async(
+                    model=settings.stt_model,
+                    file=File(file_name=filename, content=file_bytes),
+                    # Voxtral n'a pas de paramètre "prompt" libre comme Whisper :
+                    # le vocabulaire attendu se fournit en indices contextuels —
+                    # chaque élément doit être un seul mot, sans espace ni virgule
+                    # (rejeté en 400 sinon), d'où l'éclatement en mots individuels.
+                    context_bias=(prompt or _DEFAULT_VOCABULAIRE_CHANTIER)
+                    .replace(",", " ")
+                    .split(),
+                )
             )
             return transcription.text.strip()
         except Exception as e:
@@ -106,12 +113,13 @@ class AudioService:
     ) -> bytes:
         """Génère un flux audio MP3 à partir d'un texte via Mistral Voxtral TTS.
 
-        Contrairement à OpenAI (voix prêtes à l'emploi comme "alloy"), Voxtral
-        TTS fonctionne par clonage de voix : `voice` doit être le `voice_id`
-        d'une voix créée au préalable via la console Mistral
-        (`settings.tts_voice_id` si non fourni à l'appel). Sans voice_id
-        configuré, la synthèse échoue explicitement plutôt que d'utiliser une
-        voix par défaut arbitraire.
+        `voice` doit être le `voice_id` d'une voix Voxtral — soit l'un des
+        préréglages fournis par Mistral (`GET /v1/audio/voices?type=preset`,
+        dont plusieurs voix françaises "fr_marie_*"), soit une voix clonée via
+        leur console. `settings.tts_voice_id` (préréglage français par défaut)
+        s'applique si non fourni à l'appel. Sans voice_id configuré, la
+        synthèse échoue explicitement plutôt que d'utiliser une voix
+        arbitraire.
         """
         cleaned_text = text.strip()
         if not cleaned_text:
