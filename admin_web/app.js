@@ -234,25 +234,51 @@ async function fetchDocuments() {
         docList.innerHTML = '';
 
         data.documents.forEach(d => {
+            const isActive = d.is_active !== false;
             docList.innerHTML += `
-                <div class="card mb-3 shadow-none border">
+                <div class="card mb-3 shadow-none border ${isActive ? '' : 'bg-light opacity-75'}">
                     <div class="card-body p-3">
                         <div class="d-flex justify-content-between align-items-center mb-2">
-                            <span class="fw-semibold text-truncate" style="max-width: 70%;"><i class="iconoir-paste-clipboard me-1 text-primary"></i> ${d.filename}</span>
-                            <span class="badge bg-success-subtle text-success">${d.metier}</span>
+                            <span class="fw-semibold text-truncate" style="max-width: 60%;"><i class="iconoir-paste-clipboard me-1 text-primary"></i> ${d.filename}</span>
+                            <div class="d-flex gap-2 align-items-center">
+                                <span class="badge ${isActive ? 'bg-success-subtle text-success' : 'bg-warning-subtle text-warning'}">
+                                    ${isActive ? '● Visible Chat' : '○ Masqué Chat'}
+                                </span>
+                                <span class="badge bg-secondary-subtle text-secondary">${d.metier}</span>
+                            </div>
                         </div>
                         <p class="text-muted mb-3" style="font-size: 11px;">
                             ${d.chunks_count} chunks vectoriels • Ingéré le ${d.date_ingestion}
                         </p>
-                        <button class="btn btn-sm btn-outline-danger" onclick="deleteDoc('${d.filename}')">
-                            <i class="iconoir-trash me-1"></i> Supprimer de Qdrant
-                        </button>
+                        <div class="d-flex gap-2">
+                            <button class="btn btn-sm ${isActive ? 'btn-outline-warning' : 'btn-outline-success'}" onclick="toggleDocStatus('${d.filename}')">
+                                <i class="${isActive ? 'iconoir-eye-closed' : 'iconoir-eye'} me-1"></i> ${isActive ? 'Désactiver pour le Chat' : 'Activer pour le Chat'}
+                            </button>
+                            <button class="btn btn-sm btn-outline-danger" onclick="deleteDoc('${d.filename}')">
+                                <i class="iconoir-trash me-1"></i> Supprimer de Qdrant
+                            </button>
+                        </div>
                     </div>
                 </div>
             `;
         });
     } catch (err) {
         console.error('Erreur chargement documents:', err);
+    }
+}
+
+async function toggleDocStatus(docName) {
+    try {
+        const res = await adminFetch(`/api/admin/documents/${encodeURIComponent(docName)}/toggle`, { method: 'PATCH' });
+        if (res.ok) {
+            const data = await res.json();
+            alert(data.message);
+            await fetchDocuments();
+        } else {
+            alert('Erreur lors du basculement du statut du document.');
+        }
+    } catch (err) {
+        alert('Erreur réseau lors du basculement.');
     }
 }
 

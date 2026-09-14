@@ -27,6 +27,8 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.config import settings
 from app.db.session import get_db
 from app.middleware.auth import get_current_admin_user_id
+from app.models.document_config import DocumentConfig
+from app.models.metier import Metier
 from app.models.quota import QuotaUtilisateur
 from app.models.transaction import TransactionMobileMoney
 from app.models.user import User
@@ -322,9 +324,19 @@ async def grant_pass_to_user(
 @router.get("/documents")
 async def get_documents_list(
     admin_id: uuid.UUID = Depends(get_current_admin_user_id),
+    db: AsyncSession = Depends(get_db),
 ) -> dict[str, Any]:
-    """Retourne la liste des fiches et guides techniques ingérés dans Qdrant."""
+    """Retourne la liste des fiches et guides techniques ingérés dans Qdrant avec statut d'activation."""
     documents_map = {}
+    doc_configs = {}
+    try:
+        stmt = select(DocumentConfig)
+        res = await db.execute(stmt)
+        for cfg in res.scalars().all():
+            doc_configs[cfg.filename] = cfg.is_active
+    except Exception:
+        pass
+
     try:
         from qdrant_client import AsyncQdrantClient
 
@@ -357,6 +369,7 @@ async def get_documents_list(
                         "metier_id": metier_id,
                         "chunks_count": 0,
                         "date_ingestion": datetime.now(UTC).strftime("%Y-%m-%d"),
+                        "is_active": doc_configs.get(doc_name, True),
                     }
                 documents_map[doc_name]["chunks_count"] += 1
     except Exception:
@@ -373,11 +386,98 @@ async def get_documents_list(
                     "metier_id": 1,
                     "chunks_count": 18,
                     "date_ingestion": "2026-08-10",
+                    "is_active": doc_configs.get("guide_dosage_beton_maconnerie.pdf", True),
                 }
             ]
         }
 
     return {"documents": list(documents_map.values())}
+
+
+@router.patch("/documents/{doc_name}/toggle")
+async def toggle_document_status(
+    doc_name: str,
+    admin_id: uuid.UUID = Depends(get_current_admin_user_id),
+    db: AsyncSession = Depends(get_db),
+) -> dict[str, Any]:
+    """Active ou désactive un document pour la consultation dans le chat RAG."""
+    stmt = select(DocumentConfig).where(DocumentConfig.filename == doc_name)
+    res = await db.execute(stmt)
+    cfg = res.scalar_one_or_none()
+
+    if cfg is None or not isinstance(cfg, DocumentConfig):
+        new_status = False
+        cfg = DocumentConfig(
+            id=uuid.uuid4(),
+            filename=doc_name,
+            is_active=new_status,
+        )
+        db.add(cfg)
+    else:
+        new_status = not getattr(cfg, "is_active", True)
+        cfg.is_active = new_status
+        cfg.updated_at = datetime.now(UTC)
+
+    await db.commit()
+
+    return {
+        "status": "ok",
+        "filename": doc_name,
+        "is_active": new_status,
+        "message": f"Document '{doc_name}' {'activé' if new_status else 'désactivé'} pour le chat.",
+    }
+
+
+@router.get("/metiers")
+async def get_metiers_list(
+    admin_id: uuid.UUID = Depends(get_current_admin_user_id),
+    db: AsyncSession = Depends(get_db),
+) -> dict[str, Any]:
+    """Retourne la liste des métiers et leur statut d'activation pour le chat."""
+    stmt = select(Metier).order_by(Metier.id)
+    res = await db.execute(stmt)
+    metiers = res.scalars().all()
+    return {
+        "metiers": [
+            {
+                "id": m.id,
+                "nom": m.nom,
+                "slug": m.slug,
+                "description": m.description,
+                "is_active": getattr(m, "is_active", True),
+                "sous_metiers_count": len(m.sous_metiers) if m.sous_metiers else 0,
+            }
+            for m in metiers
+        ]
+    }
+
+
+@router.patch("/metiers/{metier_id}/toggle")
+async def toggle_metier_status(
+    metier_id: int,
+    admin_id: uuid.UUID = Depends(get_current_admin_user_id),
+    db: AsyncSession = Depends(get_db),
+) -> dict[str, Any]:
+    """Active ou désactive un pôle de métier complet pour les utilisateurs du chat."""
+    stmt = select(Metier).where(Metier.id == metier_id)
+    res = await db.execute(stmt)
+    metier = res.scalar_one_or_none()
+    if not metier:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND, detail="Métier introuvable."
+        )
+
+    new_status = not getattr(metier, "is_active", True)
+    metier.is_active = new_status
+    await db.commit()
+
+    return {
+        "status": "ok",
+        "metier_id": metier.id,
+        "nom": metier.nom,
+        "is_active": new_status,
+        "message": f"Métier '{metier.nom}' {'activé' if new_status else 'désactivé'} pour le chat.",
+    }
 
 
 @router.delete("/documents/{doc_id}")

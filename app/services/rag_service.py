@@ -117,13 +117,44 @@ class RAGService:
         await cache_service.cache_embedding(text, vec)
         return vec
 
+    async def get_inactive_document_names(self) -> set[str]:
+        """Retourne l'ensemble des noms de fichiers désactivés par l'administration."""
+        try:
+            from sqlalchemy import select
+            from app.db.session import async_session
+            from app.models.document_config import DocumentConfig
+
+            async with async_session() as session:
+                stmt = select(DocumentConfig.filename).where(DocumentConfig.is_active == False)
+                res = await session.execute(stmt)
+                return {row[0] for row in res.all()}
+        except Exception:
+            return set()
+
+    async def is_metier_active(self, metier_id: int | None) -> bool:
+        """Vérifie si un métier est actif dans la base de données."""
+        if metier_id is None:
+            return True
+        try:
+            from sqlalchemy import select
+            from app.db.session import async_session
+            from app.models.metier import Metier
+
+            async with async_session() as session:
+                stmt = select(Metier.is_active).where(Metier.id == metier_id)
+                res = await session.execute(stmt)
+                status = res.scalar_one_or_none()
+                return True if status is None else bool(status)
+        except Exception:
+            return True
+
     async def search_context(
         self,
         query: str,
         metier_id: int | None = None,
         top_k: int = 4,
     ) -> list[dict[str, Any]]:
-        """Recherche les passages pertinents dans Qdrant avec filtre optionnel par métier."""
+        """Recherche les passages pertinents dans Qdrant avec filtre optionnel par métier et exclusion des documents désactivés."""
         try:
             vector = await self.get_embedding(query)
             query_filter = None
@@ -143,6 +174,9 @@ class RAGService:
                 query_filter=query_filter,
                 limit=top_k,
             )
+
+            inactive_docs = await self.get_inactive_document_names()
+
             return [
                 {
                     "content": hit.payload.get("text", "") if hit.payload else "",
@@ -153,6 +187,7 @@ class RAGService:
                 # Sous le seuil, l'extrait est jugé hors sujet : mieux vaut ne
                 # pas le fournir au LLM (garde-fou zéro hallucination).
                 if hit.score >= settings.rag_min_score
+                and (hit.payload or {}).get("document_name") not in inactive_docs
             ]
         except Exception:
             # Fallback gracieux si Qdrant n'est pas encore disponible
@@ -166,6 +201,17 @@ class RAGService:
         history: list[dict[str, str]] | None = None,
     ) -> dict[str, Any]:
         """Génère une réponse multimodale (texte + vision si image fournie)."""
+        # Vérifier si le métier est désactivé par l'administration
+        if metier_id is not None and not await self.is_metier_active(metier_id):
+            return {
+                "reponse": (
+                    "Ce domaine métier est actuellement suspendu ou en cours d'actualisation "
+                    "technique par l'administration. Veuillez sélectionner un autre métier ou "
+                    "réessayer ultérieurement."
+                ),
+                "sources": [],
+            }
+
         # Vérifier le cache pour les questions répétitives sans contexte d'image ni historique
         if not image_url and not history:
             cached_res = await cache_service.get_cached_rag_response(
@@ -271,6 +317,11 @@ class RAGService:
         history: list[dict[str, str]] | None = None,
     ) -> tuple[list[dict[str, Any]], Any]:
         """Recherche le contexte de connaissances puis retourne les fiches sources et le générateur du flux."""
+        if metier_id is not None and not await self.is_metier_active(metier_id):
+            async def _inactive_gen():
+                yield "Ce domaine métier est actuellement suspendu ou en cours d'actualisation technique par l'administration. "
+            return [], _inactive_gen()
+
         docs = await self.search_context(query=question, metier_id=metier_id)
         sources = [doc["metadata"] for doc in docs if "metadata" in doc]
         fallback_requis = not image_url and not docs

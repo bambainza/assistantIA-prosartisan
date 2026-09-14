@@ -19,7 +19,7 @@ _DEV_ADMIN_PASSWORD = "dev_admin_password"
 async def seed_data() -> None:
     """Remplit la base avec des données initiales (métiers, sous-métiers, admin)."""
     async with async_session() as session:
-        # 1. Grainage des Métiers (idempotent par slug)
+        # 1. Grainage des Métiers (idempotent par slug - 10 Pôles toutes azimuts)
         metiers_data = [
             {
                 "nom": "Bâtiment & Construction",
@@ -41,12 +41,13 @@ async def seed_data() -> None:
             {
                 "nom": "Électricité & Énergie",
                 "slug": "electricite-energie",
-                "description": "Installations électriques bâtiment, solaire photovoltaïque, groupes électrogènes et climatisation.",
+                "description": "Installations électriques bâtiment, solaire photovoltaïque, groupes électrogènes, bobinage et climatisation.",
                 "sous_metiers": [
                     {"nom": "Électricité Bâtiment & Domotique", "slug": "electricite-batiment"},
                     {"nom": "Installation Solaire & Photovoltaïque", "slug": "installation-solaire"},
                     {"nom": "Groupes Électrogènes & Groupes de Secours", "slug": "groupes-electrogenes-secours"},
                     {"nom": "Froid & Climatisation", "slug": "climatisation-froid"},
+                    {"nom": "Bobinage Moteurs & Transformateurs", "slug": "bobinage-moteurs-transfos"},
                 ],
             },
             {
@@ -57,6 +58,7 @@ async def seed_data() -> None:
                     {"nom": "Plomberie Sanitaire & Réseaux d'Eau", "slug": "plomberie-sanitaire-spec"},
                     {"nom": "Assainissement Autonome & Fosses Septiques", "slug": "assainissement-fosses-septiques"},
                     {"nom": "Forages d'Eau & Pompes Immergées", "slug": "forages-pompes-immergees"},
+                    {"nom": "Traitement de l'Eau & Piscines", "slug": "traitement-eau-piscines"},
                 ],
             },
             {
@@ -68,6 +70,7 @@ async def seed_data() -> None:
                     {"nom": "Électricité & Diagnostic Électronique Auto", "slug": "electricite-diagnostic-auto"},
                     {"nom": "Tôlerie, Carrosserie & Peinture Auto", "slug": "tolerie-peinture-auto"},
                     {"nom": "Motos, Tricycles & Deux-Roues (Jakarta)", "slug": "motos-tricycles-deux-roues"},
+                    {"nom": "Vulcanisation, Pneus & Train Avant", "slug": "vulcanisation-pneus"},
                     {"nom": "Engins Lourds & Machinerie BTP", "slug": "engins-lourds-machinerie-btp"},
                 ],
             },
@@ -81,6 +84,7 @@ async def seed_data() -> None:
                     {"nom": "Boulangerie & Pâtisserie Artisanale", "slug": "boulangerie-patisserie-artisanale"},
                     {"nom": "Transformation Agro-Alimentaire (Attiéké, Fumage Chorkor)", "slug": "transformation-agroalimentaire-attieke"},
                     {"nom": "Boissons & Jus Locaux Artisanaux (Bissap, Gnamakoudji)", "slug": "boissons-jus-locaux"},
+                    {"nom": "Boucherie, Charcuterie & Choukouya Braisé", "slug": "boucherie-choukouya-grillades"},
                     {"nom": "Hygiène Alimentaire & Normes HACCP Tropicales", "slug": "hygiene-haccp-tropicale"},
                 ],
             },
@@ -90,8 +94,56 @@ async def seed_data() -> None:
                 "description": "Maroquinerie d'art, travail du cuir, sculpture sur bois, vannerie et confection textile traditionnelle.",
                 "sous_metiers": [
                     {"nom": "Maroquinerie & Travail du Cuir", "slug": "maroquinerie-travail-cuir"},
-                    {"nom": "Menuiserie Ébénisterie & Vannerie (Chaises Baoulé)", "slug": "ebenisterie-vannerie-sculpture"},
-                    {"nom": "Couture & Confection Textile (Pagne Baoulé, Wax)", "slug": "couture-confection-textile"},
+                    {"nom": "Menuiserie Ébénisterie & Sculpture Bois", "slug": "ebenisterie-vannerie-sculpture"},
+                    {"nom": "Vannerie, Rotin, Bambou & Tissage Déco", "slug": "vannerie-rotin-bambou"},
+                    {"nom": "Bijouterie, Joaillerie & Fonte de Métaux (Bronze/Or)", "slug": "bijouterie-fonte-metaux"},
+                    {"nom": "Poterie, Céramique & Décoration Argile", "slug": "poterie-ceramique-argile"},
+                    {"nom": "Ferronnerie d'Art & Forge Décorative", "slug": "ferronnerie-art-forge"},
+                ],
+            },
+            {
+                "nom": "Métiers du Textile, Habillement & Mode",
+                "slug": "textile-habillement-mode",
+                "description": "Couture artisanale, confection wax, tissage traditionnel pagne Baoulé/Kente/Sénoufo, broderie et teinturerie batik.",
+                "sous_metiers": [
+                    {"nom": "Couture & Confection Homme/Femme (Wax/Pagne)", "slug": "couture-confection-habillement"},
+                    {"nom": "Tissage Traditionnel (Pagne Baoulé, Kente, Sénoufo)", "slug": "tissage-traditionnel-pagnes"},
+                    {"nom": "Modélisme, Stylisme & Patronage", "slug": "modelisme-stylisme-patronage"},
+                    {"nom": "Teinturerie Artisanale, Batiks & Bogolan", "slug": "teinturerie-batik-bogolan"},
+                    {"nom": "Broderie Artisanale & Industrielle", "slug": "broderie-artisanale"},
+                ],
+            },
+            {
+                "nom": "Métiers de la Beauté, Coiffure & Soins",
+                "slug": "beaute-coiffure-soins",
+                "description": "Coiffure mixte, tresses et nattes africaines, soins corporels et cosmétique artisanale au karité.",
+                "sous_metiers": [
+                    {"nom": "Coiffure Mixte, Coupe & Barbe", "slug": "coiffure-mixte-coupe"},
+                    {"nom": "Tresses Africaines, Nattes & Coiffures Traditionnelles", "slug": "tresses-nattes-africaines"},
+                    {"nom": "Soins Esthétiques, Manucure & Onglerie", "slug": "soins-esthetiques-onglerie"},
+                    {"nom": "Cosmétique Artisanale (Beurre de Karité, Savon Noir)", "slug": "cosmetique-artisanale-karite"},
+                ],
+            },
+            {
+                "nom": "Métiers de l'Électronique, Numérique & Réparation",
+                "slug": "electronique-reparation-services",
+                "description": "Réparation smartphones, maintenance informatique, TV, petit électroménager et serrurerie.",
+                "sous_metiers": [
+                    {"nom": "Réparation Smartphones, Tablettes & Connectique", "slug": "reparation-smartphones-tablettes"},
+                    {"nom": "Maintenance Informatique, PC & Réseaux Locaux", "slug": "maintenance-informatique-pc"},
+                    {"nom": "Dépannage Téléviseurs, Audio & Électroménager", "slug": "depannage-tv-electromenager"},
+                    {"nom": "Serrurerie, Clés Minutes & Sécurité", "slug": "serrurerie-cles-minutes"},
+                ],
+            },
+            {
+                "nom": "Métiers Ruraux, Environnement & Recyclage",
+                "slug": "rural-environnement-recyclage",
+                "description": "Pépinières, espaces verts, pisciculture, recyclage plastiques/métaux et éco-matériaux de construction.",
+                "sous_metiers": [
+                    {"nom": "Pépinières, Paysagisme & Espaces Verts", "slug": "pepinieres-espaces-verts"},
+                    {"nom": "Pisciculture Artisanale & Élevage Volaille", "slug": "pisciculture-elevage-artisanal"},
+                    {"nom": "Recyclage Plastiques, Métaux & Déchets", "slug": "recyclage-plastiques-metaux"},
+                    {"nom": "Éco-Construction & Briques de Terre Compressée (BTC)", "slug": "eco-construction-btc"},
                 ],
             },
         ]
@@ -102,12 +154,14 @@ async def seed_data() -> None:
             stmt = select(Metier).where(Metier.slug == item["slug"])
             existing_metier = (await session.execute(stmt)).scalar_one_or_none()
             if existing_metier is None:
-                metier = Metier(**item)
+                metier = Metier(is_active=True, **item)
                 session.add(metier)
                 await session.flush()
             else:
                 existing_metier.nom = item["nom"]
                 existing_metier.description = item["description"]
+                if getattr(existing_metier, "is_active", None) is None:
+                    existing_metier.is_active = True
                 metier = existing_metier
 
             for sm in sous_items:
