@@ -125,7 +125,7 @@ async def test_admin_get_documents(mock_db_with_admin, admin_user):
 
 @pytest.mark.asyncio
 async def test_admin_get_transactions(mock_db_with_admin, admin_user):
-    """GET /api/admin/transactions doit retourner l'historique des paiements avec un token admin."""
+    """GET /api/admin/finance/transactions doit retourner le journal filtrable avec un token admin."""
     app.dependency_overrides[get_db] = mock_db_with_admin
     token = create_access_token(data={"sub": str(admin_user.id)})
     headers = {"Authorization": f"Bearer {token}"}
@@ -133,10 +133,13 @@ async def test_admin_get_transactions(mock_db_with_admin, admin_user):
     try:
         transport = ASGITransport(app=app)
         async with AsyncClient(transport=transport, base_url="http://test") as client:
-            response = await client.get("/api/admin/transactions", headers=headers)
+            response = await client.get(
+                "/api/admin/finance/transactions", headers=headers
+            )
 
         assert response.status_code == 200
         data = response.json()
         assert "transactions" in data
+        assert "total" in data
     finally:
         app.dependency_overrides.pop(get_db, None)

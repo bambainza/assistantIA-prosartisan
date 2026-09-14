@@ -166,6 +166,9 @@ function initTabs() {
         if (targetTab === 'tab-actualites') {
             loadActualitesTab();
         }
+        if (targetTab === 'tab-payments') {
+            loadFinanceTab();
+        }
     }
 
     navItems.forEach((item, index) => {
@@ -200,7 +203,7 @@ async function refreshDashboard() {
     await fetchOverview();
     await fetchArtisans();
     await fetchDocuments();
-    await fetchTransactions();
+    await loadFinanceTab();
     await loadPackagesTab();
     await fetchLogs();
 }
@@ -413,30 +416,259 @@ function initUploadForm() {
     });
 }
 
-// 5. Fetch Transactions Table
-async function fetchTransactions() {
-    try {
-        const res = await adminFetch('/api/admin/transactions');
-        const data = await res.json();
-        const tbody = document.getElementById('payments-table-body');
-        tbody.innerHTML = '';
+// =========================================================================
+// 5. MODULE FINANCE (Dashboard, journal filtrable, remboursements, rapports)
+// =========================================================================
 
-        data.transactions.forEach(t => {
-            const badgeClass = t.statut === 'ACCEPTED' ? 'badge bg-success-subtle text-success' : 'badge bg-danger-subtle text-danger';
-            tbody.innerHTML += `
-                <tr>
-                    <td><strong>${t.id}</strong></td>
-                    <td><code>${t.reference_externe}</code></td>
-                    <td>${t.artisan}</td>
-                    <td><strong>${t.montant.toLocaleString()} ${t.devise}</strong></td>
-                    <td>${t.operateur}</td>
-                    <td><span class="${badgeClass}">${t.statut}</span></td>
-                    <td>${new Date(t.timestamp).toLocaleTimeString()}</td>
-                </tr>
-            `;
-        });
+const financeState = {
+    limit: 20,
+    offset: 0,
+    total: 0,
+};
+
+function buildFinanceQuery(extra = {}) {
+    const params = new URLSearchParams();
+    const statut = document.getElementById('fin-filter-statut')?.value;
+    const operateur = document.getElementById('fin-filter-operateur')?.value;
+    const q = document.getElementById('fin-filter-q')?.value.trim();
+    const dateFrom = document.getElementById('fin-filter-date-from')?.value;
+    const dateTo = document.getElementById('fin-filter-date-to')?.value;
+
+    if (statut) params.set('statut', statut);
+    if (operateur) params.set('operateur', operateur);
+    if (q) params.set('q', q);
+    if (dateFrom) params.set('date_from', `${dateFrom}T00:00:00`);
+    if (dateTo) params.set('date_to', `${dateTo}T23:59:59`);
+    Object.entries(extra).forEach(([k, v]) => params.set(k, v));
+    return params;
+}
+
+async function loadFinanceTab() {
+    await Promise.all([
+        loadFinanceOverview(),
+        loadFinanceReport(),
+        loadFinanceTransactions(),
+    ]);
+}
+
+async function loadFinanceOverview() {
+    try {
+        const res = await adminFetch('/api/admin/finance/overview');
+        if (!res.ok) return;
+        const kpis = await res.json();
+        const fmt = (n) => `${(n || 0).toLocaleString()} F`;
+        document.getElementById('fin-kpi-revenu-total').textContent = fmt(kpis.revenu_total);
+        document.getElementById('fin-kpi-revenu-30j').textContent = fmt(kpis.revenu_30j);
+        document.getElementById('fin-kpi-taux-succes').textContent = `${kpis.taux_succes_pct}%`;
+        document.getElementById('fin-kpi-rembourse').textContent = fmt(kpis.revenu_rembourse_total);
+
+        const parOperateurEl = document.getElementById('fin-par-operateur');
+        if (parOperateurEl) {
+            const entries = Object.entries(kpis.par_operateur || {});
+            parOperateurEl.innerHTML = entries.length === 0
+                ? '<p class="text-muted small mb-0">Aucune donnée.</p>'
+                : entries.map(([op, montant]) => `
+                    <div class="d-flex justify-content-between border-bottom py-1">
+                        <span>${op}</span>
+                        <strong>${montant.toLocaleString()} F</strong>
+                    </div>
+                `).join('');
+        }
     } catch (err) {
-        console.error('Erreur chargement transactions:', err);
+        console.error('Erreur chargement KPIs finance:', err);
+    }
+}
+
+async function loadFinanceReport() {
+    try {
+        const period = document.getElementById('fin-report-period')?.value || 'day';
+        const res = await adminFetch(`/api/admin/finance/reports?period=${period}`);
+        if (!res.ok) return;
+        const data = await res.json();
+        const tbody = document.getElementById('fin-report-tbody');
+        if (!tbody) return;
+        const entries = data.entries || [];
+        tbody.innerHTML = entries.length === 0
+            ? '<tr><td colspan="3" class="text-center text-muted py-3">Aucune donnée.</td></tr>'
+            : entries.slice().reverse().map(e => `
+                <tr>
+                    <td>${e.periode}</td>
+                    <td>${e.nb_transactions}</td>
+                    <td>${e.revenu.toLocaleString()} F</td>
+                </tr>
+            `).join('');
+    } catch (err) {
+        console.error('Erreur chargement rapport finance:', err);
+    }
+}
+
+async function loadFinanceTransactions() {
+    try {
+        const params = buildFinanceQuery({
+            limit: financeState.limit,
+            offset: financeState.offset,
+        });
+        const res = await adminFetch(`/api/admin/finance/transactions?${params.toString()}`);
+        const tbody = document.getElementById('payments-table-body');
+        if (!res.ok) {
+            if (res.status === 403 && tbody) {
+                tbody.innerHTML = '<tr><td colspan="7" class="text-center text-muted py-3">Votre rôle ne donne pas accès au module Finance.</td></tr>';
+            }
+            return;
+        }
+        const data = await res.json();
+        financeState.total = data.total || 0;
+        if (!tbody) return;
+
+        tbody.innerHTML = data.transactions.length === 0
+            ? '<tr><td colspan="7" class="text-center text-muted py-3">Aucune transaction ne correspond à ces filtres.</td></tr>'
+            : data.transactions.map(t => {
+                const badgeClass = {
+                    ACCEPTED: 'badge bg-success-subtle text-success',
+                    SUCCESS: 'badge bg-success-subtle text-success',
+                    PAID: 'badge bg-success-subtle text-success',
+                    PENDING: 'badge bg-warning-subtle text-warning',
+                    FAILED: 'badge bg-danger-subtle text-danger',
+                    REFUNDED: 'badge bg-secondary-subtle text-secondary',
+                }[t.statut_paiement] || 'badge bg-light text-dark';
+                const canRefund = ['ACCEPTED', 'SUCCESS', 'PAID'].includes(t.statut_paiement);
+                const canAdjust = t.statut_paiement !== 'REFUNDED';
+
+                return `
+                    <tr>
+                        <td><code>${t.reference_externe || '—'}</code></td>
+                        <td>${t.artisan}</td>
+                        <td><strong>${t.montant.toLocaleString()} ${t.devise}</strong></td>
+                        <td>${t.operateur}</td>
+                        <td><span class="${badgeClass}">${t.statut_paiement}</span></td>
+                        <td>${new Date(t.created_at).toLocaleString()}</td>
+                        <td>
+                            ${canRefund ? `<button type="button" class="btn btn-sm btn-outline-warning" onclick='openFinanceActionModal(${JSON.stringify(t.id)}, "refund")' title="Rembourser" aria-label="Rembourser cette transaction"><i class="iconoir-undo"></i></button>` : ''}
+                            ${canAdjust ? `<button type="button" class="btn btn-sm btn-outline-secondary" onclick='openFinanceActionModal(${JSON.stringify(t.id)}, "adjust")' title="Corriger le statut" aria-label="Corriger le statut de cette transaction"><i class="iconoir-edit-pencil"></i></button>` : ''}
+                        </td>
+                    </tr>
+                `;
+            }).join('');
+
+        const info = document.getElementById('fin-pagination-info');
+        if (info) {
+            const start = financeState.total === 0 ? 0 : financeState.offset + 1;
+            const end = Math.min(financeState.offset + financeState.limit, financeState.total);
+            info.textContent = `${start}–${end} sur ${financeState.total}`;
+        }
+    } catch (err) {
+        console.error('Erreur chargement transactions finance:', err);
+    }
+}
+
+function handleFinanceFilterChange() {
+    financeState.offset = 0;
+    loadFinanceTransactions();
+}
+
+function resetFinanceFilters() {
+    ['fin-filter-q', 'fin-filter-date-from', 'fin-filter-date-to'].forEach(id => {
+        const el = document.getElementById(id);
+        if (el) el.value = '';
+    });
+    ['fin-filter-statut', 'fin-filter-operateur'].forEach(id => {
+        const el = document.getElementById(id);
+        if (el) el.value = '';
+    });
+    handleFinanceFilterChange();
+}
+
+function changeFinancePage(delta) {
+    const nextOffset = financeState.offset + delta * financeState.limit;
+    if (nextOffset < 0 || nextOffset >= financeState.total) return;
+    financeState.offset = nextOffset;
+    loadFinanceTransactions();
+}
+
+async function exportFinanceTransactions() {
+    try {
+        const params = buildFinanceQuery();
+        const res = await adminFetch(`/api/admin/finance/transactions/export?${params.toString()}`);
+        if (!res.ok) {
+            alert("Échec de l'export.");
+            return;
+        }
+        const blob = await res.blob();
+        const url = URL.createObjectURL(blob);
+        const a = document.createElement('a');
+        a.href = url;
+        a.download = `transactions_prosartisan_${new Date().toISOString().slice(0, 10)}.csv`;
+        document.body.appendChild(a);
+        a.click();
+        a.remove();
+        URL.revokeObjectURL(url);
+    } catch (err) {
+        alert("Erreur réseau lors de l'export.");
+    }
+}
+
+// --- Modale remboursement / correction de statut ---
+let financeActionModalInstance = null;
+
+function openFinanceActionModal(txnId, type) {
+    document.getElementById('fin-action-txn-id').value = txnId;
+    document.getElementById('fin-action-type').value = type;
+    document.getElementById('fin-action-reason').value = '';
+    document.getElementById('fin-action-feedback').textContent = '';
+    document.getElementById('fin-action-status-group').classList.toggle('d-none', type !== 'adjust');
+    document.getElementById('modal-finance-action-title').textContent =
+        type === 'refund' ? 'Rembourser la transaction' : 'Corriger le statut';
+
+    if (!financeActionModalInstance) {
+        financeActionModalInstance = new bootstrap.Modal(document.getElementById('modal-finance-action'));
+    }
+    financeActionModalInstance.show();
+}
+
+function closeFinanceActionModal() {
+    if (financeActionModalInstance) financeActionModalInstance.hide();
+}
+
+async function submitFinanceAction() {
+    const txnId = document.getElementById('fin-action-txn-id').value;
+    const type = document.getElementById('fin-action-type').value;
+    const reason = document.getElementById('fin-action-reason').value.trim();
+    const feedback = document.getElementById('fin-action-feedback');
+
+    if (!reason) {
+        feedback.className = 'mt-2 small text-danger';
+        feedback.textContent = 'Le motif est obligatoire (tracé dans le journal d\'audit).';
+        return;
+    }
+
+    try {
+        let res;
+        if (type === 'refund') {
+            res = await adminFetch(`/api/admin/finance/transactions/${txnId}/refund`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ reason }),
+            });
+        } else {
+            const newStatus = document.getElementById('fin-action-new-status').value;
+            res = await adminFetch(`/api/admin/finance/transactions/${txnId}/adjust-status`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ new_status: newStatus, reason }),
+            });
+        }
+
+        const data = await res.json().catch(() => ({}));
+        if (res.ok) {
+            closeFinanceActionModal();
+            await loadFinanceTab();
+        } else {
+            feedback.className = 'mt-2 small text-danger';
+            feedback.textContent = data.detail || 'Échec de l\'action.';
+        }
+    } catch (err) {
+        feedback.className = 'mt-2 small text-danger';
+        feedback.textContent = 'Erreur réseau.';
     }
 }
 
@@ -1483,10 +1715,13 @@ function renderAuditLog(logs) {
 // 9. MODULE ACTUALITÉS & CENTRE DE NOTIFICATIONS
 // =========================================================================
 
+let actualitesStatusFilter = '';
+
 async function loadActualitesTab() {
     try {
+        const params = actualitesStatusFilter ? `?statut=${actualitesStatusFilter}` : '';
         const [actuRes, suggestRes] = await Promise.all([
-            adminFetch('/api/admin/actualites'),
+            adminFetch(`/api/admin/actualites${params}`),
             adminFetch('/api/admin/actualites/suggestions'),
         ]);
 
@@ -1508,42 +1743,73 @@ async function loadActualitesTab() {
                     : suggestions.map(s => `<div>Conversation ${s.conversation_id.slice(0, 8)}… — ${s.feedbacks_negatifs} retour(s) négatif(s)</div>`).join('');
             }
         }
+
+        await loadBroadcastHistory();
     } catch (err) {
         console.error('Erreur chargement onglet actualités:', err);
     }
 }
+
+function filterActualitesByStatus(statut, btnEl) {
+    actualitesStatusFilter = statut;
+    document.querySelectorAll('#actu-status-filter .nav-link').forEach(el => el.classList.remove('active'));
+    if (btnEl) btnEl.classList.add('active');
+    loadActualitesTab();
+}
+
+const STATUT_BADGES = {
+    brouillon: '<span class="badge bg-secondary-subtle text-secondary">Brouillon</span>',
+    programme: '<span class="badge bg-info-subtle text-info">Programmée</span>',
+    publie: '<span class="badge bg-success-subtle text-success">Publiée</span>',
+    archive: '<span class="badge bg-dark-subtle text-dark">Archivée</span>',
+};
+
+const CATEGORY_LABELS = {
+    annonce: 'Annonce',
+    maintenance: 'Maintenance',
+    conseil: 'Conseil',
+    promotion: 'Promotion',
+};
 
 function renderActualitesList(actualites) {
     const container = document.getElementById('actualites-list');
     if (!container) return;
 
     if (!actualites || actualites.length === 0) {
-        container.innerHTML = '<p class="text-muted mb-0">Aucune actualité créée pour le moment.</p>';
+        container.innerHTML = '<p class="text-muted mb-0">Aucune actualité pour ce filtre.</p>';
         return;
     }
 
     container.innerHTML = actualites.map(a => {
-        const isPublished = a.statut === 'publie';
-        const badge = isPublished
-            ? '<span class="badge bg-success-subtle text-success">Publiée</span>'
-            : '<span class="badge bg-secondary-subtle text-secondary">Brouillon</span>';
+        const badge = STATUT_BADGES[a.statut] || '';
+        const categoryLabel = CATEGORY_LABELS[a.category] || a.category;
         const metierLabel = a.metier_id ? `Métier #${a.metier_id}` : 'Tous métiers';
+        const scheduledLabel = a.statut === 'programme' && a.scheduled_at
+            ? ` • Programmée pour le ${new Date(a.scheduled_at).toLocaleString()}`
+            : '';
+
+        const actions = [];
+        if (a.statut === 'brouillon' || a.statut === 'programme') {
+            actions.push(`<button type="button" class="btn btn-sm btn-outline-success" onclick="publishActualite('${a.id}')">Publier</button>`);
+            actions.push(`<button type="button" class="btn btn-sm btn-outline-info" onclick="openScheduleModal('${a.id}')">Programmer</button>`);
+        }
+        if (a.statut === 'publie') {
+            actions.push(`<button type="button" class="btn btn-sm btn-outline-warning" onclick="unpublishActualite('${a.id}')">Dépublier</button>`);
+        }
+        if (a.statut !== 'archive') {
+            actions.push(`<button type="button" class="btn btn-sm btn-outline-secondary" onclick="archiveActualite('${a.id}')">Archiver</button>`);
+        }
+        actions.push(`<button type="button" class="btn btn-sm btn-outline-danger" onclick="deleteActualitePrompt('${a.id}')" title="Supprimer cette actualité" aria-label="Supprimer cette actualité"><i class="iconoir-trash"></i></button>`);
 
         return `
             <div class="border-bottom py-2">
-                <div class="d-flex justify-content-between align-items-start">
+                <div class="d-flex justify-content-between align-items-start flex-wrap gap-1">
                     <div>
                         <span class="fw-semibold">${a.titre}</span> ${badge}
-                        <br><small class="text-muted">${metierLabel}</small>
+                        <span class="badge bg-light text-dark border">${categoryLabel}</span>
+                        <br><small class="text-muted">${metierLabel}${scheduledLabel}</small>
                     </div>
-                    <div>
-                        ${isPublished
-                            ? `<button class="btn btn-sm btn-outline-warning" onclick="unpublishActualite('${a.id}')">Dépublier</button>`
-                            : `<button class="btn btn-sm btn-outline-success" onclick="publishActualite('${a.id}')">Publier</button>`}
-                        <button class="btn btn-sm btn-outline-danger" onclick="deleteActualitePrompt('${a.id}')" title="Supprimer cette actualité" aria-label="Supprimer cette actualité">
-                            <i class="iconoir-trash"></i>
-                        </button>
-                    </div>
+                    <div class="d-flex gap-1 flex-wrap">${actions.join('')}</div>
                 </div>
                 <p class="mb-0 text-muted small mt-1">${a.contenu}</p>
             </div>
@@ -1560,12 +1826,16 @@ window.closeCreateActualiteForm = function() {
     document.getElementById('actu-titre').value = '';
     document.getElementById('actu-contenu').value = '';
     document.getElementById('actu-metier').value = '';
+    document.getElementById('actu-category').value = 'annonce';
+    document.getElementById('actu-audience').value = 'tous';
 };
 
 window.submitCreateActualite = async function() {
     const titre = document.getElementById('actu-titre').value.trim();
     const contenu = document.getElementById('actu-contenu').value.trim();
     const metierRaw = document.getElementById('actu-metier').value.trim();
+    const category = document.getElementById('actu-category').value;
+    const targetAudience = document.getElementById('actu-audience').value;
     if (!titre || !contenu) {
         alert('Titre et contenu sont requis.');
         return;
@@ -1578,6 +1848,8 @@ window.submitCreateActualite = async function() {
                 titre,
                 contenu,
                 metier_id: metierRaw ? parseInt(metierRaw, 10) : null,
+                category,
+                target_audience: targetAudience,
             }),
         });
         if (res.ok) {
@@ -1623,6 +1895,19 @@ window.unpublishActualite = async function(id) {
     }
 };
 
+window.archiveActualite = async function(id) {
+    try {
+        const res = await adminFetch(`/api/admin/actualites/${id}/archive`, { method: 'POST' });
+        if (res.ok) {
+            await loadActualitesTab();
+        } else {
+            alert("Échec de l'archivage.");
+        }
+    } catch (e) {
+        alert('Erreur réseau');
+    }
+};
+
 window.deleteActualitePrompt = async function(id) {
     if (!confirm('Supprimer définitivement cette actualité ?')) return;
     try {
@@ -1637,10 +1922,57 @@ window.deleteActualitePrompt = async function(id) {
     }
 };
 
+// --- Modale de programmation ---
+let scheduleModalInstance = null;
+
+window.openScheduleModal = function(id) {
+    document.getElementById('schedule-actualite-id').value = id;
+    document.getElementById('schedule-actualite-datetime').value = '';
+    document.getElementById('schedule-actualite-feedback').textContent = '';
+    if (!scheduleModalInstance) {
+        scheduleModalInstance = new bootstrap.Modal(document.getElementById('modal-schedule-actualite'));
+    }
+    scheduleModalInstance.show();
+};
+
+window.closeScheduleModal = function() {
+    if (scheduleModalInstance) scheduleModalInstance.hide();
+};
+
+window.submitScheduleActualite = async function() {
+    const id = document.getElementById('schedule-actualite-id').value;
+    const dtValue = document.getElementById('schedule-actualite-datetime').value;
+    const feedback = document.getElementById('schedule-actualite-feedback');
+    if (!dtValue) {
+        feedback.className = 'mt-2 small text-danger';
+        feedback.textContent = 'Choisissez une date et une heure.';
+        return;
+    }
+    try {
+        const res = await adminFetch(`/api/admin/actualites/${id}/schedule`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ scheduled_at: new Date(dtValue).toISOString() }),
+        });
+        const data = await res.json().catch(() => ({}));
+        if (res.ok) {
+            closeScheduleModal();
+            await loadActualitesTab();
+        } else {
+            feedback.className = 'mt-2 small text-danger';
+            feedback.textContent = data.detail || 'Échec de la programmation.';
+        }
+    } catch (e) {
+        feedback.className = 'mt-2 small text-danger';
+        feedback.textContent = 'Erreur réseau.';
+    }
+};
+
 window.submitBroadcastNotification = async function() {
     const title = document.getElementById('notif-title').value.trim();
     const body = document.getElementById('notif-body').value.trim();
     const metierRaw = document.getElementById('notif-metier').value.trim();
+    const targetAudience = document.getElementById('notif-audience').value;
     const feedback = document.getElementById('notif-broadcast-feedback');
 
     if (!title || !body) {
@@ -1658,6 +1990,7 @@ window.submitBroadcastNotification = async function() {
                 body,
                 metier_id: metierRaw ? parseInt(metierRaw, 10) : null,
                 channel: 'in_app',
+                target_audience: targetAudience,
             }),
         });
         const data = await res.json().catch(() => ({}));
@@ -1667,6 +2000,8 @@ window.submitBroadcastNotification = async function() {
             document.getElementById('notif-title').value = '';
             document.getElementById('notif-body').value = '';
             document.getElementById('notif-metier').value = '';
+            document.getElementById('notif-audience').value = 'tous';
+            await loadBroadcastHistory();
         } else {
             feedback.className = 'mt-2 small text-danger';
             feedback.textContent = data.detail || 'Échec de la diffusion.';
@@ -1676,3 +2011,37 @@ window.submitBroadcastNotification = async function() {
         feedback.textContent = 'Erreur réseau.';
     }
 };
+
+// --- Historique des diffusions (dérivé du journal d'audit existant) ---
+async function loadBroadcastHistory() {
+    const container = document.getElementById('broadcast-history-list');
+    if (!container) return;
+    try {
+        const res = await adminFetch('/api/admin/audit-logs?action=notification.broadcast&resource_type=notification&limit=20');
+        if (!res.ok) {
+            if (res.status === 403) {
+                container.innerHTML = '<p class="text-muted small p-2 mb-0">Votre rôle ne donne pas accès à l\'historique.</p>';
+            }
+            return;
+        }
+        const logs = await res.json();
+        if (!logs || logs.length === 0) {
+            container.innerHTML = '<p class="text-muted small p-2 mb-0">Aucune diffusion envoyée pour le moment.</p>';
+            return;
+        }
+        container.innerHTML = logs.map(l => {
+            const after = l.after_json || {};
+            const audienceLabel = { tous: 'Tous', abonnes_payants: 'Abonnés payants', gratuits: 'Gratuits' }[after.target_audience] || after.target_audience || 'Tous';
+            const metierLabel = after.metier_id ? `Métier #${after.metier_id}` : 'Tous métiers';
+            return `
+                <div class="border-bottom px-2 py-2">
+                    <div class="fw-semibold">${after.titre || '(sans titre)'}</div>
+                    <div class="text-muted">${new Date(l.created_at).toLocaleString()} • ${metierLabel} • ${audienceLabel}</div>
+                    <div class="text-muted">${after.cible_count ?? '?'} destinataire(s) • canal ${after.channel || 'in_app'}</div>
+                </div>
+            `;
+        }).join('');
+    } catch (err) {
+        console.error('Erreur chargement historique diffusions:', err);
+    }
+}

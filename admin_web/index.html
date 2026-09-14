@@ -113,7 +113,7 @@
                         <li class="nav-item" role="presentation">
                             <a class="nav-link nav-menu-item" href="javascript:void(0);" data-tab="tab-payments" role="tab" id="navtab-payments" aria-selected="false" aria-controls="tab-payments" tabindex="-1">
                                 <i class="iconoir-cart-alt menu-icon"></i>
-                                <span>Paiements MM</span>
+                                <span>Finance</span>
                             </a>
                         </li>
                         <li class="nav-item" role="presentation">
@@ -143,7 +143,7 @@
                         <li class="nav-item" role="presentation">
                             <a class="nav-link nav-menu-item" href="javascript:void(0);" data-tab="tab-actualites" role="tab" id="navtab-actualites" aria-selected="false" aria-controls="tab-actualites" tabindex="-1">
                                 <i class="iconoir-megaphone menu-icon"></i>
-                                <span>Actualités & Notifications</span>
+                                <span>Communication</span>
                             </a>
                         </li>
                     </ul>
@@ -441,32 +441,153 @@
                     </div>
                 </div>
 
-                <!-- Tab 4: Payments Mobile Money -->
+                <!-- Tab 4: Finance -->
                 <div id="tab-payments" class="tab-page" role="tabpanel" aria-labelledby="navtab-payments" tabindex="0">
-                    <div class="card mt-4">
-                        <div class="card-header d-flex justify-content-between align-items-center">
-                            <h4 class="card-title">Journal des Transactions Mobile Money (Wave / Orange)</h4>
-                            <span class="badge bg-success-subtle text-success">Signatures HMAC SHA-256 Actives</span>
+                    <!-- Bandeau KPIs Finance -->
+                    <div class="row mt-4">
+                        <div class="col-md-6 col-lg-3 mb-3">
+                            <div class="card report-card">
+                                <div class="card-body">
+                                    <p class="text-muted mb-0 fw-semibold">Revenu total</p>
+                                    <h3 class="my-1 fs-20" id="fin-kpi-revenu-total">0 F</h3>
+                                </div>
+                            </div>
+                        </div>
+                        <div class="col-md-6 col-lg-3 mb-3">
+                            <div class="card report-card">
+                                <div class="card-body">
+                                    <p class="text-muted mb-0 fw-semibold">Revenu (30j)</p>
+                                    <h3 class="my-1 fs-20" id="fin-kpi-revenu-30j">0 F</h3>
+                                </div>
+                            </div>
+                        </div>
+                        <div class="col-md-6 col-lg-3 mb-3">
+                            <div class="card report-card">
+                                <div class="card-body">
+                                    <p class="text-muted mb-0 fw-semibold">Taux de succès</p>
+                                    <h3 class="my-1 fs-20" id="fin-kpi-taux-succes">0%</h3>
+                                </div>
+                            </div>
+                        </div>
+                        <div class="col-md-6 col-lg-3 mb-3">
+                            <div class="card report-card">
+                                <div class="card-body">
+                                    <p class="text-muted mb-0 fw-semibold">Remboursé (total)</p>
+                                    <h3 class="my-1 fs-20" id="fin-kpi-rembourse">0 F</h3>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <div class="row">
+                        <div class="col-lg-4 mb-4">
+                            <div class="card">
+                                <div class="card-header">
+                                    <h4 class="card-title mb-0">Répartition par opérateur</h4>
+                                </div>
+                                <div class="card-body">
+                                    <div id="fin-par-operateur"><!-- Injected via JS --></div>
+                                </div>
+                            </div>
+                        </div>
+                        <div class="col-lg-8 mb-4">
+                            <div class="card">
+                                <div class="card-header d-flex justify-content-between align-items-center">
+                                    <h4 class="card-title mb-0">Rapport périodique</h4>
+                                    <select id="fin-report-period" class="form-select form-select-sm w-auto" onchange="loadFinanceReport()" title="Granularité du rapport" aria-label="Granularité du rapport">
+                                        <option value="day">Par jour</option>
+                                        <option value="week">Par semaine</option>
+                                        <option value="month">Par mois</option>
+                                    </select>
+                                </div>
+                                <div class="card-body p-0 scrollable-card-body-sm">
+                                    <table class="table table-sm mb-0">
+                                        <caption class="visually-hidden">Revenu agrégé par période</caption>
+                                        <thead class="table-light">
+                                            <tr>
+                                                <th scope="col">Période</th>
+                                                <th scope="col">Transactions</th>
+                                                <th scope="col">Revenu</th>
+                                            </tr>
+                                        </thead>
+                                        <tbody id="fin-report-tbody"><!-- Injected via JS --></tbody>
+                                    </table>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <div class="card mt-0">
+                        <div class="card-header d-flex justify-content-between align-items-center flex-wrap gap-2">
+                            <h4 class="card-title mb-0">Journal des Transactions Mobile Money</h4>
+                            <div class="d-flex gap-2">
+                                <span class="badge bg-success-subtle text-success align-self-center">Signatures HMAC SHA-256 Actives</span>
+                                <button type="button" class="btn btn-sm btn-outline-secondary" onclick="exportFinanceTransactions()">
+                                    <i class="iconoir-download me-1"></i>Exporter CSV
+                                </button>
+                            </div>
                         </div>
                         <div class="card-body">
+                            <div class="row g-2 mb-3">
+                                <div class="col-md-3">
+                                    <input type="text" id="fin-filter-q" class="form-control form-control-sm" placeholder="Recherche (réf. / artisan)" oninput="handleFinanceFilterChange()">
+                                </div>
+                                <div class="col-md-2">
+                                    <select id="fin-filter-statut" class="form-select form-select-sm" onchange="handleFinanceFilterChange()" title="Filtrer par statut" aria-label="Filtrer par statut">
+                                        <option value="">Tous les statuts</option>
+                                        <option value="PENDING">PENDING</option>
+                                        <option value="ACCEPTED">ACCEPTED</option>
+                                        <option value="SUCCESS">SUCCESS</option>
+                                        <option value="FAILED">FAILED</option>
+                                        <option value="REFUNDED">REFUNDED</option>
+                                    </select>
+                                </div>
+                                <div class="col-md-2">
+                                    <select id="fin-filter-operateur" class="form-select form-select-sm" onchange="handleFinanceFilterChange()" title="Filtrer par opérateur" aria-label="Filtrer par opérateur">
+                                        <option value="">Tous les opérateurs</option>
+                                        <option value="WAVE">WAVE</option>
+                                        <option value="ORANGE">ORANGE</option>
+                                        <option value="MTN">MTN</option>
+                                        <option value="MOOV">MOOV</option>
+                                    </select>
+                                </div>
+                                <div class="col-md-2">
+                                    <input type="date" id="fin-filter-date-from" class="form-control form-control-sm" onchange="handleFinanceFilterChange()" title="Date de début" aria-label="Date de début">
+                                </div>
+                                <div class="col-md-2">
+                                    <input type="date" id="fin-filter-date-to" class="form-control form-control-sm" onchange="handleFinanceFilterChange()" title="Date de fin" aria-label="Date de fin">
+                                </div>
+                                <div class="col-md-1">
+                                    <button type="button" class="btn btn-sm btn-outline-secondary w-100" onclick="resetFinanceFilters()" title="Réinitialiser les filtres" aria-label="Réinitialiser les filtres">
+                                        <i class="iconoir-refresh"></i>
+                                    </button>
+                                </div>
+                            </div>
                             <div class="table-responsive">
                                 <table class="table mb-0 table-centered">
                                     <caption class="visually-hidden">Journal des transactions Mobile Money</caption>
                                     <thead class="table-light">
                                         <tr>
-                                            <th scope="col">ID Transaction</th>
                                             <th scope="col">Référence Ext.</th>
                                             <th scope="col">Artisan</th>
                                             <th scope="col">Montant</th>
                                             <th scope="col">Opérateur</th>
                                             <th scope="col">Statut</th>
                                             <th scope="col">Horodatage</th>
+                                            <th scope="col">Actions</th>
                                         </tr>
                                     </thead>
                                     <tbody id="payments-table-body">
                                         <!-- Injected via JS -->
                                     </tbody>
                                 </table>
+                            </div>
+                            <div class="d-flex justify-content-between align-items-center mt-2">
+                                <small class="text-muted" id="fin-pagination-info"></small>
+                                <div class="btn-group btn-group-sm">
+                                    <button type="button" class="btn btn-outline-secondary" onclick="changeFinancePage(-1)" title="Page précédente" aria-label="Page précédente"><i class="iconoir-nav-arrow-left"></i></button>
+                                    <button type="button" class="btn btn-outline-secondary" onclick="changeFinancePage(1)" title="Page suivante" aria-label="Page suivante"><i class="iconoir-nav-arrow-right"></i></button>
+                                </div>
                             </div>
                         </div>
                     </div>
@@ -837,7 +958,7 @@
                     <div class="row mt-4">
                         <div class="col-lg-7 mb-4">
                             <div class="card">
-                                <div class="card-header d-flex justify-content-between align-items-center">
+                                <div class="card-header d-flex justify-content-between align-items-center flex-wrap gap-2">
                                     <h4 class="card-title mb-0">Actualités</h4>
                                     <button class="btn btn-sm btn-primary" onclick="openCreateActualiteForm()">
                                         <i class="iconoir-plus me-1"></i>Nouvelle actualité
@@ -845,6 +966,7 @@
                                 </div>
                                 <div class="card-body">
                                     <div id="actualite-form" class="border rounded p-3 mb-3 d-none">
+                                        <input type="hidden" id="actu-edit-id">
                                         <div class="mb-2">
                                             <label for="actu-titre" class="form-label">Titre</label>
                                             <input type="text" id="actu-titre" class="form-control" placeholder="Titre de l'actualité">
@@ -853,21 +975,52 @@
                                             <label for="actu-contenu" class="form-label">Contenu</label>
                                             <textarea id="actu-contenu" class="form-control" rows="3" placeholder="Contenu..."></textarea>
                                         </div>
-                                        <div class="mb-2">
-                                            <label for="actu-metier" class="form-label">Métier ciblé (optionnel)</label>
-                                            <input type="number" id="actu-metier" class="form-control" placeholder="Vide = tous les métiers">
+                                        <div class="row g-2">
+                                            <div class="col-md-4">
+                                                <label for="actu-metier" class="form-label">Métier ciblé</label>
+                                                <input type="number" id="actu-metier" class="form-control" placeholder="Vide = tous">
+                                            </div>
+                                            <div class="col-md-4">
+                                                <label for="actu-category" class="form-label">Catégorie</label>
+                                                <select id="actu-category" class="form-select">
+                                                    <option value="annonce">Annonce</option>
+                                                    <option value="maintenance">Maintenance</option>
+                                                    <option value="conseil">Conseil</option>
+                                                    <option value="promotion">Promotion</option>
+                                                </select>
+                                            </div>
+                                            <div class="col-md-4">
+                                                <label for="actu-audience" class="form-label">Audience</label>
+                                                <select id="actu-audience" class="form-select">
+                                                    <option value="tous">Tous les artisans</option>
+                                                    <option value="abonnes_payants">Abonnés payants</option>
+                                                    <option value="gratuits">Comptes gratuits</option>
+                                                </select>
+                                            </div>
                                         </div>
-                                        <button type="button" class="btn btn-primary btn-sm" onclick="submitCreateActualite()">
-                                            <i class="iconoir-check me-1"></i>Créer (brouillon)
-                                        </button>
-                                        <button type="button" class="btn btn-light btn-sm" onclick="closeCreateActualiteForm()">Annuler</button>
+                                        <div class="mt-2">
+                                            <button type="button" class="btn btn-primary btn-sm" id="actu-submit-btn" onclick="submitCreateActualite()">
+                                                <i class="iconoir-check me-1"></i>Créer (brouillon)
+                                            </button>
+                                            <button type="button" class="btn btn-light btn-sm" onclick="closeCreateActualiteForm()">Annuler</button>
+                                        </div>
                                     </div>
+
+                                    <!-- Filtre par statut (workflow éditorial) -->
+                                    <ul class="nav nav-pills nav-sm mb-3" id="actu-status-filter" aria-label="Filtrer les actualités par statut">
+                                        <li class="nav-item"><button type="button" class="nav-link active" data-statut="" onclick="filterActualitesByStatus('', this)">Toutes</button></li>
+                                        <li class="nav-item"><button type="button" class="nav-link" data-statut="brouillon" onclick="filterActualitesByStatus('brouillon', this)">Brouillons</button></li>
+                                        <li class="nav-item"><button type="button" class="nav-link" data-statut="programme" onclick="filterActualitesByStatus('programme', this)">Programmées</button></li>
+                                        <li class="nav-item"><button type="button" class="nav-link" data-statut="publie" onclick="filterActualitesByStatus('publie', this)">Publiées</button></li>
+                                        <li class="nav-item"><button type="button" class="nav-link" data-statut="archive" onclick="filterActualitesByStatus('archive', this)">Archivées</button></li>
+                                    </ul>
+
                                     <div id="actualites-list"><!-- Injected via JS --></div>
                                 </div>
                             </div>
                         </div>
                         <div class="col-lg-5 mb-4">
-                            <div class="card">
+                            <div class="card mb-4">
                                 <div class="card-header">
                                     <h4 class="card-title mb-0">Centre de notifications</h4>
                                     <small class="text-muted">Composer et diffuser une notification in-app.</small>
@@ -881,17 +1034,38 @@
                                         <label for="notif-body" class="form-label">Message</label>
                                         <textarea id="notif-body" class="form-control" rows="3" placeholder="Contenu de la notification..."></textarea>
                                     </div>
-                                    <div class="mb-2">
-                                        <label for="notif-metier" class="form-label">Métier ciblé (optionnel)</label>
-                                        <input type="number" id="notif-metier" class="form-control" placeholder="Vide = tous les artisans">
+                                    <div class="row g-2">
+                                        <div class="col-md-6">
+                                            <label for="notif-metier" class="form-label">Métier ciblé</label>
+                                            <input type="number" id="notif-metier" class="form-control" placeholder="Vide = tous">
+                                        </div>
+                                        <div class="col-md-6">
+                                            <label for="notif-audience" class="form-label">Audience</label>
+                                            <select id="notif-audience" class="form-select">
+                                                <option value="tous">Tous les artisans</option>
+                                                <option value="abonnes_payants">Abonnés payants</option>
+                                                <option value="gratuits">Comptes gratuits</option>
+                                            </select>
+                                        </div>
                                     </div>
-                                    <button type="button" class="btn btn-primary btn-sm" onclick="submitBroadcastNotification()">
+                                    <button type="button" class="btn btn-primary btn-sm mt-2" onclick="submitBroadcastNotification()">
                                         <i class="iconoir-send me-1"></i>Diffuser
                                     </button>
                                     <div id="notif-broadcast-feedback" class="mt-2 small" role="status" aria-live="polite"></div>
                                     <hr>
                                     <h6 class="fw-semibold mb-2">Suggestions (conversations mal notées)</h6>
                                     <div id="actualites-suggestions" class="small text-muted"><!-- Injected via JS --></div>
+                                </div>
+                            </div>
+                            <div class="card">
+                                <div class="card-header d-flex justify-content-between align-items-center">
+                                    <h4 class="card-title mb-0">Historique des diffusions</h4>
+                                    <button type="button" class="btn btn-sm btn-outline-primary" onclick="loadBroadcastHistory()" title="Actualiser" aria-label="Actualiser l'historique des diffusions">
+                                        <i class="iconoir-refresh"></i>
+                                    </button>
+                                </div>
+                                <div class="card-body p-0 scrollable-card-body-sm">
+                                    <div id="broadcast-history-list" class="small"><!-- Injected via JS --></div>
                                 </div>
                             </div>
                         </div>
@@ -1080,6 +1254,59 @@
                 <div class="modal-footer">
                     <button type="button" class="btn btn-light" onclick="closeRoleModal()">Annuler</button>
                     <button type="button" class="btn btn-primary" id="role-modal-submit-btn" onclick="submitRoleModal()"><i class="ri-save-line me-1"></i>Enregistrer</button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Modal Remboursement / Correction de statut d'une transaction -->
+    <div class="modal fade" id="modal-finance-action" tabindex="-1" role="dialog" aria-labelledby="modal-finance-action-title" aria-hidden="true">
+        <div class="modal-dialog modal-dialog-centered" role="document">
+            <div class="modal-content">
+                <div class="modal-header">
+                    <h5 class="modal-title" id="modal-finance-action-title">Action sur la transaction</h5>
+                    <button type="button" class="btn-close" onclick="closeFinanceActionModal()" aria-label="Close"></button>
+                </div>
+                <div class="modal-body">
+                    <input type="hidden" id="fin-action-txn-id">
+                    <input type="hidden" id="fin-action-type">
+                    <div id="fin-action-status-group" class="mb-3">
+                        <label for="fin-action-new-status" class="form-label fw-semibold">Nouveau statut</label>
+                        <select id="fin-action-new-status" class="form-select">
+                            <option value="PENDING">PENDING</option>
+                            <option value="ACCEPTED">ACCEPTED</option>
+                            <option value="FAILED">FAILED</option>
+                        </select>
+                    </div>
+                    <label for="fin-action-reason" class="form-label fw-semibold">Motif <span class="text-danger">*</span></label>
+                    <textarea id="fin-action-reason" class="form-control" rows="3" placeholder="Expliquez la raison de cette action (tracée dans le journal d'audit)..." required></textarea>
+                    <div id="fin-action-feedback" class="mt-2 small" role="status" aria-live="polite"></div>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-light" onclick="closeFinanceActionModal()">Annuler</button>
+                    <button type="button" class="btn btn-primary" onclick="submitFinanceAction()">Confirmer</button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Modal Programmer la publication d'une actualité -->
+    <div class="modal fade" id="modal-schedule-actualite" tabindex="-1" role="dialog" aria-labelledby="modal-schedule-actualite-title" aria-hidden="true">
+        <div class="modal-dialog modal-dialog-centered" role="document">
+            <div class="modal-content">
+                <div class="modal-header">
+                    <h5 class="modal-title" id="modal-schedule-actualite-title">Programmer la publication</h5>
+                    <button type="button" class="btn-close" onclick="closeScheduleModal()" aria-label="Close"></button>
+                </div>
+                <div class="modal-body">
+                    <input type="hidden" id="schedule-actualite-id">
+                    <label for="schedule-actualite-datetime" class="form-label fw-semibold">Date et heure de publication <span class="text-danger">*</span></label>
+                    <input type="datetime-local" id="schedule-actualite-datetime" class="form-control" required>
+                    <div id="schedule-actualite-feedback" class="mt-2 small" role="status" aria-live="polite"></div>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-light" onclick="closeScheduleModal()">Annuler</button>
+                    <button type="button" class="btn btn-primary" onclick="submitScheduleActualite()">Programmer</button>
                 </div>
             </div>
         </div>

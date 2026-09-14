@@ -84,7 +84,9 @@ class User(Base):
         back_populates="user", uselist=False, cascade="all, delete-orphan"
     )
     transactions: Mapped[list[TransactionMobileMoney]] = relationship(
-        back_populates="user", cascade="all, delete-orphan"
+        back_populates="user",
+        foreign_keys="TransactionMobileMoney.user_id",
+        cascade="all, delete-orphan",
     )
     conversations: Mapped[list[Conversation]] = relationship(
         back_populates="user", cascade="all, delete-orphan"

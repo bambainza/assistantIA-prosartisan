@@ -38,5 +38,15 @@ class TransactionMobileMoney(Base):
     reference_externe: Mapped[str | None] = mapped_column(String(255), default=None)
     created_at: Mapped[datetime] = mapped_column(server_default=func.now())
 
+    # Remboursement (module Finance back-office) : renseignés uniquement quand
+    # `statut_paiement == "REFUNDED"`.
+    refunded_at: Mapped[datetime | None] = mapped_column(default=None)
+    refund_reason: Mapped[str | None] = mapped_column(String(255), default=None)
+    refunded_by_admin_id: Mapped[uuid.UUID | None] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("users.id", ondelete="SET NULL"), default=None
+    )
+
     # Relations
-    user: Mapped[User] = relationship(back_populates="transactions")
+    user: Mapped[User] = relationship(
+        back_populates="transactions", foreign_keys=[user_id]
+    )

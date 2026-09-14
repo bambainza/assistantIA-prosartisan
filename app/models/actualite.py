@@ -26,12 +26,22 @@ class Actualite(Base):
     metier_id: Mapped[int | None] = mapped_column(
         ForeignKey("metiers.id"), default=None
     )
-    # "brouillon" | "publie"
+    # "brouillon" | "programme" | "publie" | "archive"
     statut: Mapped[str] = mapped_column(String(20), default="brouillon", index=True)
+    # "annonce" | "maintenance" | "conseil" | "promotion"
+    category: Mapped[str] = mapped_column(String(30), default="annonce")
+    # "tous" | "abonnes_payants" | "gratuits" — n'affecte que la notification
+    # liée à la publication, pas la visibilité de l'actualité elle-même.
+    target_audience: Mapped[str] = mapped_column(String(30), default="tous")
     created_by: Mapped[uuid.UUID | None] = mapped_column(
         ForeignKey("users.id", ondelete="SET NULL"), default=None
     )
 
+    # Publication différée : si renseignée et future, l'actualité reste au
+    # statut "programme" jusqu'à ce qu'un appel à `list_published`/`list_all`
+    # constate l'échéance passée et la fasse basculer en "publie" (voir
+    # `ActualiteService._promote_scheduled`, pas de tâche planifiée dédiée).
+    scheduled_at: Mapped[datetime | None] = mapped_column(default=None)
     publie_at: Mapped[datetime | None] = mapped_column(default=None)
     # `default=datetime.now` : une instance non encore rafraîchie depuis la base
     # (juste après construction, avant `db.refresh`) expose déjà un datetime

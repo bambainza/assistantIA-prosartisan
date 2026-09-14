@@ -27,7 +27,14 @@ _PERMISSIONS_CATALOG: list[tuple[str, str]] = [
     ("users.grant_pass", "Attribuer manuellement un Pass à un artisan"),
     ("documents.write", "Ingérer un document technique"),
     ("documents.delete", "Supprimer un document de la base de connaissances"),
-    ("transactions.read", "Consulter le journal des transactions Mobile Money"),
+    (
+        "transactions.read",
+        "Consulter le module Finance (KPIs, journal des transactions, rapports)",
+    ),
+    (
+        "finance.write",
+        "Rembourser une transaction ou corriger manuellement son statut",
+    ),
     ("logs.read", "Consulter les journaux système"),
     ("roles.read", "Consulter les rôles et permissions"),
     (

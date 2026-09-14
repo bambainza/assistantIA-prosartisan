@@ -7,7 +7,7 @@ périmètre.
 """
 
 import uuid
-from datetime import UTC, datetime
+from datetime import UTC, datetime, timedelta
 from unittest.mock import AsyncMock, MagicMock
 
 import pytest
@@ -210,6 +210,111 @@ async def test_publication_actualite_avec_notification(
             )
         assert res.status_code == 200
         assert res.json()["statut"] == "publie"
+    finally:
+        app.dependency_overrides[get_db] = mock_get_db
+
+
+@pytest.mark.asyncio
+async def test_programmation_actualite_succes(legacy_admin_user, sample_actualite):
+    """Un admin peut programmer une actualité pour une publication future."""
+    call_index = {"n": 0}
+
+    async def custom_mock_db():
+        session = MagicMock()
+
+        async def mock_execute(stmt):
+            mock_res = MagicMock()
+            call_index["n"] += 1
+            if call_index["n"] == 1:
+                mock_res.scalar_one_or_none.return_value = legacy_admin_user
+            else:
+                mock_res.scalar_one_or_none.return_value = sample_actualite
+            return mock_res
+
+        session.execute = mock_execute
+        session.commit = AsyncMock()
+        session.refresh = AsyncMock()
+        yield session
+
+    app.dependency_overrides[get_db] = custom_mock_db
+    token = create_access_token(data={"sub": str(legacy_admin_user.id)})
+    future = (datetime.now(UTC) + timedelta(days=1)).isoformat()
+    try:
+        transport = ASGITransport(app=app)
+        async with AsyncClient(transport=transport, base_url="http://test") as client:
+            res = await client.post(
+                f"/api/admin/actualites/{sample_actualite.id}/schedule",
+                headers={"Authorization": f"Bearer {token}"},
+                json={"scheduled_at": future},
+            )
+        assert res.status_code == 200
+        assert sample_actualite.statut == "programme"
+    finally:
+        app.dependency_overrides[get_db] = mock_get_db
+
+
+@pytest.mark.asyncio
+async def test_programmation_actualite_refuse_date_passee(legacy_admin_user):
+    """Programmer une actualité dans le passé doit être rejeté (400)."""
+
+    async def custom_mock_db():
+        session = MagicMock()
+        session.execute = AsyncMock(
+            return_value=MagicMock(
+                scalar_one_or_none=MagicMock(return_value=legacy_admin_user)
+            )
+        )
+        yield session
+
+    app.dependency_overrides[get_db] = custom_mock_db
+    token = create_access_token(data={"sub": str(legacy_admin_user.id)})
+    past = (datetime.now(UTC) - timedelta(days=1)).isoformat()
+    try:
+        transport = ASGITransport(app=app)
+        async with AsyncClient(transport=transport, base_url="http://test") as client:
+            res = await client.post(
+                f"/api/admin/actualites/{uuid.uuid4()}/schedule",
+                headers={"Authorization": f"Bearer {token}"},
+                json={"scheduled_at": past},
+            )
+        assert res.status_code == 400
+    finally:
+        app.dependency_overrides[get_db] = mock_get_db
+
+
+@pytest.mark.asyncio
+async def test_archivage_actualite_succes(legacy_admin_user, sample_actualite):
+    """Un admin peut archiver une actualité (retrait sans suppression)."""
+    call_index = {"n": 0}
+
+    async def custom_mock_db():
+        session = MagicMock()
+
+        async def mock_execute(stmt):
+            mock_res = MagicMock()
+            call_index["n"] += 1
+            if call_index["n"] == 1:
+                mock_res.scalar_one_or_none.return_value = legacy_admin_user
+            else:
+                mock_res.scalar_one_or_none.return_value = sample_actualite
+            return mock_res
+
+        session.execute = mock_execute
+        session.commit = AsyncMock()
+        session.refresh = AsyncMock()
+        yield session
+
+    app.dependency_overrides[get_db] = custom_mock_db
+    token = create_access_token(data={"sub": str(legacy_admin_user.id)})
+    try:
+        transport = ASGITransport(app=app)
+        async with AsyncClient(transport=transport, base_url="http://test") as client:
+            res = await client.post(
+                f"/api/admin/actualites/{sample_actualite.id}/archive",
+                headers={"Authorization": f"Bearer {token}"},
+            )
+        assert res.status_code == 200
+        assert sample_actualite.statut == "archive"
     finally:
         app.dependency_overrides[get_db] = mock_get_db
 

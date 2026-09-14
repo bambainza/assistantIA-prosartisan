@@ -41,6 +41,7 @@ from app.schemas.actualite import (
     ActualiteCreate,
     ActualiteOut,
     ActualitePublishRequest,
+    ActualiteScheduleRequest,
     ActualiteUpdate,
 )
 from app.schemas.audit_log import AuditLogOut
@@ -592,67 +593,6 @@ async def delete_document(
         "status": "success",
         "message": f"Document {doc_id} supprimé de la base Qdrant.",
     }
-
-
-@router.get("/transactions")
-async def get_transactions_log(
-    admin_id: uuid.UUID = Depends(get_current_admin_user_id),
-    db: AsyncSession = Depends(get_db),
-) -> dict[str, Any]:
-    """Retourne le journal des transactions Mobile Money réelles."""
-    stmt = (
-        select(
-            TransactionMobileMoney.id,
-            TransactionMobileMoney.reference_externe,
-            TransactionMobileMoney.montant,
-            TransactionMobileMoney.devise,
-            TransactionMobileMoney.operateur,
-            TransactionMobileMoney.statut_paiement,
-            TransactionMobileMoney.type_achat,
-            TransactionMobileMoney.created_at,
-            User.nom.label("user_nom"),
-        )
-        .outerjoin(User, TransactionMobileMoney.user_id == User.id)
-        .order_by(TransactionMobileMoney.created_at.desc())
-    )
-
-    res = await db.execute(stmt)
-    txns_data = []
-    for row in res.all():
-        txns_data.append(
-            {
-                "id": str(row.id),
-                "reference_externe": row.reference_externe or "Non spécifiée",
-                "artisan": row.user_nom or "Artisan Anonyme",
-                "montant": row.montant,
-                "devise": row.devise,
-                "operateur": row.operateur,
-                "statut": row.statut_paiement,
-                "type_achat": row.type_achat,
-                "timestamp": row.created_at.isoformat()
-                if row.created_at
-                else "Non spécifié",
-            }
-        )
-
-    if not txns_data:
-        return {
-            "transactions": [
-                {
-                    "id": "TXN-88401",
-                    "reference_externe": "REF-WAVE-9921",
-                    "artisan": "Kouassi Jean-Marc (Demo)",
-                    "montant": 3000,
-                    "devise": "XOF",
-                    "operateur": "WAVE",
-                    "statut": "ACCEPTED",
-                    "type_achat": "pass_mois",
-                    "timestamp": "2026-08-18T17:30:00Z",
-                }
-            ]
-        }
-
-    return {"transactions": txns_data}
 
 
 @router.get("/logs")
@@ -1267,6 +1207,8 @@ async def create_actualite(
         contenu=payload.contenu,
         metier_id=payload.metier_id,
         created_by=admin_id,
+        category=payload.category,
+        target_audience=payload.target_audience,
     )
     await audit_service.log_action(
         db,
@@ -1297,6 +1239,8 @@ async def update_actualite(
         titre=payload.titre,
         contenu=payload.contenu,
         metier_id=payload.metier_id,
+        category=payload.category,
+        target_audience=payload.target_audience,
     )
     if actualite is None:
         raise HTTPException(
@@ -1335,7 +1279,7 @@ async def publish_actualite(
 
     if payload.notifier_artisans:
         target_ids = await actualite_service.target_user_ids(
-            db, metier_id=actualite.metier_id
+            db, metier_id=actualite.metier_id, audience=actualite.target_audience
         )
         background_tasks.add_task(
             _broadcast_notifications_task,
@@ -1352,6 +1296,70 @@ async def publish_actualite(
         resource_type="actualite",
         resource_id=str(actualite_id),
         after={"notifier_artisans": payload.notifier_artisans},
+        request=request,
+    )
+    await db.commit()
+    await db.refresh(actualite)
+    return actualite
+
+
+@router.post("/actualites/{actualite_id}/schedule", response_model=ActualiteOut)
+async def schedule_actualite(
+    actualite_id: uuid.UUID,
+    payload: ActualiteScheduleRequest,
+    request: Request,
+    admin_id: uuid.UUID = Depends(require_permission("actualites.write")),
+    db: AsyncSession = Depends(get_db),
+) -> Any:
+    """Programme la publication future d'une actualité (statut "programme")."""
+    now = datetime.now(UTC).replace(tzinfo=None)
+    scheduled_naive = payload.scheduled_at.replace(tzinfo=None)
+    if scheduled_naive <= now:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="La date de programmation doit être dans le futur.",
+        )
+
+    actualite = await actualite_service.schedule(
+        db, actualite_id, scheduled_at=payload.scheduled_at
+    )
+    if actualite is None:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND, detail="Actualité introuvable."
+        )
+    await audit_service.log_action(
+        db,
+        actor_id=admin_id,
+        action="actualite.schedule",
+        resource_type="actualite",
+        resource_id=str(actualite_id),
+        after={"scheduled_at": scheduled_naive.isoformat()},
+        request=request,
+    )
+    await db.commit()
+    await db.refresh(actualite)
+    return actualite
+
+
+@router.post("/actualites/{actualite_id}/archive", response_model=ActualiteOut)
+async def archive_actualite(
+    actualite_id: uuid.UUID,
+    request: Request,
+    admin_id: uuid.UUID = Depends(require_permission("actualites.write")),
+    db: AsyncSession = Depends(get_db),
+) -> Any:
+    """Archive une actualité (retirée de la diffusion active, conservée pour historique)."""
+    actualite = await actualite_service.archive(db, actualite_id)
+    if actualite is None:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND, detail="Actualité introuvable."
+        )
+    await audit_service.log_action(
+        db,
+        actor_id=admin_id,
+        action="actualite.archive",
+        resource_type="actualite",
+        resource_id=str(actualite_id),
         request=request,
     )
     await db.commit()
@@ -1445,16 +1453,15 @@ async def broadcast_notification(
     admin_id: uuid.UUID = Depends(require_permission("notifications.send")),
     db: AsyncSession = Depends(get_db),
 ) -> dict[str, Any]:
-    """Compose et diffuse une notification aux artisans (tous, ou ciblés par métier).
+    """Compose et diffuse une notification aux artisans (tous, ciblés par métier
+    et/ou par segment d'audience — abonnés payants ou gratuits).
 
     L'envoi effectif est exécuté en tâche de fond (potentiellement de
     nombreux artisans) ; la réponse est immédiate (202 Accepted).
     """
-    stmt = select(User.id).where(User.is_admin == False)
-    if payload.metier_id is not None:
-        stmt = stmt.where(User.metier_id == payload.metier_id)
-    res = await db.execute(stmt)
-    target_ids = [row[0] for row in res.all()]
+    target_ids = await actualite_service.target_user_ids(
+        db, metier_id=payload.metier_id, audience=payload.target_audience
+    )
 
     background_tasks.add_task(
         _broadcast_notifications_task,
@@ -1471,6 +1478,8 @@ async def broadcast_notification(
         resource_type="notification",
         after={
             "metier_id": payload.metier_id,
+            "target_audience": payload.target_audience,
+            "channel": payload.channel,
             "cible_count": len(target_ids),
             "titre": payload.title,
         },

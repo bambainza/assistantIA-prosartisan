@@ -54,3 +54,7 @@ class NotificationBroadcastRequest(BaseModel):
         None, description="Null = tous les artisans, sinon ciblage par métier"
     )
     channel: str = Field("in_app", description="'in_app' ou 'push'")
+    target_audience: str = Field(
+        "tous",
+        description="'tous' | 'abonnes_payants' | 'gratuits' — affine le ciblage métier",
+    )
