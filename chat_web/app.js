@@ -28,6 +28,14 @@ const sendBtn = document.getElementById('send-btn');
 const imagePreviewBox = document.getElementById('image-preview-box');
 const previewImgName = document.getElementById('preview-img-name');
 const loginModal = document.getElementById('login-modal');
+const srLiveRegion = document.getElementById('sr-live-region');
+
+// Annonce un message aux lecteurs d'écran via la zone aria-live dédiée,
+// sans toucher à l'affichage visuel (déjà géré par les bulles de messages).
+function announceToScreenReader(text) {
+    if (!srLiveRegion) return;
+    srLiveRegion.textContent = text;
+}
 
 // Initialize App on DOM Loaded
 document.addEventListener('DOMContentLoaded', () => {
@@ -472,7 +480,6 @@ let audioChunks = [];
 let isVoiceRecording = false;
 
 async function toggleVoiceRecording() {
-    const micBtn = document.getElementById('mic-btn');
     if (isVoiceRecording) {
         stopVoiceRecording();
         return;
@@ -539,7 +546,7 @@ async function toggleVoiceRecording() {
 
         mediaRecorder.start();
         isVoiceRecording = true;
-        if (micBtn) micBtn.classList.add('recording');
+        setMicButtonRecordingState(true);
         showToast("🎙️ Enregistrement en cours... Cliquez à nouveau pour transcrire.");
     } catch (err) {
         console.warn("Accès micro refusé ou indisponible, tentative Web Speech API:", err);
@@ -552,8 +559,20 @@ function stopVoiceRecording() {
         mediaRecorder.stop();
     }
     isVoiceRecording = false;
+    setMicButtonRecordingState(false);
+}
+
+// Reflète l'état d'enregistrement du micro à la fois visuellement (classe CSS)
+// et pour les technologies d'assistance (aria-pressed + libellé dynamique) —
+// jusqu'ici seul un changement de couleur signalait l'état à l'utilisateur.
+function setMicButtonRecordingState(recording) {
     const micBtn = document.getElementById('mic-btn');
-    if (micBtn) micBtn.classList.remove('recording');
+    if (!micBtn) return;
+    micBtn.classList.toggle('recording', recording);
+    micBtn.setAttribute('aria-pressed', recording ? 'true' : 'false');
+    const label = recording ? "Arrêter l'enregistrement" : "Entrée vocale";
+    micBtn.setAttribute('aria-label', label);
+    micBtn.title = recording ? "Arrêter l'enregistrement" : "Entrée Vocale (Whisper)";
 }
 
 function startSpeechRecognitionFallback() {
@@ -607,6 +626,7 @@ async function sendMessage() {
     // 1. Add User bubble
     appendMessageBubble('user', text, image);
     scrollToBottom();
+    announceToScreenReader("L'assistant rédige une réponse…");
 
     // 2. Add empty Assistant bubble with a typing cursor indicator
     const assistantBubbleId = 'assistant_' + Date.now();
@@ -647,7 +667,9 @@ async function sendMessage() {
         });
 
         if (!response.ok) {
-            bubble.querySelector('.streaming-text').innerHTML = "⚠️ Désolé chef, une erreur s'est produite lors de la connexion à l'assistant. Veuillez réessayer.";
+            const errorText = "Désolé chef, une erreur s'est produite lors de la connexion à l'assistant. Veuillez réessayer.";
+            bubble.querySelector('.streaming-text').innerHTML = `⚠️ ${errorText}`;
+            announceToScreenReader(errorText);
             return;
         }
 
@@ -704,7 +726,8 @@ async function sendMessage() {
 
         // Remove cursor when finished
         bubble.querySelector('.streaming-text').innerHTML = formatMarkdownText(fullResponseText);
-        
+        announceToScreenReader(fullResponseText ? `Réponse de l'assistant : ${fullResponseText}` : "L'assistant n'a pas pu générer de réponse.");
+
         // Append sources block if any
         let sourcesHtml = '';
         if (sources && sources.length > 0) {
@@ -754,7 +777,9 @@ async function sendMessage() {
 
     } catch (e) {
         console.error("Send message error:", e);
-        bubble.querySelector('.streaming-text').innerHTML = "⚠️ Connexion réseau impossible. Vérifiez votre connexion internet.";
+        const networkErrorText = "Connexion réseau impossible. Vérifiez votre connexion internet.";
+        bubble.querySelector('.streaming-text').innerHTML = `⚠️ ${networkErrorText}`;
+        announceToScreenReader(networkErrorText);
     }
 }
 
@@ -767,7 +792,7 @@ function appendMessageBubble(role, content, imageSrc = null, sources = null) {
     
     let imageHtml = '';
     if (imageSrc) {
-        imageHtml = `<img src="${imageSrc}" class="msg-image" alt="Chantier picture">`;
+        imageHtml = `<img src="${imageSrc}" class="msg-image" alt="Photo de chantier envoyée par l'utilisateur">`;
     }
 
     let actionsHtml = '';
@@ -905,7 +930,7 @@ function appendLoadingBubble() {
     bubble.innerHTML = `
         <div class="msg-avatar">A</div>
         <div class="msg-content">
-            <div class="typing-indicator">
+            <div class="typing-indicator" role="status" aria-label="L'assistant rédige une réponse">
                 <span></span>
                 <span></span>
                 <span></span>
@@ -1132,14 +1157,60 @@ function regenerateLastResponse() {
 }
 
 // Login Modal Management
+let loginModalTrigger = null;
+
+function getModalFocusableElements() {
+    const card = loginModal.querySelector('.modal-card');
+    if (!card) return [];
+    return Array.from(card.querySelectorAll('button, [href], input, select, textarea'))
+        .filter(el => !el.disabled && el.offsetParent !== null);
+}
+
+function handleLoginModalKeydown(e) {
+    if (e.key === 'Escape') {
+        e.preventDefault();
+        closeLoginModal();
+        return;
+    }
+    if (e.key !== 'Tab') return;
+
+    // Piège à focus : empêche Tab/Shift+Tab de sortir de la modale tant
+    // qu'elle est ouverte (WAI-ARIA Dialog pattern).
+    const focusable = getModalFocusableElements();
+    if (focusable.length === 0) return;
+    const first = focusable[0];
+    const last = focusable[focusable.length - 1];
+
+    if (e.shiftKey && document.activeElement === first) {
+        e.preventDefault();
+        last.focus();
+    } else if (!e.shiftKey && document.activeElement === last) {
+        e.preventDefault();
+        first.focus();
+    }
+}
+
 function openLoginModal() {
+    loginModalTrigger = document.activeElement;
     loginModal.classList.remove('hidden');
     switchAuthView('login');
+    document.addEventListener('keydown', handleLoginModalKeydown);
+    // Laisse le navigateur terminer le rendu (retrait de .hidden) avant de
+    // déplacer le focus, sinon l'élément n'est pas encore focusable.
+    setTimeout(() => {
+        const focusable = getModalFocusableElements();
+        (focusable[0] || loginModal).focus();
+    }, 0);
 }
 
 // Close Login Modal
 function closeLoginModal() {
     loginModal.classList.add('hidden');
+    document.removeEventListener('keydown', handleLoginModalKeydown);
+    if (loginModalTrigger && typeof loginModalTrigger.focus === 'function') {
+        loginModalTrigger.focus();
+    }
+    loginModalTrigger = null;
 }
 
 // Switch between Register and Login views

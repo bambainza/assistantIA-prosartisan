@@ -1,5 +1,23 @@
 /* Custom Admin Dashboard Component Styles */
 
+/* Lien d'évitement : invisible tant qu'il n'a pas le focus clavier. */
+.skip-link {
+    position: absolute;
+    top: -60px;
+    left: 8px;
+    z-index: 10000;
+    padding: 10px 16px;
+    background: #10b981;
+    color: #fff;
+    border-radius: 4px;
+    text-decoration: none;
+    font-weight: 600;
+    transition: top 0.15s ease-in-out;
+}
+.skip-link:focus {
+    top: 8px;
+}
+
 /* Tab Page Show/Hide */
 .tab-page {
     display: none !important;
@@ -215,7 +233,9 @@
 
 .package-period {
     font-size: 0.85rem;
-    color: #8a92a6;
+    /* #8a92a6 tombait sous 3:1 sur fond clair (échec AA) ; ce gris plus
+       sombre reste discret tout en passant le seuil de contraste texte. */
+    color: #5f6a7d;
 }
 
 .package-features-list {

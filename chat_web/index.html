@@ -50,9 +50,11 @@
                 <div class="history-empty-state" id="history-empty">
                     Connectez-vous pour enregistrer vos discussions.
                 </div>
-                <ul class="conversations-list" id="conversations-list">
-                    <!-- Injected via app.js -->
-                </ul>
+                <nav aria-label="Historique des discussions">
+                    <ul class="conversations-list" id="conversations-list">
+                        <!-- Injected via app.js -->
+                    </ul>
+                </nav>
             </div>
 
             <!-- Sidebar Footer Options -->
@@ -84,7 +86,7 @@
 
                 <!-- Call to action block for unlogged users -->
                 <div class="cta-sidebar-login" id="cta-sidebar-login">
-                    <h6>Obtenez des réponses personnalisées</h6>
+                    <p class="cta-title">Obtenez des réponses personnalisées</p>
                     <p>Connectez-vous pour obtenir des réponses sur la base des chats enregistrés, créer des images et charger des fichiers.</p>
                     <button class="btn btn-primary btn-sm btn-block" onclick="openLoginModal()">Se connecter</button>
                 </div>
@@ -150,18 +152,18 @@
                 <div class="landing-container" id="landing-container">
                     <h1 class="landing-welcome">Par quoi commençons-nous ?</h1>
                     <div class="chips-container">
-                        <div class="chip" onclick="fillInput('Comment doser le ciment pour une dalle de béton ?')">
+                        <button type="button" class="chip" onclick="fillInput('Comment doser le ciment pour une dalle de béton ?')">
                             <span>🏗️ Dose de ciment pour béton</span>
-                        </div>
-                        <div class="chip" onclick="fillInput('Comment poser du carrelage dans une douche italienne ?')">
+                        </button>
+                        <button type="button" class="chip" onclick="fillInput('Comment poser du carrelage dans une douche italienne ?')">
                             <span>🚿 Poser du carrelage</span>
-                        </div>
-                        <div class="chip" onclick="fillInput('Quelles sont les normes de sécurité en électricité bâtiment ?')">
+                        </button>
+                        <button type="button" class="chip" onclick="fillInput('Quelles sont les normes de sécurité en électricité bâtiment ?')">
                             <span>⚡ Normes électriques</span>
-                        </div>
-                        <div class="chip" onclick="fillInput('Qu\'est-ce que tu sais faire ?')">
+                        </button>
+                        <button type="button" class="chip" onclick="fillInput('Qu\'est-ce que tu sais faire ?')">
                             <span>👷‍♂️ Qu'est-ce que tu sais faire ?</span>
-                        </div>
+                        </button>
                     </div>
                 </div>
 
@@ -169,6 +171,11 @@
                 <div class="messages-stream hidden" id="messages-stream">
                     <!-- Dynamic message bubbles injected via app.js -->
                 </div>
+
+                <!-- Zone annoncée aux lecteurs d'écran : statut de frappe + réponse
+                     complète de l'assistant (mise à jour uniquement à la fin du
+                     streaming pour ne pas spammer l'annonce à chaque jeton). -->
+                <div class="sr-only" id="sr-live-region" aria-live="polite" aria-atomic="true"></div>
             </div>
 
             <!-- Footer Chat Input Bar Area -->
@@ -189,7 +196,7 @@
                         <textarea class="chat-input" id="chat-input" rows="1" placeholder="Poser une question..." oninput="handleInputKeyPress()" aria-label="Poser une question"></textarea>
                     </div>
 
-                    <button class="input-action-btn" id="mic-btn" onclick="toggleVoiceRecording()" title="Entrée Vocale (Whisper)" aria-label="Entrée vocale">
+                    <button class="input-action-btn" id="mic-btn" onclick="toggleVoiceRecording()" title="Entrée Vocale (Whisper)" aria-label="Entrée vocale" aria-pressed="false">
                         <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 1a3 3 0 0 0-3 3v8a3 3 0 0 0 6 0V4a3 3 0 0 0-3-3z"/><path d="M19 10v2a7 7 0 0 1-14 0v-2"/><line x1="12" y1="19" x2="12" y2="23"/></svg>
                     </button>
 
@@ -206,11 +213,11 @@
     </div>
 
     <!-- Login/Sign Up Modal Overlay -->
-    <div class="modal-overlay hidden" id="login-modal">
+    <div class="modal-overlay hidden" id="login-modal" role="dialog" aria-modal="true" aria-labelledby="login-modal-title">
         <div class="modal-card">
             <button class="modal-close-btn" onclick="closeLoginModal()" title="Fermer" aria-label="Fermer la fenêtre de connexion">×</button>
             <div class="modal-header">
-                <h2>Connectez-vous ou inscrivez-vous</h2>
+                <h2 id="login-modal-title">Connectez-vous ou inscrivez-vous</h2>
                 <p>Vous recevrez des réponses plus intelligentes et pourrez charger des fichiers, des images, et bien plus encore.</p>
             </div>
             
@@ -259,7 +266,7 @@
     </div>
 
     <!-- Alert Modal for Toast Notifications -->
-    <div class="toast-notification hidden" id="toast-notif">
+    <div class="toast-notification hidden" id="toast-notif" role="status" aria-live="polite">
         <span id="toast-text">Message</span>
     </div>
 

@@ -106,34 +106,69 @@ function initLoginForm() {
     });
 }
 
-// Tab Navigation
+// Tab Navigation — implémente le pattern WAI-ARIA Tabs (role=tab/tabpanel,
+// aria-selected, tabindex "roving" + navigation flèches) sur le menu latéral
+// existant, sans changer son apparence visuelle.
 function initTabs() {
-    const navItems = document.querySelectorAll('.nav-menu-item');
+    const navItems = Array.from(document.querySelectorAll('.nav-menu-item'));
     const tabPages = document.querySelectorAll('.tab-page');
     const pageTitle = document.getElementById('page-title');
+    const pageTitleH1 = document.getElementById('page-title-h1');
 
-    navItems.forEach(item => {
-        item.addEventListener('click', () => {
-            navItems.forEach(n => n.classList.remove('active'));
-            tabPages.forEach(p => p.classList.remove('active'));
+    function activateTab(item, { focusTab = false } = {}) {
+        navItems.forEach(n => {
+            n.classList.remove('active');
+            n.setAttribute('aria-selected', 'false');
+            n.setAttribute('tabindex', '-1');
+        });
+        tabPages.forEach(p => p.classList.remove('active'));
 
-            item.classList.add('active');
-            const targetTab = item.getAttribute('data-tab');
-            const targetEl = document.getElementById(targetTab);
-            if (targetEl) targetEl.classList.add('active');
+        item.classList.add('active');
+        item.setAttribute('aria-selected', 'true');
+        item.setAttribute('tabindex', '0');
+        if (focusTab) item.focus();
 
-            if (item.querySelector('span')) {
-                pageTitle.textContent = item.querySelector('span').textContent;
+        const targetTab = item.getAttribute('data-tab');
+        const targetEl = document.getElementById(targetTab);
+        if (targetEl) targetEl.classList.add('active');
+
+        const label = item.querySelector('span') ? item.querySelector('span').textContent : '';
+        if (label) {
+            pageTitle.textContent = label;
+            if (pageTitleH1) pageTitleH1.textContent = label;
+            document.title = `${label} — ProsArtisan IA — Console d'Administration`;
+        }
+
+        if (targetTab === 'tab-packages') {
+            loadPackagesTab();
+        }
+        if (targetTab === 'tab-security') {
+            loadSecurityTab();
+        }
+        if (targetTab === 'tab-actualites') {
+            loadActualitesTab();
+        }
+    }
+
+    navItems.forEach((item, index) => {
+        item.addEventListener('click', () => activateTab(item));
+
+        // Navigation clavier flèches Haut/Bas + Home/End entre les onglets,
+        // conforme au pattern APG Tabs (activation automatique au focus).
+        item.addEventListener('keydown', (e) => {
+            let targetIndex = null;
+            if (e.key === 'ArrowDown' || e.key === 'ArrowRight') {
+                targetIndex = (index + 1) % navItems.length;
+            } else if (e.key === 'ArrowUp' || e.key === 'ArrowLeft') {
+                targetIndex = (index - 1 + navItems.length) % navItems.length;
+            } else if (e.key === 'Home') {
+                targetIndex = 0;
+            } else if (e.key === 'End') {
+                targetIndex = navItems.length - 1;
             }
-
-            if (targetTab === 'tab-packages') {
-                loadPackagesTab();
-            }
-            if (targetTab === 'tab-security') {
-                loadSecurityTab();
-            }
-            if (targetTab === 'tab-actualites') {
-                loadActualitesTab();
+            if (targetIndex !== null) {
+                e.preventDefault();
+                activateTab(navItems[targetIndex], { focusTab: true });
             }
         });
     });
@@ -579,7 +614,7 @@ function renderPackagesList(packages) {
                                     <i class="iconoir-eye me-1"></i> Réactiver
                                 </button>
                             `}
-                            <button class="btn btn-sm btn-outline-danger" onclick="deletePackagePrompt('${pkg.id}', '${safeNom}')" title="Supprimer définitivement cette formule">
+                            <button class="btn btn-sm btn-outline-danger" onclick="deletePackagePrompt('${pkg.id}', '${safeNom}')" title="Supprimer définitivement cette formule" aria-label="Supprimer définitivement cette formule">
                                 <i class="iconoir-trash"></i>
                             </button>
                         </div>
@@ -690,7 +725,7 @@ function renderSubscriptionsTable(subs) {
                             +30j
                         </button>
                         ${s.statut === 'actif' ? `
-                            <button class="btn btn-sm btn-outline-danger" title="Résilier" onclick="cancelSubscription('${s.id}')">
+                            <button class="btn btn-sm btn-outline-danger" title="Résilier" aria-label="Résilier l'abonnement" onclick="cancelSubscription('${s.id}')">
                                 <i class="iconoir-xmark"></i>
                             </button>
                         ` : ''}
@@ -1248,7 +1283,7 @@ function renderActualitesList(actualites) {
                         ${isPublished
                             ? `<button class="btn btn-sm btn-outline-warning" onclick="unpublishActualite('${a.id}')">Dépublier</button>`
                             : `<button class="btn btn-sm btn-outline-success" onclick="publishActualite('${a.id}')">Publier</button>`}
-                        <button class="btn btn-sm btn-outline-danger" onclick="deleteActualitePrompt('${a.id}')">
+                        <button class="btn btn-sm btn-outline-danger" onclick="deleteActualitePrompt('${a.id}')" title="Supprimer cette actualité" aria-label="Supprimer cette actualité">
                             <i class="iconoir-trash"></i>
                         </button>
                     </div>

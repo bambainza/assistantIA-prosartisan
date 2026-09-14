@@ -20,11 +20,15 @@
 </head>
 <body>
 
+    <!-- Lien d'évitement : permet aux utilisateurs clavier de sauter les ~9
+         éléments de navigation latérale répétés sur chaque page. -->
+    <a href="#main-content" class="skip-link">Aller au contenu principal</a>
+
     <!-- Interface de connexion Backoffice -->
     <div id="login-container" class="login-screen">
         <div class="card shadow-lg border-0 login-card">
             <div class="card-body p-4 text-center">
-                <span class="fs-1">👷‍♂️</span>
+                <span class="fs-1" aria-hidden="true">👷‍♂️</span>
                 <h4 class="mt-3 mb-1 text-white fw-bold">ProsArtisan Admin</h4>
                 <p class="text-muted mb-4 fs-13">Veuillez vous authentifier pour accéder à la console</p>
                 
@@ -60,12 +64,12 @@
     </div>
 
     <!-- leftbar-tab-menu -->
-    <div class="startbar d-print-none">
+    <div class="startbar d-print-none" role="navigation" aria-label="Navigation principale">
         <!--start brand-->
         <div class="brand">
             <a href="javascript:void(0);" class="logo">
                 <span>
-                    <span class="fs-4">👷‍♂️</span>
+                    <span class="fs-4" aria-hidden="true">👷‍♂️</span>
                 </span>
                 <span class="logo-lg text-dark fw-bold ms-2">
                     ProsArtisan
@@ -79,61 +83,61 @@
             <div class="startbar-collapse" id="startbarCollapse" data-simplebar>
                 <div class="d-flex align-items-start flex-column w-100">
                     <!-- Navigation -->
-                    <ul class="navbar-nav mb-auto w-100">
-                        <li class="menu-label mt-2">
+                    <ul class="navbar-nav mb-auto w-100" role="tablist" aria-label="Sections de la console d'administration">
+                        <li class="menu-label mt-2" role="presentation">
                             <span>Navigation</span>
                         </li>
 
-                        <li class="nav-item">
-                            <a class="nav-link nav-menu-item active" href="javascript:void(0);" data-tab="tab-overview">
+                        <li class="nav-item" role="presentation">
+                            <a class="nav-link nav-menu-item active" href="javascript:void(0);" data-tab="tab-overview" role="tab" id="navtab-overview" aria-selected="true" aria-controls="tab-overview" tabindex="0">
                                 <i class="iconoir-report-columns menu-icon"></i>
                                 <span>Tableau de bord</span>
                             </a>
                         </li>
-                        <li class="nav-item">
-                            <a class="nav-link nav-menu-item" href="javascript:void(0);" data-tab="tab-artisans">
+                        <li class="nav-item" role="presentation">
+                            <a class="nav-link nav-menu-item" href="javascript:void(0);" data-tab="tab-artisans" role="tab" id="navtab-artisans" aria-selected="false" aria-controls="tab-artisans" tabindex="-1">
                                 <i class="iconoir-community menu-icon"></i>
                                 <span>Artisans & Quotas</span>
                             </a>
                         </li>
-                        <li class="nav-item">
-                            <a class="nav-link nav-menu-item" href="javascript:void(0);" data-tab="tab-ingestion">
+                        <li class="nav-item" role="presentation">
+                            <a class="nav-link nav-menu-item" href="javascript:void(0);" data-tab="tab-ingestion" role="tab" id="navtab-ingestion" aria-selected="false" aria-controls="tab-ingestion" tabindex="-1">
                                 <i class="iconoir-paste-clipboard menu-icon"></i>
                                 <span>Ingestion RAG PDF</span>
                             </a>
                         </li>
-                        <li class="nav-item">
-                            <a class="nav-link nav-menu-item" href="javascript:void(0);" data-tab="tab-payments">
+                        <li class="nav-item" role="presentation">
+                            <a class="nav-link nav-menu-item" href="javascript:void(0);" data-tab="tab-payments" role="tab" id="navtab-payments" aria-selected="false" aria-controls="tab-payments" tabindex="-1">
                                 <i class="iconoir-cart-alt menu-icon"></i>
                                 <span>Paiements MM</span>
                             </a>
                         </li>
-                        <li class="nav-item">
-                            <a class="nav-link nav-menu-item" href="javascript:void(0);" data-tab="tab-packages">
+                        <li class="nav-item" role="presentation">
+                            <a class="nav-link nav-menu-item" href="javascript:void(0);" data-tab="tab-packages" role="tab" id="navtab-packages" aria-selected="false" aria-controls="tab-packages" tabindex="-1">
                                 <i class="iconoir-box-iso menu-icon"></i>
                                 <span>Packages & Abonnements</span>
                             </a>
                         </li>
-                        <li class="nav-item">
-                            <a class="nav-link nav-menu-item" href="javascript:void(0);" data-tab="tab-playground">
+                        <li class="nav-item" role="presentation">
+                            <a class="nav-link nav-menu-item" href="javascript:void(0);" data-tab="tab-playground" role="tab" id="navtab-playground" aria-selected="false" aria-controls="tab-playground" tabindex="-1">
                                 <i class="iconoir-open-book menu-icon"></i>
                                 <span>RAG & Vision Studio</span>
                             </a>
                         </li>
-                        <li class="nav-item">
-                            <a class="nav-link nav-menu-item" href="javascript:void(0);" data-tab="tab-logs">
+                        <li class="nav-item" role="presentation">
+                            <a class="nav-link nav-menu-item" href="javascript:void(0);" data-tab="tab-logs" role="tab" id="navtab-logs" aria-selected="false" aria-controls="tab-logs" tabindex="-1">
                                 <i class="iconoir-reports menu-icon"></i>
                                 <span>Journaux System</span>
                             </a>
                         </li>
-                        <li class="nav-item">
-                            <a class="nav-link nav-menu-item" href="javascript:void(0);" data-tab="tab-security">
+                        <li class="nav-item" role="presentation">
+                            <a class="nav-link nav-menu-item" href="javascript:void(0);" data-tab="tab-security" role="tab" id="navtab-security" aria-selected="false" aria-controls="tab-security" tabindex="-1">
                                 <i class="iconoir-shield-alert menu-icon"></i>
                                 <span>Sécurité (Rôles & Audit)</span>
                             </a>
                         </li>
-                        <li class="nav-item">
-                            <a class="nav-link nav-menu-item" href="javascript:void(0);" data-tab="tab-actualites">
+                        <li class="nav-item" role="presentation">
+                            <a class="nav-link nav-menu-item" href="javascript:void(0);" data-tab="tab-actualites" role="tab" id="navtab-actualites" aria-selected="false" aria-controls="tab-actualites" tabindex="-1">
                                 <i class="iconoir-megaphone menu-icon"></i>
                                 <span>Actualités & Notifications</span>
                             </a>
@@ -146,7 +150,7 @@
     
     <div class="page-wrapper">
         <!-- Top Bar Start -->
-        <div class="topbar d-print-none">
+        <div class="topbar d-print-none" role="banner">
             <div class="container-fluid">
                 <nav class="topbar-custom d-flex justify-content-between" id="topbar-custom">    
                     <ul class="topbar-item list-unstyled d-inline-flex align-items-center mb-0">                        
@@ -156,8 +160,13 @@
                             </button>
                         </li> 
                         <li class="mx-2">
-                            <h5 class="mb-0 fw-semibold" id="page-title">Tableau de bord</h5>
-                        </li>                   
+                            <!-- h1 masqué visuellement : donne à chaque vue un titre de page réel
+                                 pour la navigation par landmarks/headings des lecteurs d'écran,
+                                 sans changer le rendu visuel du bandeau (voir initTabs() dans app.js
+                                 pour la mise à jour synchronisée avec #page-title). -->
+                            <h1 class="visually-hidden" id="page-title-h1">Tableau de bord</h1>
+                            <h5 class="mb-0 fw-semibold" id="page-title" aria-hidden="true">Tableau de bord</h5>
+                        </li>
                     </ul>
                     <ul class="topbar-item list-unstyled d-inline-flex align-items-center mb-0">
                         <li class="topbar-item me-3">
@@ -166,7 +175,7 @@
                             </button>
                         </li>
                         <li class="topbar-item">
-                            <a class="nav-link nav-icon" href="javascript:void(0);" id="light-dark-mode" title="Changer de thème" aria-label="Changer de thème">
+                            <a class="nav-link nav-icon" href="javascript:void(0);" id="light-dark-mode" role="button" title="Changer de thème" aria-label="Changer de thème">
                                 <i class="iconoir-half-moon dark-mode"></i>
                                 <i class="iconoir-sun-light light-mode"></i>
                             </a>                    
@@ -191,7 +200,7 @@
                                     </div>
                                 </div>
                                 <div class="dropdown-divider my-0"></div>
-                                <a class="dropdown-item text-danger py-2" href="javascript:void(0);" onclick="logoutAdmin()">
+                                <a class="dropdown-item text-danger py-2" href="javascript:void(0);" onclick="logoutAdmin()" role="button">
                                     <i class="iconoir-log-out me-2"></i> Déconnexion
                                 </a>
                             </div>
@@ -202,11 +211,11 @@
         </div>
         <!-- Top Bar End -->
 
-        <div class="page-content">
+        <div class="page-content" role="main" id="main-content" tabindex="-1">
             <div class="container-fluid">
-                
+
                 <!-- Tab 1: Overview -->
-                <div id="tab-overview" class="tab-page active">
+                <div id="tab-overview" class="tab-page active" role="tabpanel" aria-labelledby="navtab-overview" tabindex="0">
                     <div class="row mt-4">
                         <!-- KPI Card 1: Artisans Inscrits -->
                         <div class="col-md-6 col-lg-3 mb-4">
@@ -341,7 +350,7 @@
                 </div>
 
                 <!-- Tab 2: Artisans & Quotas -->
-                <div id="tab-artisans" class="tab-page">
+                <div id="tab-artisans" class="tab-page" role="tabpanel" aria-labelledby="navtab-artisans" tabindex="0">
                     <div class="card mt-4">
                         <div class="card-header d-flex justify-content-between align-items-center">
                             <h4 class="card-title">Gestion des Artisans et Crédits</h4>
@@ -350,14 +359,15 @@
                         <div class="card-body">
                             <div class="table-responsive">
                                 <table class="table mb-0 table-centered">
+                                    <caption class="visually-hidden">Liste des artisans, leur métier, leur abonnement et leurs questions restantes</caption>
                                     <thead class="table-light">
                                         <tr>
-                                            <th>Artisan</th>
-                                            <th>Téléphone</th>
-                                            <th>Métier</th>
-                                            <th>Abonnement</th>
-                                            <th>Questions Restantes</th>
-                                            <th>Actions</th>
+                                            <th scope="col">Artisan</th>
+                                            <th scope="col">Téléphone</th>
+                                            <th scope="col">Métier</th>
+                                            <th scope="col">Abonnement</th>
+                                            <th scope="col">Questions Restantes</th>
+                                            <th scope="col">Actions</th>
                                         </tr>
                                     </thead>
                                     <tbody id="artisans-table-body">
@@ -370,7 +380,7 @@
                 </div>
 
                 <!-- Tab 3: Ingestion RAG PDF -->
-                <div id="tab-ingestion" class="tab-page">
+                <div id="tab-ingestion" class="tab-page" role="tabpanel" aria-labelledby="navtab-ingestion" tabindex="0">
                     <div class="row mt-4">
                         <div class="col-lg-6 mb-4">
                             <div class="card">
@@ -380,7 +390,7 @@
                                 <div class="card-body">
                                     <form id="upload-form">
                                         <div class="drop-zone mb-3" id="drop-zone">
-                                            <span class="drop-icon">📁</span>
+                                            <span class="drop-icon" aria-hidden="true">📁</span>
                                             <p class="mb-1">Glissez-déposez votre document <strong>PDF</strong> ici</p>
                                             <span class="text-muted small">ou cliquez pour sélectionner un fichier</span>
                                             <input type="file" id="pdf-file-input" accept=".pdf" required title="Fichier PDF à ingérer" placeholder="Sélectionner un fichier PDF" aria-label="Fichier PDF à ingérer">
@@ -428,7 +438,7 @@
                 </div>
 
                 <!-- Tab 4: Payments Mobile Money -->
-                <div id="tab-payments" class="tab-page">
+                <div id="tab-payments" class="tab-page" role="tabpanel" aria-labelledby="navtab-payments" tabindex="0">
                     <div class="card mt-4">
                         <div class="card-header d-flex justify-content-between align-items-center">
                             <h4 class="card-title">Journal des Transactions Mobile Money (Wave / Orange)</h4>
@@ -437,15 +447,16 @@
                         <div class="card-body">
                             <div class="table-responsive">
                                 <table class="table mb-0 table-centered">
+                                    <caption class="visually-hidden">Journal des transactions Mobile Money</caption>
                                     <thead class="table-light">
                                         <tr>
-                                            <th>ID Transaction</th>
-                                            <th>Référence Ext.</th>
-                                            <th>Artisan</th>
-                                            <th>Montant</th>
-                                            <th>Opérateur</th>
-                                            <th>Statut</th>
-                                            <th>Horodatage</th>
+                                            <th scope="col">ID Transaction</th>
+                                            <th scope="col">Référence Ext.</th>
+                                            <th scope="col">Artisan</th>
+                                            <th scope="col">Montant</th>
+                                            <th scope="col">Opérateur</th>
+                                            <th scope="col">Statut</th>
+                                            <th scope="col">Horodatage</th>
                                         </tr>
                                     </thead>
                                     <tbody id="payments-table-body">
@@ -458,7 +469,7 @@
                 </div>
 
                 <!-- Tab: Packages & Abonnements -->
-                <div id="tab-packages" class="tab-page">
+                <div id="tab-packages" class="tab-page" role="tabpanel" aria-labelledby="navtab-packages" tabindex="0">
                     <!-- Bandeau KPIs Abonnements -->
                     <div class="row mt-4">
                         <div class="col-md-6 col-lg-3 mb-4">
@@ -598,17 +609,18 @@
                             <!-- Tableau -->
                             <div class="table-responsive">
                                 <table class="table mb-0 table-centered table-hover">
+                                    <caption class="visually-hidden">Abonnements souscrits par les artisans</caption>
                                     <thead class="table-light">
                                         <tr>
-                                            <th>Artisan</th>
-                                            <th>Contact</th>
-                                            <th>Métier</th>
-                                            <th>Package Souscrit</th>
-                                            <th>Date Début</th>
-                                            <th>Durée & Échéance</th>
-                                            <th>Quotas</th>
-                                            <th>Statut</th>
-                                            <th class="text-end">Actions</th>
+                                            <th scope="col">Artisan</th>
+                                            <th scope="col">Contact</th>
+                                            <th scope="col">Métier</th>
+                                            <th scope="col">Package Souscrit</th>
+                                            <th scope="col">Date Début</th>
+                                            <th scope="col">Durée & Échéance</th>
+                                            <th scope="col">Quotas</th>
+                                            <th scope="col">Statut</th>
+                                            <th scope="col" class="text-end">Actions</th>
                                         </tr>
                                     </thead>
                                     <tbody id="subscriptions-table-body">
@@ -621,7 +633,7 @@
                 </div>
 
                 <!-- Tab 5: RAG & Vision Studio Playground -->
-                <div id="tab-playground" class="tab-page">
+                <div id="tab-playground" class="tab-page" role="tabpanel" aria-labelledby="navtab-playground" tabindex="0">
                     <div class="row mt-4">
                         <div class="col-lg-6 mb-4">
                             <div class="card">
@@ -659,7 +671,7 @@
                 </div>
 
                 <!-- Tab 6: System Logs -->
-                <div id="tab-logs" class="tab-page">
+                <div id="tab-logs" class="tab-page" role="tabpanel" aria-labelledby="navtab-logs" tabindex="0">
                     <div class="card mt-4">
                         <div class="card-header">
                             <h4 class="card-title">Journaux d'activité récents</h4>
@@ -673,7 +685,7 @@
                 </div>
 
                 <!-- Tab: Sécurité (RBAC & Journal d'audit) -->
-                <div id="tab-security" class="tab-page">
+                <div id="tab-security" class="tab-page" role="tabpanel" aria-labelledby="navtab-security" tabindex="0">
                     <div class="row mt-4">
                         <div class="col-md-6 col-lg-3 mb-3">
                             <div class="card report-card">
@@ -734,7 +746,7 @@
                                     <button type="button" class="btn btn-primary btn-sm" onclick="submitAssignRole()">
                                         <i class="iconoir-check me-1"></i>Assigner
                                     </button>
-                                    <div id="role-assign-feedback" class="mt-2 small"></div>
+                                    <div id="role-assign-feedback" class="mt-2 small" role="status" aria-live="polite"></div>
                                 </div>
                             </div>
                         </div>
@@ -749,12 +761,13 @@
                                 <div class="card-body p-0">
                                     <div class="table-responsive">
                                         <table class="table table-hover mb-0">
+                                            <caption class="visually-hidden">Journal d'audit des actions administrateur</caption>
                                             <thead>
                                                 <tr>
-                                                    <th>Date</th>
-                                                    <th>Acteur</th>
-                                                    <th>Action</th>
-                                                    <th>Ressource</th>
+                                                    <th scope="col">Date</th>
+                                                    <th scope="col">Acteur</th>
+                                                    <th scope="col">Action</th>
+                                                    <th scope="col">Ressource</th>
                                                 </tr>
                                             </thead>
                                             <tbody id="audit-log-tbody">
@@ -769,7 +782,7 @@
                 </div>
 
                 <!-- Tab: Actualités & Centre de notifications -->
-                <div id="tab-actualites" class="tab-page">
+                <div id="tab-actualites" class="tab-page" role="tabpanel" aria-labelledby="navtab-actualites" tabindex="0">
                     <div class="row mt-4">
                         <div class="col-lg-7 mb-4">
                             <div class="card">
@@ -824,7 +837,7 @@
                                     <button type="button" class="btn btn-primary btn-sm" onclick="submitBroadcastNotification()">
                                         <i class="iconoir-send me-1"></i>Diffuser
                                     </button>
-                                    <div id="notif-broadcast-feedback" class="mt-2 small"></div>
+                                    <div id="notif-broadcast-feedback" class="mt-2 small" role="status" aria-live="polite"></div>
                                     <hr>
                                     <h6 class="fw-semibold mb-2">Suggestions (conversations mal notées)</h6>
                                     <div id="actualites-suggestions" class="small text-muted"><!-- Injected via JS --></div>
