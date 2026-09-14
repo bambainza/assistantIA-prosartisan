@@ -75,7 +75,11 @@ class UserSubscription(Base):
         from datetime import UTC, datetime
 
         now = datetime.now(UTC).replace(tzinfo=None)
-        end = self.date_fin.replace(tzinfo=None) if self.date_fin.tzinfo else self.date_fin
+        end = (
+            self.date_fin.replace(tzinfo=None)
+            if self.date_fin.tzinfo
+            else self.date_fin
+        )
         delta = end - now
         return max(0, delta.days)
 
@@ -88,10 +92,15 @@ class UserSubscription(Base):
             from datetime import UTC, datetime
 
             now = datetime.now(UTC).replace(tzinfo=None)
-            end = self.date_fin.replace(tzinfo=None) if self.date_fin.tzinfo else self.date_fin
+            end = (
+                self.date_fin.replace(tzinfo=None)
+                if self.date_fin.tzinfo
+                else self.date_fin
+            )
             if end < now:
                 return False
-        if self.quota_initial is not None and self.quota_restant is not None:
-            if self.quota_restant <= 0:
-                return False
-        return True
+        return not (
+            self.quota_initial is not None
+            and self.quota_restant is not None
+            and self.quota_restant <= 0
+        )

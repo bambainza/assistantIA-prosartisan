@@ -8,7 +8,6 @@ from typing import Any
 
 from sqlalchemy import func, or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
-from sqlalchemy.orm import selectinload
 
 from app.models.metier import Metier
 from app.models.package import Package
@@ -31,7 +30,7 @@ class SubscriptionService:
         """Liste tous les packages avec le nombre d'abonnés actifs pour chacun."""
         stmt = select(Package).order_by(Package.prix.asc())
         if only_active:
-            stmt = stmt.where(Package.est_actif == True)  # noqa: E712
+            stmt = stmt.where(Package.est_actif == True)
         res = await db.execute(stmt)
         packages = res.scalars().all()
 
@@ -72,7 +71,10 @@ class SubscriptionService:
         return result
 
     async def get_package_by_id_or_code(
-        self, db: AsyncSession, package_id: uuid.UUID | None = None, code: str | None = None
+        self,
+        db: AsyncSession,
+        package_id: uuid.UUID | None = None,
+        code: str | None = None,
     ) -> Package | None:
         """Retrouve une formule par son identifiant unique ou son slug/code."""
         if package_id:
@@ -160,7 +162,7 @@ class SubscriptionService:
         self, db: AsyncSession, package_id: uuid.UUID, force: bool = False
     ) -> dict[str, Any]:
         """Supprime définitivement un package du catalogue.
-        
+
         Par sécurité, si force=False, vérifie qu'aucun abonnement actif n'utilise ce package.
         """
         pkg = await self.get_package_by_id_or_code(db, package_id=package_id)
@@ -297,7 +299,9 @@ class SubscriptionService:
 
         # 3. Calcul de durée et quotas
         now = datetime.now(UTC).replace(tzinfo=None)
-        duree_jours = payload.duree_jours if payload.duree_jours is not None else pkg.duree_jours
+        duree_jours = (
+            payload.duree_jours if payload.duree_jours is not None else pkg.duree_jours
+        )
         date_fin = (now + timedelta(days=duree_jours)) if duree_jours else None
 
         quota_initial = (
@@ -362,13 +366,19 @@ class SubscriptionService:
             raise ValueError("Abonnement introuvable.")
 
         now = datetime.now(UTC).replace(tzinfo=None)
-        sub_end = sub.date_fin.replace(tzinfo=None) if (sub.date_fin and sub.date_fin.tzinfo) else sub.date_fin
+        sub_end = (
+            sub.date_fin.replace(tzinfo=None)
+            if (sub.date_fin and sub.date_fin.tzinfo)
+            else sub.date_fin
+        )
         base_date = sub_end if (sub_end and sub_end > now) else now
         sub.date_fin = base_date + timedelta(days=additional_days)
         sub.statut = "ACTIVE"
 
         # Synchroniser QuotaUtilisateur
-        quota_stmt = select(QuotaUtilisateur).where(QuotaUtilisateur.user_id == sub.user_id)
+        quota_stmt = select(QuotaUtilisateur).where(
+            QuotaUtilisateur.user_id == sub.user_id
+        )
         q_res = await db.execute(quota_stmt)
         quota = q_res.scalar_one_or_none()
         if quota:
@@ -399,7 +409,9 @@ class SubscriptionService:
             user.type_abonnement = "FREE"
 
         # Réinitialiser quota premium
-        quota_stmt = select(QuotaUtilisateur).where(QuotaUtilisateur.user_id == sub.user_id)
+        quota_stmt = select(QuotaUtilisateur).where(
+            QuotaUtilisateur.user_id == sub.user_id
+        )
         q_res = await db.execute(quota_stmt)
         quota = q_res.scalar_one_or_none()
         if quota:
@@ -415,7 +427,7 @@ class SubscriptionService:
         in_7_days = now + timedelta(days=7)
 
         # 1. Total artisans inscrits
-        users_count_stmt = select(func.count(User.id)).where(User.is_admin == False)  # noqa: E712
+        users_count_stmt = select(func.count(User.id)).where(User.is_admin == False)
         users_count = (await db.execute(users_count_stmt)).scalar() or 0
 
         # 2. Total souscriptions créées

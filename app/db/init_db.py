@@ -9,7 +9,6 @@ from app.db.session import async_session, check_database_connection, engine
 from app.models.base import Base
 from app.models.metier import Metier, SousMetier
 from app.models.package import Package
-from app.models.subscription import UserSubscription
 from app.models.user import User
 
 logger = logging.getLogger(__name__)

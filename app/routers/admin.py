@@ -709,7 +709,11 @@ async def toggle_package(
     """Bascule ou définit l'état actif/inactif d'un package dans le catalogue."""
     try:
         pkg = await subscription_service.toggle_package(db, package_id, active=active)
-        action_str = "activé (mis en vente)" if pkg.est_actif else "désactivé (retiré de la vente)"
+        action_str = (
+            "activé (mis en vente)"
+            if pkg.est_actif
+            else "désactivé (retiré de la vente)"
+        )
         return {
             "status": "success",
             "package_id": str(package_id),
@@ -837,4 +841,3 @@ async def get_subscription_stats(
     """Indicateurs clés et KPIs du module packages."""
     kpis = await subscription_service.get_subscription_kpis(db)
     return {"kpis": kpis}
-

@@ -85,8 +85,11 @@ def sample_subscription(artisan_user, sample_package):
 
 
 @pytest.fixture
-def mock_db_with_packages(admin_user, artisan_user, sample_package, sample_subscription):
+def mock_db_with_packages(
+    admin_user, artisan_user, sample_package, sample_subscription
+):
     """Fournit un mock AsyncSession complet pour tester le cycle de vie des packages."""
+
     async def custom_mock_db():
         session = MagicMock()
 
@@ -105,17 +108,29 @@ def mock_db_with_packages(admin_user, artisan_user, sample_package, sample_subsc
                 mock_res.scalar_one_or_none.return_value = sample_subscription
                 mock_res.scalars.return_value.all.return_value = [sample_subscription]
                 mock_res.all.return_value = [
-                    (sample_subscription, artisan_user, sample_package, "Maçonnerie & Gros Œuvre")
+                    (
+                        sample_subscription,
+                        artisan_user,
+                        sample_package,
+                        "Maçonnerie & Gros Œuvre",
+                    )
                 ]
             elif "quotas_utilisateurs" in stmt_str:
-                quota = QuotaUtilisateur(user_id=artisan_user.id, requetes_restantes_gratuites=5)
+                quota = QuotaUtilisateur(
+                    user_id=artisan_user.id, requetes_restantes_gratuites=5
+                )
                 mock_res.scalar_one_or_none.return_value = quota
             else:
                 mock_res.scalar_one_or_none.return_value = sample_package
                 mock_res.scalar.return_value = 1
                 mock_res.scalars.return_value.all.return_value = [sample_package]
                 mock_res.all.return_value = [
-                    (sample_subscription, artisan_user, sample_package, "Maçonnerie & Gros Œuvre")
+                    (
+                        sample_subscription,
+                        artisan_user,
+                        sample_package,
+                        "Maçonnerie & Gros Œuvre",
+                    )
                 ]
 
             return mock_res
@@ -130,6 +145,7 @@ def mock_db_with_packages(admin_user, artisan_user, sample_package, sample_subsc
     app.dependency_overrides[get_db] = custom_mock_db
     yield
     from tests.conftest import mock_get_db
+
     app.dependency_overrides[get_db] = mock_get_db
 
 
@@ -190,7 +206,9 @@ async def test_admin_create_and_toggle_package(mock_db_with_packages, admin_user
 
 
 @pytest.mark.asyncio
-async def test_admin_assign_and_manage_subscription(mock_db_with_packages, admin_user, artisan_user):
+async def test_admin_assign_and_manage_subscription(
+    mock_db_with_packages, admin_user, artisan_user
+):
     """Vérifie l'attribution, la consultation, la prolongation et la résiliation d'une souscription."""
     token = create_access_token(data={"sub": str(admin_user.id)})
 
@@ -256,6 +274,7 @@ async def test_admin_subscriptions_stats(mock_db_with_packages, admin_user):
 @pytest.mark.asyncio
 async def test_non_admin_forbidden_on_packages(artisan_user):
     """Vérifie qu'un artisan non-admin ne peut pas accéder aux routes packages."""
+
     async def non_admin_db():
         session = MagicMock()
         mock_res = MagicMock()
@@ -280,11 +299,14 @@ async def test_non_admin_forbidden_on_packages(artisan_user):
         assert res_sub.status_code == 403
 
     from tests.conftest import mock_get_db
+
     app.dependency_overrides[get_db] = mock_get_db
 
 
 @pytest.mark.asyncio
-async def test_admin_update_and_manage_package_lifecycle(mock_db_with_packages, admin_user, sample_package):
+async def test_admin_update_and_manage_package_lifecycle(
+    mock_db_with_packages, admin_user, sample_package
+):
     """Vérifie la modification, la désactivation, la réactivation et la suppression d'un package."""
     token = create_access_token(data={"sub": str(admin_user.id)})
     transport = ASGITransport(app=app)

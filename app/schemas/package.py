@@ -4,7 +4,6 @@ from __future__ import annotations
 
 import uuid
 from datetime import datetime
-from typing import Any
 
 from pydantic import BaseModel, ConfigDict, Field
 
@@ -12,23 +11,40 @@ from pydantic import BaseModel, ConfigDict, Field
 class PackageBase(BaseModel):
     """Caractéristiques fondamentales d'un package."""
 
-    code: str = Field(..., min_length=2, max_length=50, description="Code unique du package (ex: pass_mois)")
-    nom: str = Field(..., min_length=2, max_length=100, description="Nom d'affichage commercial")
-    description: str | None = Field(None, description="Description détaillée de l'offre")
+    code: str = Field(
+        ...,
+        min_length=2,
+        max_length=50,
+        description="Code unique du package (ex: pass_mois)",
+    )
+    nom: str = Field(
+        ..., min_length=2, max_length=100, description="Nom d'affichage commercial"
+    )
+    description: str | None = Field(
+        None, description="Description détaillée de l'offre"
+    )
     prix: int = Field(..., ge=0, description="Prix en F CFA (XOF)")
     devise: str = Field("XOF", max_length=5)
-    type_package: str = Field("DURATION", description="Type : 'DURATION', 'CREDITS', 'HYBRID'")
-    duree_jours: int | None = Field(None, ge=1, description="Durée de validité en jours")
-    quota_requetes: int | None = Field(None, ge=1, description="Volume de requêtes incluses")
-    auto_renouvelable: bool = Field(False, description="Renouvellement automatique par défaut")
+    type_package: str = Field(
+        "DURATION", description="Type : 'DURATION', 'CREDITS', 'HYBRID'"
+    )
+    duree_jours: int | None = Field(
+        None, ge=1, description="Durée de validité en jours"
+    )
+    quota_requetes: int | None = Field(
+        None, ge=1, description="Volume de requêtes incluses"
+    )
+    auto_renouvelable: bool = Field(
+        False, description="Renouvellement automatique par défaut"
+    )
     est_actif: bool = Field(True, description="Visible et souscriptible au catalogue")
-    fonctionnalites: list[str] | None = Field(default_factory=list, description="Liste des avantages inclus")
+    fonctionnalites: list[str] | None = Field(
+        default_factory=list, description="Liste des avantages inclus"
+    )
 
 
 class PackageCreate(PackageBase):
     """Création d'un nouveau package."""
-
-    pass
 
 
 class PackageUpdate(BaseModel):
@@ -61,16 +77,26 @@ class SubscriptionAssignRequest(BaseModel):
 
     user_id: uuid.UUID = Field(..., description="ID de l'artisan bénéficiaire")
     package_id: uuid.UUID | None = Field(None, description="ID du package choisi")
-    package_code: str | None = Field(None, description="Ou code du package (ex: pass_mois)")
-    duree_jours: int | None = Field(None, ge=1, description="Durée personnalisée (optionnelle)")
-    quota_initial: int | None = Field(None, ge=1, description="Quota personnalisé (optionnel)")
-    renouvellement_auto: bool = Field(False, description="Activer le renouvellement automatique")
+    package_code: str | None = Field(
+        None, description="Ou code du package (ex: pass_mois)"
+    )
+    duree_jours: int | None = Field(
+        None, ge=1, description="Durée personnalisée (optionnelle)"
+    )
+    quota_initial: int | None = Field(
+        None, ge=1, description="Quota personnalisé (optionnel)"
+    )
+    renouvellement_auto: bool = Field(
+        False, description="Activer le renouvellement automatique"
+    )
 
 
 class SubscriptionExtendRequest(BaseModel):
     """Prolongation de la date d'échéance d'un abonnement."""
 
-    jours_supplementaires: int = Field(30, ge=1, le=365, description="Nombre de jours à ajouter")
+    jours_supplementaires: int = Field(
+        30, ge=1, le=365, description="Nombre de jours à ajouter"
+    )
 
 
 class SubscriptionResponse(BaseModel):
