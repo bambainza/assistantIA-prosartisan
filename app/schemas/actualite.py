@@ -19,7 +19,9 @@ class ActualiteCreate(BaseModel):
     metier_id: int | None = Field(
         None, description="Null = diffusée à tous les métiers"
     )
-    category: str = Field("annonce", description="annonce|maintenance|conseil|promotion")
+    category: str = Field(
+        "annonce", description="annonce|maintenance|conseil|promotion"
+    )
     target_audience: str = Field(
         "tous", description="tous|abonnes_payants|gratuits — affine la notification"
     )

@@ -127,7 +127,9 @@ async def export_finance_transactions(
         )
 
     buffer.seek(0)
-    filename = f"transactions_prosartisan_{datetime.now(UTC).strftime('%Y%m%d_%H%M%S')}.csv"
+    filename = (
+        f"transactions_prosartisan_{datetime.now(UTC).strftime('%Y%m%d_%H%M%S')}.csv"
+    )
     return StreamingResponse(
         iter([buffer.getvalue()]),
         media_type="text/csv",

@@ -229,9 +229,7 @@ async def test_adjust_status_rejette_statut_non_autorise(legacy_admin_user):
     et l'acteur) : l'endpoint générique de correction de statut la refuse
     explicitement pour garder une seule source de vérité.
     """
-    app.dependency_overrides[get_db] = _sequenced_db(
-        [("scalar", legacy_admin_user)]
-    )
+    app.dependency_overrides[get_db] = _sequenced_db([("scalar", legacy_admin_user)])
     token = create_access_token(data={"sub": str(legacy_admin_user.id)})
     try:
         transport = ASGITransport(app=app)

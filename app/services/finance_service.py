@@ -177,7 +177,11 @@ class FinanceService:
             buckets[key]["nb_transactions"] += 1
 
         return [
-            {"periode": key, "revenu": val["revenu"], "nb_transactions": val["nb_transactions"]}
+            {
+                "periode": key,
+                "revenu": val["revenu"],
+                "nb_transactions": val["nb_transactions"],
+            }
             for key, val in sorted(buckets.items())
         ]
 
