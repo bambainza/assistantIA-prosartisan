@@ -123,6 +123,7 @@ def mock_db_with_packages(admin_user, artisan_user, sample_package, sample_subsc
         session.execute = mock_execute
         session.commit = AsyncMock()
         session.add = MagicMock()
+        session.delete = AsyncMock()
         session.refresh = AsyncMock()
         yield session
 
@@ -280,3 +281,56 @@ async def test_non_admin_forbidden_on_packages(artisan_user):
 
     from tests.conftest import mock_get_db
     app.dependency_overrides[get_db] = mock_get_db
+
+
+@pytest.mark.asyncio
+async def test_admin_update_and_manage_package_lifecycle(mock_db_with_packages, admin_user, sample_package):
+    """Vérifie la modification, la désactivation, la réactivation et la suppression d'un package."""
+    token = create_access_token(data={"sub": str(admin_user.id)})
+    transport = ASGITransport(app=app)
+
+    async with AsyncClient(transport=transport, base_url="http://test") as client:
+        # 1. Modification (PUT)
+        update_payload = {
+            "nom": "Pass Mensuel Pro Ajusté",
+            "prix": 3500,
+            "type_package": "DURATION",
+            "description": "Tarif mis à jour pour inflation",
+            "fonctionnalites": ["Support prioritaire WhatsApp", "Devis illimités"],
+        }
+        res_update = await client.put(
+            f"/api/admin/packages/{sample_package.id}",
+            headers={"Authorization": f"Bearer {token}"},
+            json=update_payload,
+        )
+        assert res_update.status_code == 200
+        data_update = res_update.json()
+        assert data_update["package"]["nom"] == "Pass Mensuel Pro Ajusté"
+        assert data_update["package"]["prix"] == 3500
+
+        # 2. Désactivation explicite (active=false)
+        res_deact = await client.patch(
+            f"/api/admin/packages/{sample_package.id}/toggle?active=false",
+            headers={"Authorization": f"Bearer {token}"},
+        )
+        assert res_deact.status_code == 200
+        assert res_deact.json()["est_actif"] is False
+        assert "désactivé" in res_deact.json()["message"]
+
+        # 3. Réactivation explicite (active=true)
+        res_react = await client.patch(
+            f"/api/admin/packages/{sample_package.id}/toggle?active=true",
+            headers={"Authorization": f"Bearer {token}"},
+        )
+        assert res_react.status_code == 200
+        assert res_react.json()["est_actif"] is True
+        assert "activé" in res_react.json()["message"]
+
+        # 4. Suppression avec force=True
+        res_delete = await client.delete(
+            f"/api/admin/packages/{sample_package.id}?force=true",
+            headers={"Authorization": f"Bearer {token}"},
+        )
+        assert res_delete.status_code == 200
+        assert res_delete.json()["status"] == "success"
+        assert "supprimé" in res_delete.json()["message"]

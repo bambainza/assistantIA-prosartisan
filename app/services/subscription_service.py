@@ -124,6 +124,8 @@ class SubscriptionService:
             pkg.description = payload.description
         if payload.prix is not None:
             pkg.prix = payload.prix
+        if payload.type_package is not None:
+            pkg.type_package = payload.type_package
         if payload.duree_jours is not None:
             pkg.duree_jours = payload.duree_jours
         if payload.quota_requetes is not None:
@@ -139,15 +141,61 @@ class SubscriptionService:
         await db.refresh(pkg)
         return pkg
 
-    async def toggle_package(self, db: AsyncSession, package_id: uuid.UUID) -> Package:
+    async def toggle_package(
+        self, db: AsyncSession, package_id: uuid.UUID, active: bool | None = None
+    ) -> Package:
         """Active ou désactive une formule dans le catalogue."""
         pkg = await self.get_package_by_id_or_code(db, package_id=package_id)
         if not pkg:
             raise ValueError("Package introuvable.")
-        pkg.est_actif = not pkg.est_actif
+        if active is not None:
+            pkg.est_actif = active
+        else:
+            pkg.est_actif = not pkg.est_actif
         await db.commit()
         await db.refresh(pkg)
         return pkg
+
+    async def delete_package(
+        self, db: AsyncSession, package_id: uuid.UUID, force: bool = False
+    ) -> dict[str, Any]:
+        """Supprime définitivement un package du catalogue.
+        
+        Par sécurité, si force=False, vérifie qu'aucun abonnement actif n'utilise ce package.
+        """
+        pkg = await self.get_package_by_id_or_code(db, package_id=package_id)
+        if not pkg:
+            raise ValueError("Package introuvable.")
+
+        now = datetime.now(UTC).replace(tzinfo=None)
+        count_stmt = select(func.count(UserSubscription.id)).where(
+            UserSubscription.package_id == pkg.id,
+            UserSubscription.statut == "ACTIVE",
+            or_(
+                UserSubscription.date_fin.is_(None),
+                UserSubscription.date_fin > now,
+            ),
+        )
+        count_res = await db.execute(count_stmt)
+        active_count = count_res.scalar() or 0
+
+        if active_count > 0 and not force:
+            raise ValueError(
+                f"Impossible de supprimer le package '{pkg.nom}' car il compte actuellement {active_count} abonnement(s) actif(s). "
+                "Veuillez plutôt le désactiver pour bloquer les nouvelles souscriptions sans impacter les artisans en cours."
+            )
+
+        nom = pkg.nom
+        await db.delete(pkg)
+        await db.commit()
+
+        return {
+            "status": "success",
+            "message": f"Package '{nom}' supprimé avec succès du catalogue.",
+            "package_id": str(package_id),
+            "nom": nom,
+            "active_subscriptions_affected": active_count,
+        }
 
     async def list_subscriptions(
         self,

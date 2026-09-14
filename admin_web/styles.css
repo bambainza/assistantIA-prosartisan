@@ -256,3 +256,14 @@
     border: 1px solid rgba(239, 68, 68, 0.3);
 }
 
+.package-card-inactive {
+    opacity: 0.72;
+    border-style: dashed;
+    border-color: rgba(239, 68, 68, 0.35);
+    background-color: rgba(0, 0, 0, 0.15);
+}
+
+.package-card-inactive .package-price-val {
+    color: #8a92a6;
+}
+

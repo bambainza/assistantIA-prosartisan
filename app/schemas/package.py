@@ -37,6 +37,7 @@ class PackageUpdate(BaseModel):
     nom: str | None = Field(None, min_length=2, max_length=100)
     description: str | None = None
     prix: int | None = Field(None, ge=0)
+    type_package: str | None = None
     duree_jours: int | None = Field(None, ge=1)
     quota_requetes: int | None = Field(None, ge=1)
     auto_renouvelable: bool | None = None

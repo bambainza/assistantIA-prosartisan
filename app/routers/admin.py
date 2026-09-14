@@ -702,22 +702,48 @@ async def update_package(
 @router.patch("/packages/{package_id}/toggle")
 async def toggle_package(
     package_id: uuid.UUID,
+    active: bool | None = None,
     admin_id: uuid.UUID = Depends(get_current_admin_user_id),
     db: AsyncSession = Depends(get_db),
 ) -> dict[str, Any]:
-    """Bascule l'état actif/inactif d'un package dans le catalogue."""
+    """Bascule ou définit l'état actif/inactif d'un package dans le catalogue."""
     try:
-        pkg = await subscription_service.toggle_package(db, package_id)
+        pkg = await subscription_service.toggle_package(db, package_id, active=active)
+        action_str = "activé (mis en vente)" if pkg.est_actif else "désactivé (retiré de la vente)"
         return {
             "status": "success",
             "package_id": str(package_id),
             "est_actif": pkg.est_actif,
-            "message": f"Package '{pkg.nom}' {'activé' if pkg.est_actif else 'désactivé'}.",
+            "message": f"Package '{pkg.nom}' {action_str} avec succès.",
         }
     except ValueError as err:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
             detail=str(err),
+        )
+
+
+@router.delete("/packages/{package_id}")
+async def delete_package(
+    package_id: uuid.UUID,
+    force: bool = False,
+    admin_id: uuid.UUID = Depends(get_current_admin_user_id),
+    db: AsyncSession = Depends(get_db),
+) -> dict[str, Any]:
+    """Supprime un package du catalogue (vérifie les abonnements actifs si force=False)."""
+    try:
+        res = await subscription_service.delete_package(db, package_id, force=force)
+        return res
+    except ValueError as err:
+        detail = str(err)
+        status_code = (
+            status.HTTP_404_NOT_FOUND
+            if "introuvable" in detail.lower()
+            else status.HTTP_400_BAD_REQUEST
+        )
+        raise HTTPException(
+            status_code=status_code,
+            detail=detail,
         )
 
 

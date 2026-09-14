@@ -523,17 +523,30 @@ function renderPackagesList(packages) {
             durationBadge += `<span class="badge bg-light text-dark"><i class="iconoir-chat-bubble-check me-1"></i>${pkg.quota_requetes} req.</span>`;
         }
 
+        const safeNom = (pkg.nom || '').replace(/'/g, "\\'").replace(/"/g, '&quot;');
+
         grid.innerHTML += `
             <div class="col-md-6 col-xl-4 mb-3">
                 <div class="card package-card h-100 ${isActive ? '' : 'package-card-inactive'}">
                     <div class="card-body d-flex flex-column">
                         <div class="d-flex justify-content-between align-items-start mb-2">
                             <div>
-                                <span class="badge ${isActive ? 'bg-success-subtle text-success' : 'bg-secondary-subtle text-secondary'} mb-1">
-                                    ${isActive ? '● En vente' : '○ Inactif'}
+                                <span class="badge ${isActive ? 'bg-success-subtle text-success' : 'badge-sub-expired text-danger'} mb-1">
+                                    ${isActive ? '● En vente (Actif)' : '○ Désactivé (Inactif)'}
                                 </span>
                                 <h5 class="card-title mb-0 text-truncate" title="${pkg.nom}">${pkg.nom}</h5>
                                 <small class="text-muted font-monospace">${pkg.code}</small>
+                            </div>
+                            <div class="dropdown">
+                                <button class="btn btn-sm btn-light border-0" type="button" data-bs-toggle="dropdown" aria-expanded="false">
+                                    <i class="iconoir-more-vert"></i>
+                                </button>
+                                <ul class="dropdown-menu dropdown-menu-end shadow-sm">
+                                    <li><a class="dropdown-item" href="javascript:void(0)" onclick="openEditPackageModal('${pkg.id}')"><i class="iconoir-edit me-2 text-primary"></i>Modifier la formule</a></li>
+                                    <li><a class="dropdown-item" href="javascript:void(0)" onclick="togglePackageActive('${pkg.id}', ${!isActive})"><i class="${isActive ? 'iconoir-eye-closed text-warning' : 'iconoir-eye text-success'} me-2"></i>${isActive ? 'Désactiver de la vente' : 'Réactiver la formule'}</a></li>
+                                    <li><hr class="dropdown-divider"></li>
+                                    <li><a class="dropdown-item text-danger" href="javascript:void(0)" onclick="deletePackagePrompt('${pkg.id}', '${safeNom}')"><i class="iconoir-trash me-2"></i>Supprimer définitivement</a></li>
+                                </ul>
                             </div>
                         </div>
                         <div class="my-2">
@@ -548,11 +561,20 @@ function renderPackagesList(packages) {
                             ${featuresHtml || '<li class="text-muted fst-italic">Accès standard à la plateforme</li>'}
                         </ul>
                         <div class="mt-3 pt-2 border-top d-flex gap-2">
-                            <button class="btn btn-sm btn-outline-primary flex-fill" onclick="openEditPackageModal(${pkg.id})">
+                            <button class="btn btn-sm btn-outline-primary flex-fill" onclick="openEditPackageModal('${pkg.id}')" title="Modifier cette offre">
                                 <i class="iconoir-edit me-1"></i> Modifier
                             </button>
-                            <button class="btn btn-sm ${isActive ? 'btn-outline-warning' : 'btn-outline-success'}" onclick="togglePackageActive(${pkg.id})" title="${isActive ? 'Désactiver' : 'Activer'}">
-                                <i class="${isActive ? 'iconoir-eye-closed' : 'iconoir-eye'}"></i>
+                            ${isActive ? `
+                                <button class="btn btn-sm btn-outline-warning" onclick="togglePackageActive('${pkg.id}', false)" title="Désactiver (retirer de la vente)">
+                                    <i class="iconoir-eye-closed me-1"></i> Désactiver
+                                </button>
+                            ` : `
+                                <button class="btn btn-sm btn-outline-success" onclick="togglePackageActive('${pkg.id}', true)" title="Réactiver la mise en vente">
+                                    <i class="iconoir-eye me-1"></i> Réactiver
+                                </button>
+                            `}
+                            <button class="btn btn-sm btn-outline-danger" onclick="deletePackagePrompt('${pkg.id}', '${safeNom}')" title="Supprimer définitivement cette formule">
+                                <i class="iconoir-trash"></i>
                             </button>
                         </div>
                     </div>
@@ -658,11 +680,11 @@ function renderSubscriptionsTable(subs) {
                 <td>${badgeStatus}</td>
                 <td class="text-end">
                     <div class="btn-group">
-                        <button class="btn btn-sm btn-outline-primary" title="Prolonger de 30 jours" onclick="quickExtendSubscription(${s.id}, 30)">
+                        <button class="btn btn-sm btn-outline-primary" title="Prolonger de 30 jours" onclick="quickExtendSubscription('${s.id}', 30)">
                             +30j
                         </button>
                         ${s.statut === 'actif' ? `
-                            <button class="btn btn-sm btn-outline-danger" title="Résilier" onclick="cancelSubscription(${s.id})">
+                            <button class="btn btn-sm btn-outline-danger" title="Résilier" onclick="cancelSubscription('${s.id}')">
                                 <i class="iconoir-xmark"></i>
                             </button>
                         ` : ''}
@@ -717,17 +739,74 @@ async function cancelSubscription(subId) {
     }
 }
 
-// Toggle Package Active
-async function togglePackageActive(packageId) {
+// Toggle / Activate / Deactivate Package
+async function togglePackageActive(packageId, targetState = null) {
     try {
-        const res = await adminFetch(`/api/admin/packages/${packageId}/toggle`, {
+        let url = `/api/admin/packages/${packageId}/toggle`;
+        if (targetState !== null && targetState !== undefined) {
+            url += `?active=${targetState}`;
+        }
+        const res = await adminFetch(url, {
             method: 'PATCH'
         });
         if (res.ok) {
+            const data = await res.json();
+            alert(data.message || 'Statut de la formule mis à jour.');
             await loadPackagesTab();
         } else {
             const err = await res.json().catch(() => ({}));
             alert(err.detail || 'Erreur lors du changement de statut');
+        }
+    } catch (e) {
+        alert('Erreur réseau lors de l\'activation/désactivation');
+    }
+}
+
+// Delete Package with Confirmation & Safeguards
+async function deletePackagePrompt(packageId, packageName) {
+    const confirmMsg = `Êtes-vous certain de vouloir supprimer définitivement la formule :\n"${packageName}" ?\n\nAttention : cette action retirera le package du catalogue commercial.`;
+    if (!confirm(confirmMsg)) return;
+
+    try {
+        const res = await adminFetch(`/api/admin/packages/${packageId}`, {
+            method: 'DELETE'
+        });
+
+        if (res.ok) {
+            const data = await res.json();
+            alert(data.message || `Package "${packageName}" supprimé avec succès.`);
+            await loadPackagesTab();
+        } else {
+            const err = await res.json().catch(() => ({}));
+            const detail = err.detail || 'Erreur lors de la suppression';
+            
+            // Si le blocage est dû à des abonnements actifs, offrir l'option de forcer
+            if (detail.includes('actif(s)')) {
+                const forceConfirm = `${detail}\n\nSouhaitez-vous forcer la suppression malgré tout (cela supprimera également l'historique associé) ?`;
+                if (confirm(forceConfirm)) {
+                    await deletePackageForce(packageId, packageName);
+                }
+            } else {
+                alert(detail);
+            }
+        }
+    } catch (e) {
+        alert('Erreur réseau lors de la suppression du package');
+    }
+}
+
+async function deletePackageForce(packageId, packageName) {
+    try {
+        const res = await adminFetch(`/api/admin/packages/${packageId}?force=true`, {
+            method: 'DELETE'
+        });
+        if (res.ok) {
+            const data = await res.json();
+            alert(data.message || `Package "${packageName}" supprimé avec succès.`);
+            await loadPackagesTab();
+        } else {
+            const err = await res.json().catch(() => ({}));
+            alert(err.detail || 'Erreur lors du forçage de la suppression');
         }
     } catch (e) {
         alert('Erreur réseau');
@@ -852,7 +931,7 @@ function openCreatePackageModal() {
 }
 
 function openEditPackageModal(pkgId) {
-    const pkg = allPackagesCache.find(p => p.id === pkgId);
+    const pkg = allPackagesCache.find(p => String(p.id) === String(pkgId));
     if (!pkg) return;
 
     const titleEl = document.getElementById('modal-package-edit-title');
