@@ -45,6 +45,10 @@
                         <label for="admin-password" class="form-label text-muted fs-12">Mot de passe</label>
                         <input type="password" class="form-control login-input" id="admin-password" placeholder="••••••••" required>
                     </div>
+                    <div class="mb-3 text-start d-none" id="admin-totp-group">
+                        <label for="admin-totp" class="form-label text-muted fs-12">Code d'authentification à deux facteurs</label>
+                        <input type="text" class="form-control login-input" id="admin-totp" placeholder="123456" inputmode="numeric" pattern="[0-9]{6}" maxlength="6" autocomplete="one-time-code">
+                    </div>
                     <div class="d-flex justify-content-between align-items-center mb-3">
                         <span class="text-muted fs-12">Pré-remplissage rapide :</span>
                         <button type="button" class="btn btn-sm btn-outline-info py-0 px-2 fs-11" onclick="fillDemoCredentials('admin123')">
@@ -723,9 +727,14 @@
                     <div class="row">
                         <div class="col-lg-5 mb-4">
                             <div class="card">
-                                <div class="card-header">
-                                    <h4 class="card-title mb-0">Rôles RBAC</h4>
-                                    <small class="text-muted">Un admin sans rôle assigné garde l'accès complet historique.</small>
+                                <div class="card-header d-flex justify-content-between align-items-center">
+                                    <div>
+                                        <h4 class="card-title mb-0">Rôles RBAC</h4>
+                                        <small class="text-muted">Un admin sans rôle assigné garde l'accès complet historique.</small>
+                                    </div>
+                                    <button type="button" class="btn btn-sm btn-primary" onclick="openCreateRoleModal()">
+                                        <i class="iconoir-plus me-1"></i>Nouveau rôle
+                                    </button>
                                 </div>
                                 <div class="card-body">
                                     <div id="roles-list" class="mb-3">
@@ -775,6 +784,48 @@
                                             </tbody>
                                         </table>
                                     </div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                    <div class="row">
+                        <div class="col-lg-6 mb-4">
+                            <div class="card">
+                                <div class="card-header">
+                                    <h4 class="card-title mb-0">Sécurité de mon compte</h4>
+                                    <small class="text-muted">Authentification à deux facteurs (TOTP) pour votre propre session admin.</small>
+                                </div>
+                                <div class="card-body">
+                                    <div id="totp-status-badge" class="mb-3">
+                                        <span class="badge bg-secondary-subtle text-secondary">Statut inconnu</span>
+                                    </div>
+
+                                    <!-- Étape 1 : activation (masquée si 2FA déjà active) -->
+                                    <div id="totp-enable-section" class="d-none">
+                                        <button type="button" class="btn btn-sm btn-outline-primary mb-2" onclick="startTotpSetup()">
+                                            <i class="iconoir-qr-code me-1"></i>Activer la 2FA
+                                        </button>
+                                        <div id="totp-setup-block" class="d-none">
+                                            <p class="small text-muted mb-1">Ajoutez ce code secret dans une application d'authentification (Google Authenticator, Authy...) :</p>
+                                            <div class="p-2 rounded bg-body-secondary border font-monospace small mb-2" id="totp-secret-display" style="word-break: break-all;"></div>
+                                            <label for="totp-enable-code" class="form-label fw-semibold">Code à 6 chiffres</label>
+                                            <div class="d-flex gap-2">
+                                                <input type="text" id="totp-enable-code" class="form-control" style="max-width: 140px;" inputmode="numeric" maxlength="6" placeholder="123456">
+                                                <button type="button" class="btn btn-primary btn-sm" onclick="confirmTotpEnable()">Confirmer l'activation</button>
+                                            </div>
+                                        </div>
+                                    </div>
+
+                                    <!-- Étape 2 : désactivation (masquée si 2FA inactive) -->
+                                    <div id="totp-disable-section" class="d-none">
+                                        <label for="totp-disable-code" class="form-label fw-semibold">Code à 6 chiffres pour désactiver</label>
+                                        <div class="d-flex gap-2">
+                                            <input type="text" id="totp-disable-code" class="form-control" style="max-width: 140px;" inputmode="numeric" maxlength="6" placeholder="123456">
+                                            <button type="button" class="btn btn-outline-danger btn-sm" onclick="confirmTotpDisable()">Désactiver la 2FA</button>
+                                        </div>
+                                    </div>
+
+                                    <div id="totp-feedback" class="mt-2 small" role="status" aria-live="polite"></div>
                                 </div>
                             </div>
                         </div>
@@ -994,6 +1045,41 @@
                 <div class="modal-footer">
                     <button type="button" class="btn btn-light" onclick="closePackageEditModal()">Annuler</button>
                     <button type="button" class="btn btn-primary" onclick="submitPackageForm()"><i class="ri-save-line me-1"></i>Enregistrer</button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Modal Création / Édition des permissions d'un rôle RBAC -->
+    <div class="modal fade" id="modal-role-permissions" tabindex="-1" role="dialog" aria-labelledby="modal-role-permissions-title" aria-hidden="true">
+        <div class="modal-dialog modal-dialog-centered" role="document">
+            <div class="modal-content">
+                <div class="modal-header">
+                    <h5 class="modal-title" id="modal-role-permissions-title"><i class="iconoir-shield-alert me-2 text-primary"></i>Rôle</h5>
+                    <button type="button" class="btn-close" onclick="closeRoleModal()" aria-label="Close"></button>
+                </div>
+                <div class="modal-body">
+                    <input type="hidden" id="role-modal-id">
+                    <div class="row g-3 mb-3">
+                        <div class="col-md-6">
+                            <label for="role-modal-code" class="form-label fw-semibold">Code technique <span class="text-danger">*</span></label>
+                            <input type="text" id="role-modal-code" class="form-control font-monospace" placeholder="ex: support_niveau_2" pattern="[a-z][a-z0-9_]*" required>
+                            <small class="text-muted">Minuscules, chiffres et underscore uniquement. Non modifiable après création.</small>
+                        </div>
+                        <div class="col-md-6">
+                            <label for="role-modal-label" class="form-label fw-semibold">Nom affiché <span class="text-danger">*</span></label>
+                            <input type="text" id="role-modal-label" class="form-control" placeholder="ex: Support Niveau 2" required>
+                        </div>
+                    </div>
+                    <label class="form-label fw-semibold">Permissions accordées</label>
+                    <div id="role-modal-permissions-list" class="role-permissions-checklist">
+                        <!-- Injected via JS -->
+                    </div>
+                    <div id="role-modal-feedback" class="mt-2 small" role="status" aria-live="polite"></div>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-light" onclick="closeRoleModal()">Annuler</button>
+                    <button type="button" class="btn btn-primary" id="role-modal-submit-btn" onclick="submitRoleModal()"><i class="ri-save-line me-1"></i>Enregistrer</button>
                 </div>
             </div>
         </div>

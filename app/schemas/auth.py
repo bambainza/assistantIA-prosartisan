@@ -21,18 +21,20 @@ class UserProfile(BaseModel):
     auth_provider: str = "local"
     type_abonnement: str = "FREE"
     is_admin: bool = False
+    totp_enabled: bool = False
     created_at: datetime | None = None
 
     model_config = {"from_attributes": True}
 
-    @field_validator("is_admin", mode="before")
+    @field_validator("is_admin", "totp_enabled", mode="before")
     @classmethod
     def _normalise_is_admin(cls, value: object) -> bool:
         """Coerce les valeurs nulles en ``False``.
 
         Un objet ``User`` non encore inséré (ou une ligne héritée sans valeur)
-        expose ``is_admin = None`` : la valeur par défaut du champ ne s'applique
-        que si la clé est absente, pas si elle vaut explicitement ``None``.
+        expose ``is_admin = None`` / ``totp_enabled = None`` : la valeur par
+        défaut du champ ne s'applique que si la clé est absente, pas si elle
+        vaut explicitement ``None``.
         """
         return bool(value)
 

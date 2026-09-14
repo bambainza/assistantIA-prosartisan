@@ -51,7 +51,13 @@ from app.schemas.package import (
     SubscriptionAssignRequest,
     SubscriptionExtendRequest,
 )
-from app.schemas.role import PermissionOut, RoleAssignRequest, RoleOut
+from app.schemas.role import (
+    PermissionOut,
+    RoleAssignRequest,
+    RoleCreateRequest,
+    RoleOut,
+    RolePermissionsUpdateRequest,
+)
 from app.services.actualite_service import actualite_service
 from app.services.audit_service import audit_service
 from app.services.cache_service import cache_service
@@ -1003,6 +1009,116 @@ async def get_permissions_list(
     stmt = select(Permission).order_by(Permission.code)
     res = await db.execute(stmt)
     return list(res.scalars().all())
+
+
+@router.post("/roles", response_model=RoleOut, status_code=status.HTTP_201_CREATED)
+async def create_role(
+    payload: RoleCreateRequest,
+    request: Request,
+    admin_id: uuid.UUID = Depends(require_permission("roles.write")),
+    db: AsyncSession = Depends(get_db),
+) -> Role:
+    """Crée un nouveau rôle RBAC, avec son jeu de permissions initial."""
+    existing_stmt = select(Role).where(Role.code == payload.code)
+    existing_res = await db.execute(existing_stmt)
+    if existing_res.scalar_one_or_none():
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail=f"Le rôle '{payload.code}' existe déjà.",
+        )
+
+    permissions: list[Permission] = []
+    if payload.permission_codes:
+        perms_stmt = select(Permission).where(
+            Permission.code.in_(payload.permission_codes)
+        )
+        perms_res = await db.execute(perms_stmt)
+        permissions = list(perms_res.scalars().all())
+        found_codes = {p.code for p in permissions}
+        missing = set(payload.permission_codes) - found_codes
+        if missing:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail=f"Permission(s) inconnue(s) : {', '.join(sorted(missing))}",
+            )
+
+    new_role = Role(
+        id=uuid.uuid4(),
+        code=payload.code,
+        label=payload.label,
+        permissions=permissions,
+    )
+    db.add(new_role)
+
+    await audit_service.log_action(
+        db,
+        actor_id=admin_id,
+        action="role.create",
+        resource_type="role",
+        resource_id=str(new_role.id),
+        after={
+            "code": new_role.code,
+            "label": new_role.label,
+            "permissions": sorted(payload.permission_codes),
+        },
+        request=request,
+    )
+    await db.commit()
+    await db.refresh(new_role)
+    return new_role
+
+
+@router.put("/roles/{role_id}/permissions", response_model=RoleOut)
+async def update_role_permissions(
+    role_id: uuid.UUID,
+    payload: RolePermissionsUpdateRequest,
+    request: Request,
+    admin_id: uuid.UUID = Depends(require_permission("roles.write")),
+    db: AsyncSession = Depends(get_db),
+) -> Role:
+    """Remplace le jeu de permissions actives d'un rôle (active/désactive en bloc)."""
+    role_stmt = (
+        select(Role).options(selectinload(Role.permissions)).where(Role.id == role_id)
+    )
+    role_res = await db.execute(role_stmt)
+    role = role_res.scalar_one_or_none()
+    if not role:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND, detail="Rôle introuvable."
+        )
+
+    before_codes = sorted(p.code for p in role.permissions)
+
+    permissions: list[Permission] = []
+    if payload.permission_codes:
+        perms_stmt = select(Permission).where(
+            Permission.code.in_(payload.permission_codes)
+        )
+        perms_res = await db.execute(perms_stmt)
+        permissions = list(perms_res.scalars().all())
+        found_codes = {p.code for p in permissions}
+        missing = set(payload.permission_codes) - found_codes
+        if missing:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail=f"Permission(s) inconnue(s) : {', '.join(sorted(missing))}",
+            )
+
+    role.permissions = permissions
+
+    await audit_service.log_action(
+        db,
+        actor_id=admin_id,
+        action="role.permissions.update",
+        resource_type="role",
+        resource_id=str(role.id),
+        before={"permissions": before_codes},
+        after={"permissions": sorted(p.code for p in permissions)},
+        request=request,
+    )
+    await db.commit()
+    await db.refresh(role)
+    return role
 
 
 @router.post("/users/{user_id}/role")

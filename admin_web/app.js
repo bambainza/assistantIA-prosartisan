@@ -67,6 +67,8 @@ function initLoginForm() {
         e.preventDefault();
         const email = (document.getElementById('admin-email').value || '').trim();
         const password = (document.getElementById('admin-password').value || '').trim();
+        const totpGroup = document.getElementById('admin-totp-group');
+        const totpCode = (document.getElementById('admin-totp').value || '').trim();
         const errMsg = document.getElementById('login-error-msg');
         const submitBtn = document.getElementById('btn-login-submit');
 
@@ -75,10 +77,13 @@ function initLoginForm() {
         errMsg.classList.add('d-none');
 
         try {
+            const payload = { email, password };
+            if (totpCode) payload.totp_code = totpCode;
+
             const res = await fetch('/api/auth/login', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ email, password })
+                body: JSON.stringify(payload)
             });
 
             if (res.status === 200) {
@@ -93,8 +98,21 @@ function initLoginForm() {
                 }
             } else {
                 const errData = await res.json().catch(() => ({}));
-                errMsg.textContent = errData.detail || 'Identifiants incorrects.';
-                errMsg.classList.remove('d-none');
+                const detail = errData.detail || 'Identifiants incorrects.';
+                // Le backend renvoie ce message précis quand le compte a la 2FA
+                // active : on révèle alors le champ code au lieu d'afficher un
+                // simple échec, pour ne pas forcer l'admin à ressaisir email/mdp.
+                if (detail.includes('authentification à deux facteurs')) {
+                    totpGroup.classList.remove('d-none');
+                    document.getElementById('admin-totp').focus();
+                    errMsg.textContent = totpCode
+                        ? 'Code invalide, veuillez réessayer.'
+                        : 'Entrez le code de votre application d\'authentification.';
+                    errMsg.classList.remove('d-none');
+                } else {
+                    errMsg.textContent = detail;
+                    errMsg.classList.remove('d-none');
+                }
             }
         } catch (err) {
             errMsg.textContent = 'Impossible de contacter le serveur d\'authentification.';
@@ -1094,11 +1112,13 @@ async function submitPackageForm() {
 // =========================================================================
 
 let allRolesCache = [];
+let allPermissionsCache = [];
 
 async function loadSecurityTab() {
     try {
-        const [rolesRes, auditRes, statsRes] = await Promise.all([
+        const [rolesRes, permsRes, auditRes, statsRes] = await Promise.all([
             adminFetch('/api/admin/roles'),
+            adminFetch('/api/admin/permissions'),
             adminFetch('/api/admin/audit-logs?limit=100'),
             adminFetch('/api/admin/security-stats'),
         ]);
@@ -1110,6 +1130,10 @@ async function loadSecurityTab() {
             setKpi('sec-kpi-login-failed', stats.tentatives_connexion_echouees_30j);
             setKpi('sec-kpi-webhooks-rejected', stats.webhooks_rejetes_30j);
             setKpi('sec-kpi-tokens-revoked', stats.tokens_revoques_30j);
+        }
+
+        if (permsRes.ok) {
+            allPermissionsCache = await permsRes.json();
         }
 
         if (rolesRes.ok) {
@@ -1132,6 +1156,8 @@ async function loadSecurityTab() {
                 tbody.innerHTML = '<tr><td colspan="4" class="text-center text-muted py-3">Votre rôle ne donne pas accès au journal d\'audit.</td></tr>';
             }
         }
+
+        await loadMyAccountSecurity();
     } catch (err) {
         console.error('Erreur chargement onglet sécurité:', err);
     }
@@ -1152,9 +1178,130 @@ function renderRolesList(roles) {
                 <span class="fw-semibold">${role.label}</span>
                 <br><small class="text-muted font-monospace">${role.code}</small>
             </div>
-            <span class="badge bg-primary-subtle text-primary">${role.permissions.length} permission(s)</span>
+            <div class="d-flex align-items-center gap-2">
+                <span class="badge bg-primary-subtle text-primary">${role.permissions.length} permission(s)</span>
+                <button type="button" class="btn btn-sm btn-outline-secondary" onclick='openEditRolePermissionsModal(${JSON.stringify(role.code)})'>
+                    <i class="iconoir-settings"></i>
+                </button>
+            </div>
         </div>
     `).join('');
+}
+
+// =========================================================================
+// MODAL RÔLE : CRÉATION + ÉDITION DES PERMISSIONS
+// =========================================================================
+
+let roleModalInstance = null;
+let roleModalMode = 'create'; // 'create' | 'edit'
+
+function renderPermissionChecklist(checkedCodes) {
+    const container = document.getElementById('role-modal-permissions-list');
+    if (!container) return;
+    const checkedSet = new Set(checkedCodes || []);
+
+    if (!allPermissionsCache || allPermissionsCache.length === 0) {
+        container.innerHTML = '<p class="text-muted small mb-0">Aucune permission disponible.</p>';
+        return;
+    }
+
+    container.innerHTML = allPermissionsCache.map(perm => `
+        <div class="form-check">
+            <input class="form-check-input" type="checkbox" value="${perm.code}" id="perm-check-${perm.code}" ${checkedSet.has(perm.code) ? 'checked' : ''}>
+            <label class="form-check-label small" for="perm-check-${perm.code}">
+                <span class="font-monospace">${perm.code}</span>
+                ${perm.description ? `<br><span class="text-muted">${perm.description}</span>` : ''}
+            </label>
+        </div>
+    `).join('');
+}
+
+function openCreateRoleModal() {
+    roleModalMode = 'create';
+    document.getElementById('modal-role-permissions-title').textContent = 'Créer un rôle';
+    document.getElementById('role-modal-id').value = '';
+    document.getElementById('role-modal-code').value = '';
+    document.getElementById('role-modal-code').disabled = false;
+    document.getElementById('role-modal-label').value = '';
+    document.getElementById('role-modal-label').disabled = false;
+    document.getElementById('role-modal-feedback').textContent = '';
+    renderPermissionChecklist([]);
+
+    if (!roleModalInstance) {
+        roleModalInstance = new bootstrap.Modal(document.getElementById('modal-role-permissions'));
+    }
+    roleModalInstance.show();
+}
+
+function openEditRolePermissionsModal(roleCode) {
+    const role = allRolesCache.find(r => r.code === roleCode);
+    if (!role) return;
+
+    roleModalMode = 'edit';
+    document.getElementById('modal-role-permissions-title').textContent = `Permissions — ${role.label}`;
+    document.getElementById('role-modal-id').value = role.id;
+    document.getElementById('role-modal-code').value = role.code;
+    document.getElementById('role-modal-code').disabled = true;
+    document.getElementById('role-modal-label').value = role.label;
+    document.getElementById('role-modal-label').disabled = true;
+    document.getElementById('role-modal-feedback').textContent = '';
+    renderPermissionChecklist(role.permissions.map(p => p.code));
+
+    if (!roleModalInstance) {
+        roleModalInstance = new bootstrap.Modal(document.getElementById('modal-role-permissions'));
+    }
+    roleModalInstance.show();
+}
+
+function closeRoleModal() {
+    if (roleModalInstance) roleModalInstance.hide();
+}
+
+function getCheckedPermissionCodes() {
+    return Array.from(document.querySelectorAll('#role-modal-permissions-list input[type="checkbox"]:checked'))
+        .map(el => el.value);
+}
+
+async function submitRoleModal() {
+    const feedback = document.getElementById('role-modal-feedback');
+    const permissionCodes = getCheckedPermissionCodes();
+
+    try {
+        let res;
+        if (roleModalMode === 'create') {
+            const code = (document.getElementById('role-modal-code').value || '').trim();
+            const label = (document.getElementById('role-modal-label').value || '').trim();
+            if (!code || !label) {
+                feedback.className = 'mt-2 small text-danger';
+                feedback.textContent = 'Le code et le nom affiché sont obligatoires.';
+                return;
+            }
+            res = await adminFetch('/api/admin/roles', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ code, label, permission_codes: permissionCodes }),
+            });
+        } else {
+            const roleId = document.getElementById('role-modal-id').value;
+            res = await adminFetch(`/api/admin/roles/${roleId}/permissions`, {
+                method: 'PUT',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ permission_codes: permissionCodes }),
+            });
+        }
+
+        const data = await res.json().catch(() => ({}));
+        if (res.ok) {
+            closeRoleModal();
+            await loadSecurityTab();
+        } else {
+            feedback.className = 'mt-2 small text-danger';
+            feedback.textContent = data.detail || 'Échec de l\'enregistrement du rôle.';
+        }
+    } catch (err) {
+        feedback.className = 'mt-2 small text-danger';
+        feedback.textContent = 'Erreur réseau lors de l\'enregistrement.';
+    }
 }
 
 function populateRoleAssignSelect(roles) {
@@ -1195,6 +1342,116 @@ async function submitAssignRole() {
     } catch (err) {
         feedback.className = 'mt-2 small text-danger';
         feedback.textContent = 'Erreur réseau lors de l\'assignation.';
+    }
+}
+
+// =========================================================================
+// SÉCURITÉ DE MON COMPTE — 2FA (TOTP)
+// =========================================================================
+
+async function loadMyAccountSecurity() {
+    const badge = document.getElementById('totp-status-badge');
+    const enableSection = document.getElementById('totp-enable-section');
+    const disableSection = document.getElementById('totp-disable-section');
+    if (!badge || !enableSection || !disableSection) return;
+
+    try {
+        const res = await adminFetch('/api/auth/me');
+        if (!res.ok) return;
+        const me = await res.json();
+
+        if (me.totp_enabled) {
+            badge.innerHTML = '<span class="badge bg-success-subtle text-success"><i class="iconoir-check-circle me-1"></i>2FA activée</span>';
+            enableSection.classList.add('d-none');
+            disableSection.classList.remove('d-none');
+        } else {
+            badge.innerHTML = '<span class="badge bg-warning-subtle text-warning"><i class="iconoir-warning-triangle me-1"></i>2FA désactivée</span>';
+            enableSection.classList.remove('d-none');
+            disableSection.classList.add('d-none');
+            document.getElementById('totp-setup-block').classList.add('d-none');
+        }
+    } catch (err) {
+        console.error('Erreur chargement statut 2FA:', err);
+    }
+}
+
+async function startTotpSetup() {
+    const feedback = document.getElementById('totp-feedback');
+    feedback.textContent = '';
+    try {
+        const res = await adminFetch('/api/auth/totp/setup', { method: 'POST' });
+        const data = await res.json().catch(() => ({}));
+        if (res.ok) {
+            document.getElementById('totp-secret-display').textContent = data.secret;
+            document.getElementById('totp-setup-block').classList.remove('d-none');
+            document.getElementById('totp-enable-code').focus();
+        } else {
+            feedback.className = 'mt-2 small text-danger';
+            feedback.textContent = data.detail || 'Impossible de générer le secret TOTP.';
+        }
+    } catch (err) {
+        feedback.className = 'mt-2 small text-danger';
+        feedback.textContent = 'Erreur réseau.';
+    }
+}
+
+async function confirmTotpEnable() {
+    const feedback = document.getElementById('totp-feedback');
+    const code = (document.getElementById('totp-enable-code').value || '').trim();
+    if (!code) {
+        feedback.className = 'mt-2 small text-danger';
+        feedback.textContent = 'Entrez le code à 6 chiffres affiché par votre application.';
+        return;
+    }
+    try {
+        const res = await adminFetch('/api/auth/totp/enable', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ code }),
+        });
+        if (res.ok) {
+            feedback.className = 'mt-2 small text-success';
+            feedback.textContent = '2FA activée avec succès.';
+            document.getElementById('totp-enable-code').value = '';
+            await loadMyAccountSecurity();
+        } else {
+            const data = await res.json().catch(() => ({}));
+            feedback.className = 'mt-2 small text-danger';
+            feedback.textContent = data.detail || 'Code invalide.';
+        }
+    } catch (err) {
+        feedback.className = 'mt-2 small text-danger';
+        feedback.textContent = 'Erreur réseau.';
+    }
+}
+
+async function confirmTotpDisable() {
+    const feedback = document.getElementById('totp-feedback');
+    const code = (document.getElementById('totp-disable-code').value || '').trim();
+    if (!code) {
+        feedback.className = 'mt-2 small text-danger';
+        feedback.textContent = 'Entrez un code valide pour confirmer la désactivation.';
+        return;
+    }
+    try {
+        const res = await adminFetch('/api/auth/totp/disable', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ code }),
+        });
+        if (res.ok) {
+            feedback.className = 'mt-2 small text-success';
+            feedback.textContent = '2FA désactivée.';
+            document.getElementById('totp-disable-code').value = '';
+            await loadMyAccountSecurity();
+        } else {
+            const data = await res.json().catch(() => ({}));
+            feedback.className = 'mt-2 small text-danger';
+            feedback.textContent = data.detail || 'Code invalide.';
+        }
+    } catch (err) {
+        feedback.className = 'mt-2 small text-danger';
+        feedback.textContent = 'Erreur réseau.';
     }
 }
 

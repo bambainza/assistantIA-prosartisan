@@ -156,6 +156,179 @@ async def test_non_admin_rejete_sur_roles():
         app.dependency_overrides[get_db] = mock_get_db
 
 
+def _sequenced_db(responses):
+    """Mock DB : chaque appel `db.execute` consomme la réponse suivante de la liste.
+
+    `responses` est une liste de tuples `("scalar", valeur)` pour un
+    `scalar_one_or_none()` ou `("scalars", [valeurs])` pour un `scalars().all()`.
+    """
+
+    async def custom_mock_db():
+        session = MagicMock()
+        queue = list(responses)
+
+        async def mock_execute(stmt):
+            kind, value = queue.pop(0)
+            mock_res = MagicMock()
+            if kind == "scalar":
+                mock_res.scalar_one_or_none.return_value = value
+            else:
+                mock_res.scalars.return_value.all.return_value = value
+            return mock_res
+
+        session.execute = mock_execute
+        session.commit = AsyncMock()
+        session.refresh = AsyncMock()
+        yield session
+
+    return custom_mock_db
+
+
+@pytest.mark.asyncio
+async def test_create_role_success(legacy_admin_user):
+    """Un admin avec accès complet peut créer un rôle avec des permissions initiales."""
+    new_permission = Permission(id=uuid.uuid4(), code="roles.read")
+    app.dependency_overrides[get_db] = _sequenced_db(
+        [
+            ("scalar", legacy_admin_user),  # require_permission
+            ("scalar", None),  # pas de conflit de code
+            ("scalars", [new_permission]),  # résolution des permission_codes
+        ]
+    )
+    token = create_access_token(data={"sub": str(legacy_admin_user.id)})
+    try:
+        transport = ASGITransport(app=app)
+        async with AsyncClient(transport=transport, base_url="http://test") as client:
+            res = await client.post(
+                "/api/admin/roles",
+                headers={"Authorization": f"Bearer {token}"},
+                json={
+                    "code": "support_n2",
+                    "label": "Support Niveau 2",
+                    "permission_codes": ["roles.read"],
+                },
+            )
+        assert res.status_code == 201
+        body = res.json()
+        assert body["code"] == "support_n2"
+        assert [p["code"] for p in body["permissions"]] == ["roles.read"]
+    finally:
+        app.dependency_overrides[get_db] = mock_get_db
+
+
+@pytest.mark.asyncio
+async def test_create_role_conflit_code_existant(legacy_admin_user, restricted_role):
+    """La création échoue avec 409 si le code de rôle existe déjà."""
+    app.dependency_overrides[get_db] = _sequenced_db(
+        [
+            ("scalar", legacy_admin_user),  # require_permission
+            ("scalar", restricted_role),  # code déjà pris
+        ]
+    )
+    token = create_access_token(data={"sub": str(legacy_admin_user.id)})
+    try:
+        transport = ASGITransport(app=app)
+        async with AsyncClient(transport=transport, base_url="http://test") as client:
+            res = await client.post(
+                "/api/admin/roles",
+                headers={"Authorization": f"Bearer {token}"},
+                json={"code": "support", "label": "Doublon"},
+            )
+        assert res.status_code == 409
+    finally:
+        app.dependency_overrides[get_db] = mock_get_db
+
+
+@pytest.mark.asyncio
+async def test_create_role_bloque_sans_permission(restricted_admin_user):
+    """Un admin sans la permission 'roles.write' ne peut pas créer de rôle."""
+    app.dependency_overrides[get_db] = _sequenced_db(
+        [("scalar", restricted_admin_user)]  # require_permission échoue ici
+    )
+    token = create_access_token(data={"sub": str(restricted_admin_user.id)})
+    try:
+        transport = ASGITransport(app=app)
+        async with AsyncClient(transport=transport, base_url="http://test") as client:
+            res = await client.post(
+                "/api/admin/roles",
+                headers={"Authorization": f"Bearer {token}"},
+                json={"code": "nouveau", "label": "Nouveau Rôle"},
+            )
+        assert res.status_code == 403
+    finally:
+        app.dependency_overrides[get_db] = mock_get_db
+
+
+@pytest.mark.asyncio
+async def test_update_role_permissions_success(legacy_admin_user, restricted_role):
+    """Un admin avec accès complet peut activer/désactiver les permissions d'un rôle."""
+    new_permission = Permission(id=uuid.uuid4(), code="audit.read")
+    app.dependency_overrides[get_db] = _sequenced_db(
+        [
+            ("scalar", legacy_admin_user),  # require_permission
+            ("scalar", restricted_role),  # rôle ciblé (permissions: roles.read)
+            ("scalars", [new_permission]),  # nouveau jeu : audit.read seul
+        ]
+    )
+    token = create_access_token(data={"sub": str(legacy_admin_user.id)})
+    try:
+        transport = ASGITransport(app=app)
+        async with AsyncClient(transport=transport, base_url="http://test") as client:
+            res = await client.put(
+                f"/api/admin/roles/{restricted_role.id}/permissions",
+                headers={"Authorization": f"Bearer {token}"},
+                json={"permission_codes": ["audit.read"]},
+            )
+        assert res.status_code == 200
+        body = res.json()
+        assert [p["code"] for p in body["permissions"]] == ["audit.read"]
+    finally:
+        app.dependency_overrides[get_db] = mock_get_db
+
+
+@pytest.mark.asyncio
+async def test_update_role_permissions_role_introuvable(legacy_admin_user):
+    """La mise à jour échoue avec 404 si le rôle n'existe pas."""
+    app.dependency_overrides[get_db] = _sequenced_db(
+        [
+            ("scalar", legacy_admin_user),  # require_permission
+            ("scalar", None),  # rôle introuvable
+        ]
+    )
+    token = create_access_token(data={"sub": str(legacy_admin_user.id)})
+    try:
+        transport = ASGITransport(app=app)
+        async with AsyncClient(transport=transport, base_url="http://test") as client:
+            res = await client.put(
+                f"/api/admin/roles/{uuid.uuid4()}/permissions",
+                headers={"Authorization": f"Bearer {token}"},
+                json={"permission_codes": []},
+            )
+        assert res.status_code == 404
+    finally:
+        app.dependency_overrides[get_db] = mock_get_db
+
+
+@pytest.mark.asyncio
+async def test_update_role_permissions_bloque_sans_permission(restricted_admin_user):
+    """Un admin sans la permission 'roles.write' ne peut pas modifier les permissions d'un rôle."""
+    app.dependency_overrides[get_db] = _sequenced_db(
+        [("scalar", restricted_admin_user)]  # require_permission échoue ici
+    )
+    token = create_access_token(data={"sub": str(restricted_admin_user.id)})
+    try:
+        transport = ASGITransport(app=app)
+        async with AsyncClient(transport=transport, base_url="http://test") as client:
+            res = await client.put(
+                f"/api/admin/roles/{uuid.uuid4()}/permissions",
+                headers={"Authorization": f"Bearer {token}"},
+                json={"permission_codes": []},
+            )
+        assert res.status_code == 403
+    finally:
+        app.dependency_overrides[get_db] = mock_get_db
+
+
 @pytest.mark.asyncio
 async def test_assign_role_success(legacy_admin_user, restricted_role):
     """Un admin avec accès complet peut assigner un rôle RBAC à un autre compte."""

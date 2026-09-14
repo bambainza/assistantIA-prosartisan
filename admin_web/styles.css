@@ -1,5 +1,14 @@
 /* Custom Admin Dashboard Component Styles */
 
+/* Liste de permissions à cocher dans la modale de rôle RBAC. */
+.role-permissions-checklist {
+    max-height: 320px;
+    overflow-y: auto;
+    padding: 8px 12px;
+    border: 1px solid var(--bs-border-color, #e5e5e5);
+    border-radius: 6px;
+}
+
 /* Lien d'évitement : invisible tant qu'il n'a pas le focus clavier. */
 .skip-link {
     position: absolute;

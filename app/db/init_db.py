@@ -30,7 +30,10 @@ _PERMISSIONS_CATALOG: list[tuple[str, str]] = [
     ("transactions.read", "Consulter le journal des transactions Mobile Money"),
     ("logs.read", "Consulter les journaux système"),
     ("roles.read", "Consulter les rôles et permissions"),
-    ("roles.write", "Assigner un rôle RBAC à un administrateur"),
+    (
+        "roles.write",
+        "Créer un rôle, modifier ses permissions, ou l'assigner à un administrateur",
+    ),
     ("audit.read", "Consulter le journal d'audit"),
     ("actualites.read", "Consulter les actualités (y compris brouillons)"),
     ("actualites.write", "Créer, modifier, publier ou supprimer une actualité"),
