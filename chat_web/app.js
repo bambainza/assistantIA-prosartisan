@@ -1517,3 +1517,511 @@ function dismissActualitesBanner() {
     }
     banner.classList.add('hidden');
 }
+
+// ==========================================================================
+// 🧮 CALCULATEURS MÉTIER DÉTERMINISTES
+// ==========================================================================
+
+let lastCalcResult = "";
+
+function openCalculatorsModal() {
+    const modal = document.getElementById('calculators-modal');
+    if (modal) modal.classList.remove('hidden');
+}
+
+function closeCalculatorsModal() {
+    const modal = document.getElementById('calculators-modal');
+    if (modal) modal.classList.add('hidden');
+}
+
+function switchCalcTab(tab) {
+    const tabs = ['beton', 'cable', 'plomberie', 'carrelage', 'clim'];
+    tabs.forEach(t => {
+        const btn = document.getElementById(`tab-btn-${t}`);
+        const content = document.getElementById(`tab-content-${t}`);
+        if (btn) btn.classList.toggle('active', t === tab);
+        if (content) content.classList.toggle('hidden', t !== tab);
+    });
+}
+
+async function executeCalculator(toolName, parameters) {
+    try {
+        const res = await fetch('/api/chat/calculate', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ tool_name: toolName, parameters })
+        });
+        const data = await res.json();
+        const resultBox = document.getElementById('calc-result-box');
+        const resultText = document.getElementById('calc-result-text');
+        if (resultBox && resultText) {
+            resultBox.classList.remove('hidden');
+            lastCalcResult = data.result_text || JSON.stringify(data.data, null, 2);
+            resultText.textContent = lastCalcResult;
+            resultBox.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+        }
+    } catch (e) {
+        console.error("Calcul error:", e);
+        showToast("Erreur lors de l'exécution du calcul.");
+    }
+}
+
+function submitCalcBeton() {
+    const type_dosage = document.getElementById('calc-beton-type').value;
+    const volume_m3 = parseFloat(document.getElementById('calc-beton-vol').value) || 1.0;
+    executeCalculator('calculer_dosage_beton_mortier', { type_dosage, volume_m3 });
+}
+
+function submitCalcCable() {
+    const puissance_watts = parseFloat(document.getElementById('calc-cable-power').value) || 3500;
+    const tension_volts = parseInt(document.getElementById('calc-cable-voltage').value, 10) || 230;
+    const longueur_metres = parseFloat(document.getElementById('calc-cable-length').value) || 25;
+    executeCalculator('calculer_section_cable_nfc15100', { puissance_watts, tension_volts, longueur_metres });
+}
+
+function submitCalcPlomb() {
+    const type_appareil = document.getElementById('calc-plomb-app').value;
+    const longueur_metres = parseFloat(document.getElementById('calc-plomb-length').value) || 4.0;
+    executeCalculator('calculer_pente_evacuation_dtu60', { type_appareil, longueur_metres });
+}
+
+function submitCalcCarrelage() {
+    const surface_m2 = parseFloat(document.getElementById('calc-carr-surf').value) || 25;
+    const format_carreau = document.getElementById('calc-carr-dim').value;
+    const pourcentage_chute = parseFloat(document.getElementById('calc-carr-waste').value) || 10;
+    executeCalculator('calculer_surface_carrelage_colle', { surface_m2, format_carreau, pourcentage_chute });
+}
+
+function submitCalcClim() {
+    const surface_m2 = parseFloat(document.getElementById('calc-clim-surf').value) || 20;
+    const hauteur_sous_plafond = parseFloat(document.getElementById('calc-clim-height').value) || 2.8;
+    const exposition_soleil = document.getElementById('calc-clim-sun').value;
+    const nombre_personnes = parseInt(document.getElementById('calc-clim-pers').value, 10) || 2;
+    executeCalculator('calculer_bilan_thermique_climatisation', {
+        surface_m2, hauteur_sous_plafond, exposition_soleil, nombre_personnes
+    });
+}
+
+function copyCalcResult() {
+    if (!lastCalcResult) return;
+    navigator.clipboard.writeText(lastCalcResult);
+    showToast("Résultat copié dans le presse-papier !");
+}
+
+function injectCalcResultToChat() {
+    if (!lastCalcResult) return;
+    closeCalculatorsModal();
+    if (chatInput) {
+        chatInput.value = `Voici le résultat du calcul normé que j'ai obtenu :\n\n${lastCalcResult}\n\nPeux-tu me donner des conseils de mise en œuvre ?`;
+        handleInputKeyPress();
+        chatInput.focus();
+    }
+}
+
+// ==========================================================================
+// 📄 GÉNÉRATEUR DE DEVIS & FACTURES PRO-FORMA
+// ==========================================================================
+
+let currentQuoteData = {
+    id: null,
+    items: []
+};
+
+function openQuotesModal() {
+    const modal = document.getElementById('quotes-modal');
+    if (modal) {
+        modal.classList.remove('hidden');
+        if (currentQuoteData.items.length === 0) {
+            addQuoteItemRow({ description: "Prestation principale", quantite: 1, unite: "u", prix_unitaire: 25000 });
+        }
+    }
+}
+
+function closeQuotesModal() {
+    const modal = document.getElementById('quotes-modal');
+    if (modal) modal.classList.add('hidden');
+}
+
+async function extractQuoteFromText() {
+    const promptInput = document.getElementById('quote-prompt-input');
+    if (!promptInput || !promptInput.value.trim()) {
+        showToast("Veuillez saisir ou dicter vos notes de chantier.");
+        return;
+    }
+
+    const btn = document.getElementById('btn-extract-quote');
+    const originalText = btn.textContent;
+    btn.disabled = true;
+    btn.textContent = "⏳ Analyse IA en cours...";
+
+    try {
+        const token = localStorage.getItem('prosartisan_token');
+        const res = await fetch('/api/quotes/extract', {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+                ...(token ? { 'Authorization': `Bearer ${token}` } : {})
+            },
+            body: JSON.stringify({ prompt: promptInput.value.trim() })
+        });
+
+        if (res.ok) {
+            const data = await res.json();
+            document.getElementById('quote-client-name').value = data.client_nom || "";
+            document.getElementById('quote-client-phone').value = data.client_telephone || "";
+            document.getElementById('quote-client-address').value = data.client_adresse || "";
+            
+            const tbody = document.getElementById('quote-items-tbody');
+            tbody.innerHTML = '';
+            currentQuoteData.items = [];
+
+            (data.items || []).forEach(item => addQuoteItemRow(item));
+            recalculateQuoteTotals();
+            showToast("Devis extrait et structuré avec succès !");
+        } else {
+            showToast("Erreur lors de l'analyse du devis.");
+        }
+    } catch (e) {
+        console.error("Extraction quote error:", e);
+        showToast("Erreur de connexion avec le serveur.");
+    } finally {
+        btn.disabled = false;
+        btn.textContent = originalText;
+    }
+}
+
+function addQuoteItemRow(item = { description: "", quantite: 1, unite: "u", prix_unitaire: 0 }) {
+    const tbody = document.getElementById('quote-items-tbody');
+    if (!tbody) return;
+
+    const row = document.createElement('tr');
+    row.className = "quote-item-row";
+    row.innerHTML = `
+        <td><input type="text" class="item-desc" value="${escapeHtml(item.description || '')}" placeholder="Désignation"></td>
+        <td><input type="number" class="item-qty" value="${item.quantite || 1}" min="0.1" step="any" oninput="recalculateQuoteTotals()"></td>
+        <td><input type="text" class="item-unit" value="${escapeHtml(item.unite || 'u')}"></td>
+        <td><input type="number" class="item-price" value="${item.prix_unitaire || 0}" min="0" step="100" oninput="recalculateQuoteTotals()"></td>
+        <td class="item-total-cell">${Math.round((item.quantite || 1) * (item.prix_unitaire || 0)).toLocaleString('fr-FR')} F</td>
+        <td><button class="remove-item-btn" onclick="removeQuoteItemRow(this)" title="Supprimer" aria-label="Supprimer la ligne">✕</button></td>
+    `;
+    tbody.appendChild(row);
+    recalculateQuoteTotals();
+}
+
+function removeQuoteItemRow(btn) {
+    const row = btn.closest('tr');
+    if (row) {
+        row.remove();
+        recalculateQuoteTotals();
+    }
+}
+
+function recalculateQuoteTotals() {
+    const rows = document.querySelectorAll('.quote-item-row');
+    let totalHT = 0;
+
+    rows.forEach(row => {
+        const qty = parseFloat(row.querySelector('.item-qty')?.value) || 0;
+        const price = parseFloat(row.querySelector('.item-price')?.value) || 0;
+        const lineTotal = qty * price;
+        const totalCell = row.querySelector('.item-total-cell');
+        if (totalCell) totalCell.textContent = `${Math.round(lineTotal).toLocaleString('fr-FR')} F`;
+        totalHT += lineTotal;
+    });
+
+    const totalTVA = Math.round(totalHT * 0.18);
+    const totalTTC = totalHT + totalTVA;
+
+    const elHT = document.getElementById('quote-total-ht');
+    const elTVA = document.getElementById('quote-total-tva');
+    const elTTC = document.getElementById('quote-total-ttc');
+
+    if (elHT) elHT.textContent = `${Math.round(totalHT).toLocaleString('fr-FR')} FCFA`;
+    if (elTVA) elTVA.textContent = `${totalTVA.toLocaleString('fr-FR')} FCFA`;
+    if (elTTC) elTTC.textContent = `${Math.round(totalTTC).toLocaleString('fr-FR')} FCFA`;
+}
+
+function gatherQuoteFormData() {
+    const rows = document.querySelectorAll('.quote-item-row');
+    const items = [];
+    rows.forEach(row => {
+        const desc = row.querySelector('.item-desc')?.value.trim();
+        if (desc) {
+            const qty = parseFloat(row.querySelector('.item-qty')?.value) || 1;
+            const unit = row.querySelector('.item-unit')?.value.trim() || 'u';
+            const price = parseFloat(row.querySelector('.item-price')?.value) || 0;
+            items.push({ description: desc, quantite: qty, unite: unit, prix_unitaire: price });
+        }
+    });
+
+    return {
+        titre: "Devis travaux",
+        type_document: document.getElementById('quote-type')?.value || "devis",
+        client_nom: document.getElementById('quote-client-name')?.value.trim() || "Client",
+        client_telephone: document.getElementById('quote-client-phone')?.value.trim() || "",
+        client_adresse: document.getElementById('quote-client-address')?.value.trim() || "",
+        taux_tva: 18.0,
+        items: items
+    };
+}
+
+async function saveQuoteToServer() {
+    const payload = gatherQuoteFormData();
+    if (payload.items.length === 0) {
+        showToast("Ajoutez au moins une ligne de prestation.");
+        return;
+    }
+
+    const token = localStorage.getItem('prosartisan_token');
+    if (!token) {
+        showToast("Connectez-vous pour enregistrer vos devis dans votre compte.");
+        openLoginModal();
+        return;
+    }
+
+    try {
+        const res = await fetch('/api/quotes', {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+                'Authorization': `Bearer ${token}`
+            },
+            body: JSON.stringify(payload)
+        });
+        if (res.ok) {
+            const data = await res.json();
+            currentQuoteData.id = data.id;
+            showToast(`Devis ${data.numero_devis} enregistré !`);
+        } else {
+            showToast("Erreur lors de l'enregistrement du devis.");
+        }
+    } catch (e) {
+        console.error("Save quote error:", e);
+        showToast("Erreur de connexion.");
+    }
+}
+
+function exportQuoteWhatsApp() {
+    const data = gatherQuoteFormData();
+    if (data.items.length === 0) {
+        showToast("Veuillez remplir votre devis.");
+        return;
+    }
+
+    let text = `🛠️ *${data.type_document.toUpperCase()} PROSARTISAN*\n`;
+    text += `👤 *Client :* ${data.client_nom} ${data.client_telephone ? '(' + data.client_telephone + ')' : ''}\n`;
+    if (data.client_adresse) text += `📍 *Lieu :* ${data.client_adresse}\n`;
+    text += `\n*DÉTAILS DES PRESTATIONS :*\n`;
+
+    let totalHT = 0;
+    data.items.forEach((it, idx) => {
+        const lineTotal = it.quantite * it.prix_unitaire;
+        totalHT += lineTotal;
+        text += `${idx + 1}. ${it.description} - ${it.quantite} ${it.unite} × ${it.prix_unitaire.toLocaleString('fr-FR')} = *${Math.round(lineTotal).toLocaleString('fr-FR')} FCFA*\n`;
+    });
+
+    const totalTTC = Math.round(totalHT * 1.18);
+    text += `\n💰 *Total HT :* ${Math.round(totalHT).toLocaleString('fr-FR')} FCFA\n`;
+    text += `💵 *Total TTC (TVA 18%) :* *${totalTTC.toLocaleString('fr-FR')} FCFA*\n\n`;
+    text += `_Devis généré avec l'Assistant ProsArtisan IA Expert_`;
+
+    const encoded = encodeURIComponent(text);
+    const phone = data.client_telephone.replace(/[^0-9]/g, '');
+    const waUrl = phone ? `https://wa.me/${phone}?text=${encoded}` : `https://wa.me/?text=${encoded}`;
+    window.open(waUrl, '_blank');
+}
+
+async function previewQuoteHtml() {
+    const data = gatherQuoteFormData();
+    if (data.items.length === 0) {
+        showToast("Veuillez remplir votre devis.");
+        return;
+    }
+
+    const token = localStorage.getItem('prosartisan_token');
+    if (currentQuoteData.id && token) {
+        window.open(`/api/quotes/${currentQuoteData.id}/html`, '_blank');
+    } else {
+        // Envoi pour sauvegarde ou preview directe
+        if (token) {
+            await saveQuoteToServer();
+            if (currentQuoteData.id) {
+                window.open(`/api/quotes/${currentQuoteData.id}/html`, '_blank');
+                return;
+            }
+        }
+        showToast("Enregistrez le devis pour ouvrir la version imprimable.");
+    }
+}
+
+// ==========================================================================
+// 🎙️ MODE VOCAL MAINS-LIBRES & WEBSOCKET AUDIO DUPLEX
+// ==========================================================================
+
+let liveVoiceWs = null;
+let liveMediaRecorder = null;
+let liveAudioStream = null;
+let isLiveVoiceActive = false;
+let currentVoiceAssistantBubble = null;
+
+async function toggleLiveVoiceSession() {
+    const micBtn = document.getElementById('mic-btn');
+    if (isLiveVoiceActive) {
+        stopLiveVoiceSession();
+    } else {
+        startLiveVoiceSession();
+    }
+}
+
+async function startLiveVoiceSession() {
+    const micBtn = document.getElementById('mic-btn');
+    try {
+        liveAudioStream = await navigator.mediaDevices.getUserMedia({ audio: true });
+        liveMediaRecorder = new MediaRecorder(liveAudioStream);
+
+        const wsProtocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
+        const wsUrl = `${wsProtocol}//${window.location.host}/api/chat/ws`;
+        liveVoiceWs = new WebSocket(wsUrl);
+
+        liveVoiceWs.onopen = () => {
+            const token = localStorage.getItem('prosartisan_token');
+            liveVoiceWs.send(JSON.stringify({
+                action: 'auth',
+                token: token || null,
+                conversation_id: state.currentConversationId
+            }));
+
+            isLiveVoiceActive = true;
+            if (micBtn) {
+                micBtn.classList.add('recording-active');
+                micBtn.setAttribute('aria-pressed', 'true');
+            }
+            showToast("🎙️ Écoute en cours... Parlez à l'assistant !");
+            announceToScreenReader("Microphone activé, écoute en cours");
+
+            const audioChunks = [];
+            liveMediaRecorder.ondataavailable = (e) => {
+                if (e.data.size > 0) audioChunks.push(e.data);
+            };
+
+            liveMediaRecorder.onstop = async () => {
+                if (audioChunks.length > 0 && liveVoiceWs && liveVoiceWs.readyState === WebSocket.OPEN) {
+                    const blob = new Blob(audioChunks, { type: 'audio/webm' });
+                    const reader = new FileReader();
+                    reader.onloadend = () => {
+                        const base64Audio = reader.result.split(',')[1];
+                        liveVoiceWs.send(JSON.stringify({
+                            action: 'audio_chunk',
+                            audio: base64Audio,
+                            audio_format: 'audio/webm'
+                        }));
+                    };
+                    reader.readAsDataURL(blob);
+                }
+            };
+
+            liveMediaRecorder.start();
+        };
+
+        liveVoiceWs.onmessage = (event) => {
+            try {
+                const msg = JSON.parse(event.data);
+                handleVoiceWebSocketMessage(msg);
+            } catch (e) {
+                console.error("WS Parse error:", e);
+            }
+        };
+
+        liveVoiceWs.onerror = (err) => {
+            console.error("Voice WS Error:", err);
+            stopLiveVoiceSession();
+            showToast("Erreur de connexion vocale WebSocket.");
+        };
+
+        liveVoiceWs.onclose = () => {
+            stopLiveVoiceSession();
+        };
+
+    } catch (err) {
+        console.error("Audio Access Denied:", err);
+        showToast("Accès au microphone refusé ou non supporté.");
+    }
+}
+
+function stopLiveVoiceSession() {
+    isLiveVoiceActive = false;
+    const micBtn = document.getElementById('mic-btn');
+    if (micBtn) {
+        micBtn.classList.remove('recording-active');
+        micBtn.setAttribute('aria-pressed', 'false');
+    }
+
+    if (liveMediaRecorder && liveMediaRecorder.state !== 'inactive') {
+        liveMediaRecorder.stop();
+    }
+    if (liveAudioStream) {
+        liveAudioStream.getTracks().forEach(t => t.stop());
+        liveAudioStream = null;
+    }
+}
+
+function handleVoiceWebSocketMessage(msg) {
+    if (msg.type === 'user_transcription' && msg.text) {
+        landingContainer.classList.add('hidden');
+        messagesStream.classList.remove('hidden');
+        appendMessage('user', msg.text);
+    } else if (msg.type === 'stream') {
+        if (!currentVoiceAssistantBubble) {
+            currentVoiceAssistantBubble = appendAssistantStreamingBubble();
+        }
+        if (msg.chunk) {
+            currentVoiceAssistantBubble.appendChunk(msg.chunk);
+        }
+    } else if (msg.type === 'audio_response' && msg.audio) {
+        try {
+            const audioMime = msg.audio_format || 'audio/mp3';
+            const snd = new Audio(`data:${audioMime};base64,${msg.audio}`);
+            snd.play().catch(e => console.warn("Autoplay blocked:", e));
+        } catch (e) {
+            console.error("Audio playback error:", e);
+        }
+    } else if (msg.type === 'stream_end') {
+        if (currentVoiceAssistantBubble) {
+            currentVoiceAssistantBubble.finalize();
+            currentVoiceAssistantBubble = null;
+        }
+        updateQuotaUI();
+    } else if (msg.type === 'error') {
+        showToast(msg.message || "Erreur lors du traitement vocal.");
+    }
+}
+
+function appendAssistantStreamingBubble() {
+    const bubble = document.createElement('div');
+    bubble.className = "message assistant-message";
+    bubble.innerHTML = `
+        <div class="msg-avatar">⚡</div>
+        <div class="msg-content-wrapper">
+            <div class="msg-author">ProsArtisan IA</div>
+            <div class="msg-text"></div>
+        </div>
+    `;
+    messagesStream.appendChild(bubble);
+    messagesStream.scrollTop = messagesStream.scrollHeight;
+
+    const textEl = bubble.querySelector('.msg-text');
+    let fullText = "";
+
+    return {
+        appendChunk: (chunk) => {
+            fullText += chunk;
+            textEl.innerHTML = marked.parse(fullText);
+            messagesStream.scrollTop = messagesStream.scrollHeight;
+        },
+        finalize: () => {
+            textEl.innerHTML = marked.parse(fullText);
+            hljs.highlightAll();
+        }
+    };
+}
+

@@ -73,6 +73,8 @@ ingestion/documents/*.pdf
 # =========================
 .claude/settings.local.json
 .idea/
+.settings/
+*.prefs
 .vscode/*
 !.vscode/settings.json
 !.vscode/launch.json

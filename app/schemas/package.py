@@ -40,11 +40,11 @@ class PackageBase(BaseModel):
     model_config = ConfigDict(populate_by_name=True)
 
     est_actif: bool = Field(
-        True,
+        default=True,
         alias="is_active",
         description="Visible et souscriptible au catalogue",
     )
-    fonctionnalites: list[str] | None = Field(
+    fonctionnalites: list[str] = Field(
         default_factory=list,
         alias="features",
         description="Liste des avantages inclus",
@@ -60,15 +60,15 @@ class PackageUpdate(BaseModel):
 
     model_config = ConfigDict(populate_by_name=True)
 
-    nom: str | None = Field(None, min_length=2, max_length=100)
+    nom: str | None = Field(default=None, min_length=2, max_length=100)
     description: str | None = None
-    prix: int | None = Field(None, ge=0)
+    prix: int | None = Field(default=None, ge=0)
     type_package: str | None = None
-    duree_jours: int | None = Field(None, ge=1)
-    quota_requetes: int | None = Field(None, ge=1)
+    duree_jours: int | None = Field(default=None, ge=1)
+    quota_requetes: int | None = Field(default=None, ge=1)
     auto_renouvelable: bool | None = None
-    est_actif: bool | None = Field(None, alias="is_active")
-    fonctionnalites: list[str] | None = Field(None, alias="features")
+    est_actif: bool | None = Field(default=None, alias="is_active")
+    fonctionnalites: list[str] | None = Field(default=None, alias="features")
 
 
 class PackageResponse(PackageBase):

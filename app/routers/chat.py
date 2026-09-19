@@ -6,6 +6,7 @@ Intercepte les requêtes avec le Rate Limiter & Gestionnaire de Quota (HTTP 402 
 
 from __future__ import annotations
 
+import base64
 import json
 import uuid
 
@@ -28,6 +29,11 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.db.session import get_db
 from app.middleware.auth import get_optional_user_id, get_user_id_from_token
 from app.models.feedback import Feedback
+from app.schemas.calculator import (
+    CalculateRequest,
+    CalculateResponse,
+    CalculatorInfo,
+)
 from app.schemas.chat import (
     ChatResponse,
     FeedbackCreate,
@@ -36,6 +42,8 @@ from app.schemas.chat import (
 )
 from app.schemas.quota import QuotaEpuiseResponse
 from app.services.audio_service import audio_service
+from app.services.cache_service import cache_service
+from app.services.calculator_service import calculator_service
 from app.services.chat_history_service import chat_history_service
 from app.services.quota_service import quota_service
 from app.services.rag_service import rag_service
@@ -274,12 +282,14 @@ async def chat_websocket_endpoint(
     db: AsyncSession = Depends(get_db),
     token: str | None = Query(default=None),
 ) -> None:
-    """Connexion WebSocket pour streaming de réponse en temps réel.
+    """Connexion WebSocket bidirectionnelle temps réel pour mode texte et vocal mains-libres.
 
-    L'identité est déduite du JWT passé en query param (`?token=...`, un
-    WebSocket ne permet pas d'en-tête Authorization portable côté client) ;
-    en son absence, l'identifiant anonyme partagé est utilisé, comme pour
-    les routes HTTP. Un token invalide ferme la connexion (policy violation).
+    Supporte :
+    - Messages texte simples ou JSON (`{"type": "text", "content": "...", "metier_id": 1}`)
+    - Notes vocales et flux audio (`{"type": "voice", "audio": "<base64>", "format": "wav"}`)
+    - Streaming de réponse assistant (`type="stream"`, `type="stream_end"`)
+    - Synthèse vocale automatique (`type="audio_response"`) pour usage mains-libres
+    - Ping/Pong (`type="ping"` -> `type="pong"`)
     """
     user_id = ANONYMOUS_USER_ID
     if token:
@@ -292,7 +302,72 @@ async def chat_websocket_endpoint(
     await websocket.accept()
     try:
         while True:
-            data = await websocket.receive_text()
+            raw_data = await websocket.receive_text()
+
+            question_text = ""
+            metier_id = None
+            is_voice_request = False
+
+            try:
+                parsed = json.loads(raw_data)
+                if isinstance(parsed, dict):
+                    msg_type = parsed.get("type", "text")
+
+                    if msg_type == "ping":
+                        await websocket.send_text(
+                            WebSocketMessage(type="pong").model_dump_json()
+                        )
+                        continue
+
+                    if msg_type in ("voice", "audio"):
+                        is_voice_request = True
+                        audio_b64 = parsed.get("audio") or parsed.get("data")
+                        audio_format = parsed.get("format", "wav")
+                        metier_id = parsed.get("metier_id")
+
+                        if not audio_b64:
+                            err_msg = WebSocketMessage(
+                                type="error", message="Données audio manquantes."
+                            )
+                            await websocket.send_text(err_msg.model_dump_json())
+                            continue
+
+                        try:
+                            audio_bytes = base64.b64decode(audio_b64)
+                            transcription = await audio_service.transcribe_audio(
+                                file_bytes=audio_bytes,
+                                filename=f"voice.{audio_format}",
+                            )
+                            question_text = transcription.strip()
+                            await websocket.send_text(
+                                WebSocketMessage(
+                                    type="user_transcription",
+                                    text=question_text,
+                                ).model_dump_json()
+                            )
+                        except Exception as e:
+                            err_msg = WebSocketMessage(
+                                type="error",
+                                message=f"Échec de transcription vocale: {e!s}",
+                            )
+                            await websocket.send_text(err_msg.model_dump_json())
+                            continue
+                    else:
+                        question_text = (
+                            parsed.get("content")
+                            or parsed.get("text")
+                            or parsed.get("question")
+                            or ""
+                        )
+                        metier_id = parsed.get("metier_id")
+                        is_voice_request = bool(parsed.get("voice_output", False))
+                else:
+                    question_text = str(parsed)
+            except (json.JSONDecodeError, TypeError):
+                question_text = raw_data
+
+            if not question_text:
+                continue
 
             allowed = await quota_service.consume_quota(db=db, user_id=user_id)
             if not allowed:
@@ -303,9 +378,11 @@ async def chat_websocket_endpoint(
                 await websocket.send_text(epuise_msg.model_dump_json())
                 continue
 
-            rag_res = await rag_service.generate_response(question=data)
+            rag_res = await rag_service.generate_response(
+                question=question_text, metier_id=metier_id
+            )
+            answer_text = rag_res.get("reponse", "")
 
-            # Streaming mock message
             res_chunk = WebSocketMessage(
                 type="stream",
                 chunk="Voici les instructions pour votre chantier : ",
@@ -314,9 +391,31 @@ async def chat_websocket_endpoint(
 
             end_msg = WebSocketMessage(
                 type="stream_end",
-                message=rag_res["reponse"],
+                message=answer_text,
+                sources=rag_res.get("sources"),
             )
             await websocket.send_text(end_msg.model_dump_json())
+
+            if is_voice_request and answer_text:
+                try:
+                    tts_bytes = await audio_service.synthesize_speech(
+                        text=answer_text[:500]
+                    )
+                    audio_b64_res = base64.b64encode(tts_bytes).decode("ascii")
+                    await websocket.send_text(
+                        WebSocketMessage(
+                            type="audio_response",
+                            audio=audio_b64_res,
+                            audio_format="audio/mp3",
+                            is_final=True,
+                        ).model_dump_json()
+                    )
+                except Exception:
+                    pass
+
+                await websocket.send_text(
+                    WebSocketMessage(type="voice_turn_completed").model_dump_json()
+                )
     except WebSocketDisconnect:
         pass
 
@@ -358,3 +457,57 @@ async def submit_feedback(
         message_id=feedback.message_id,
         conversation_id=feedback.conversation_id,
     )
+
+
+@router.get(
+    "/chat/calculators",
+    response_model=list[CalculatorInfo],
+    summary="Lister les calculateurs et outils métiers disponibles",
+)
+async def list_calculators() -> list[CalculatorInfo]:
+    """Retourne la liste des outils de calcul technique certifiés (béton, câbles, évacuations, revêtements, clim)."""
+    tools = calculator_service.get_tool_definitions()
+    return [
+        CalculatorInfo(
+            name=t["function"]["name"],
+            description=t["function"]["description"],
+            parameters=t["function"]["parameters"],
+        )
+        for t in tools
+    ]
+
+
+@router.post(
+    "/chat/calculate",
+    response_model=CalculateResponse,
+    summary="Exécuter un calcul technique certifié",
+)
+async def execute_calculation(payload: CalculateRequest) -> CalculateResponse:
+    """Exécute un calculateur métier (béton, électricité, plomberie, carrelage, clim)."""
+    try:
+        result = calculator_service.execute_tool(
+            tool_name=payload.tool_name,
+            arguments=payload.arguments,
+        )
+        try:
+            await cache_service.increment(
+                f"prosartisan:calculator:{payload.tool_name}:count"
+            )
+        except Exception:
+            pass  # Ne bloque pas le calcul si le cache est indisponible
+
+        return CalculateResponse(
+            tool_name=payload.tool_name,
+            status="success",
+            result=result,
+        )
+    except ValueError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=str(exc),
+        )
+    except Exception as exc:
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Erreur lors du calcul : {exc!s}",
+        )

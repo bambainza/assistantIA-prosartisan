@@ -1,6 +1,7 @@
 """Schémas Pydantic : Chat IA."""
 
 import uuid
+from typing import Any
 
 from pydantic import BaseModel
 
@@ -23,12 +24,17 @@ class ChatResponse(BaseModel):
 
 
 class WebSocketMessage(BaseModel):
-    """Message transitant via WebSocket."""
+    """Message transitant via WebSocket (texte, streaming, audio Voxtral, contrôles de session)."""
 
-    type: str  # "stream", "stream_end", "payment_required", "payment_success", "error"
+    type: str  # "stream", "stream_end", "user_transcription", "audio_response", "voice_turn_completed", "payment_required", "error", "pong"
     chunk: str | None = None
+    text: str | None = None
     message: str | None = None
     action: str | None = None
+    audio: str | None = None  # Base64 encoded audio
+    audio_format: str | None = None  # "audio/mp3", "audio/wav"
+    sources: list[dict[str, Any]] | None = None
+    is_final: bool | None = None
 
 
 class FeedbackCreate(BaseModel):

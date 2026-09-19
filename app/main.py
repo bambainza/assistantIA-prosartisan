@@ -31,6 +31,7 @@ from app.routers import (
     parametres,
     payment,
     quota,
+    quote,
 )
 from app.services.rag_service import rag_service
 
@@ -119,6 +120,7 @@ app.include_router(quota.router)
 app.include_router(notification.router)
 app.include_router(actualite.router)
 app.include_router(finance.router)
+app.include_router(quote.router)
 app.include_router(parametres.router)
 app.include_router(admin.router)
 

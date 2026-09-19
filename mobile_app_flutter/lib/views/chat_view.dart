@@ -1,8 +1,10 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import '../viewmodels/chat_viewmodel.dart';
+import 'calculators_view.dart';
 import 'offline_sheets_view.dart';
 import 'paywall_dialog.dart';
+import 'quotes_view.dart';
 
 class ChatView extends StatefulWidget {
   const ChatView({super.key});
@@ -246,6 +248,46 @@ class _ChatViewState extends State<ChatView> {
               Navigator.push(
                 context,
                 MaterialPageRoute(builder: (_) => const OfflineSheetsView()),
+              );
+            },
+          ),
+          ListTile(
+            leading: const Icon(Icons.calculate, color: Color(0xFFE2A000)),
+            title: Text(
+              "Calculateurs Normés",
+              style: TextStyle(color: textColor, fontWeight: FontWeight.bold, fontSize: 14),
+            ),
+            subtitle: Text(
+              "Béton, Câblage, Pente, Carrelage, Clim",
+              style: TextStyle(color: textSecColor, fontSize: 11),
+            ),
+            onTap: () {
+              Navigator.pop(context);
+              Navigator.push(
+                context,
+                MaterialPageRoute(
+                  builder: (_) => CalculatorsView(networkClient: viewModel.client),
+                ),
+              );
+            },
+          ),
+          ListTile(
+            leading: const Icon(Icons.receipt_long, color: Color(0xFFE2A000)),
+            title: Text(
+              "Devis & Factures Express",
+              style: TextStyle(color: textColor, fontWeight: FontWeight.bold, fontSize: 14),
+            ),
+            subtitle: Text(
+              "Chiffrage IA & export WhatsApp",
+              style: TextStyle(color: textSecColor, fontSize: 11),
+            ),
+            onTap: () {
+              Navigator.pop(context);
+              Navigator.push(
+                context,
+                MaterialPageRoute(
+                  builder: (_) => QuotesView(networkClient: viewModel.client),
+                ),
               );
             },
           ),

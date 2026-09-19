@@ -45,8 +45,14 @@ Ce document complète `AGENTS.md` (règles d'ingénierie à respecter pour chaqu
 | 4.4 | Biométrie (`local_auth`) | Mobile | P2 | S | ✅ |
 | 4.5 | Crash reporting (Sentry) | Mobile | P1 | S | 🔄 |
 | 4.6 | i18n interface mobile | Mobile | P2 | M | ⏸️ |
+| 5.1 | RAG & Calculateurs Déterministes (Tool Calling) | Core RAG / Métier | P0 | M | ✅ |
+| 5.2 | Module Devis & Factures Pro-Forma (WhatsApp/PDF) | Devis & Facturation | P0 | M | ✅ |
+| 5.3 | Mode Vocal Mains-Libres (Voxtral Duplex WS) | Audio / WebSocket | P1 | M | ✅ |
+| 5.4 | Modales Interactives & Outils PWA (chat_web) | Chat web | P1 | S | ✅ |
+| 5.5 | Écrans Calculateurs & Devis Express (Flutter) | Mobile | P0 | M | ✅ |
+| 5.6 | Supervision Devis & Stats Calculateurs (admin_web) | Back-office | P1 | S | ✅ |
 
-**Statut priorités** : P0 ✅ (2026-09-14) — P1 ✅ (2026-09-14, 4.2/4.5 scaffoldés) — P2 ✅ (2026-09-14, Web Push finalisé le même jour ; a11y fait/i18n reportée sur 3.5 et 4.6 — voir notes).
+**Statut priorités** : P0 ✅ (2026-09-14 & 2026-09-19) — P1 ✅ (2026-09-14 & 2026-09-19) — P2 ✅ (2026-09-14). Tous les lots de modernisation 2026 (5.1 à 5.6) sont complétés et validés (209 tests backend, 11 tests Flutter, 100% de réussite).
 
 **Légende** : `🔄` code intégré et validé, mais inactif tant que l'utilisateur n'a pas fourni ses identifiants externes (Firebase, Sentry DSN, clés VAPID). `✅*` fait partiellement : voir note. `⏸️` reporté avec justification.
 
@@ -324,3 +330,11 @@ _(Ajouter ici, au fil de l'avancement, la date, l'item concerné et un résumé 
   - **3.5 Accessibilité (a11y)** : `aria-label` ajoutés sur tous les boutons icône-seule et champs `placeholder`-only de `chat_web/index.html` (menu, thème, micro, envoi, déconnexion, fermeture modale, champs de connexion/inscription). **i18n reportée délibérément** : le produit est français-only par conception (CLAUDE.md/PDR.md — le Nouchi/langues locales sont gérés côté LLM, pas dans l'interface) ; un scaffold i18n complet sans locale supplémentaire réelle à servir n'apporterait aucune valeur produit immédiate.
   - **4.4 Biométrie mobile** : `local_auth` ajouté, `BiometricService`, nouvel état `AppScreen.locked` avec écran de déverrouillage dédié (`main.dart`), bouton d'activation/désactivation dans l'AppBar du chat (confirmation biométrique requise pour activer).
   - **4.6 i18n mobile — reporté (`⏸️`)** : même justification que 3.5 (produit français-only). À reconsidérer si une cible anglophone (autres pays CEDEAO) est un jour visée.
+
+- **2026-09-19 — Modernisation Complète aux Standards 2026 (Lots 5.1 à 5.6).** 209/209 tests backend passent (+68 tests depuis la passe initiale), `flutter test` 11/11 tests au vert.
+  - **5.1 RAG & Calculateurs Déterministes (Tool Calling)** : `app/services/calculator_service.py` (Béton/Mortier 350kg/m³, Câblage NF C 15-100, Pentes DTU 60.11, Carrelage/Colle, Bilan Thermique Climatisation Tropicale), intégration loop Mistral tool calling dans `app/services/rag_service.py` sans hallucination numérique, endpoint `POST /api/chat/calculators/execute`.
+  - **5.2 Module Devis & Factures Pro-Forma (WhatsApp & PDF)** : modèle `Quote` (`app/models/quote.py`, migration `e7f8a9b0c1d2`), `app/services/quote_service.py` (extraction IA de notes de chantier vocales/brutes, calculs HT/TTC et acomptes, mise en page WhatsApp et export PDF), router `app/routers/quote.py` avec isolation anti-IDOR.
+  - **5.3 Mode Vocal Mains-Libres (Voxtral Duplex WS)** : streaming bidirectionnel base64 sur `/api/chat/ws`, transcription STT en direct (`user_transcription`), streaming texte de tokens et synthèse vocale TTS automatique (`audio_response`).
+  - **5.4 Outils Rapides Chat Web (PWA)** : modales pour les 5 calculateurs avec insertion des résultats dans la discussion, modale Devis Express avec bouton d'extraction IA et partage direct WhatsApp (`wa.me/?text=...`).
+  - **5.5 Application Mobile Flutter Native (`mobile_app_flutter/`)** : `CalculatorsView` (5 onglets tactiles de dimensionnement chantier), `QuotesView` (dictée/saisie, extraction IA, tableau de devis interactif avec calculs temps réel HT/TVA/TTC, export WhatsApp et sauvegarde serveur), intégration navigation Drawer dans `ChatView`.
+  - **5.6 Back-Office & Supervision Admin (`admin_web/`)** : endpoints `GET /api/admin/quotes` et `GET /api/admin/calculators/stats`, nouvel onglet "Devis & Chiffrages" avec métriques de calculateurs et tableau de consultation des devis émis.

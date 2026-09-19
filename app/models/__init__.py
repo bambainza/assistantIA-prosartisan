@@ -8,6 +8,7 @@ from app.models.message import Message
 from app.models.metier import Metier, SousMetier
 from app.models.package import Package
 from app.models.quota import QuotaUtilisateur
+from app.models.quote import Quote
 from app.models.subscription import UserSubscription
 from app.models.transaction import TransactionMobileMoney
 from app.models.user import User
@@ -21,6 +22,7 @@ __all__ = [
     "Metier",
     "Package",
     "QuotaUtilisateur",
+    "Quote",
     "SousMetier",
     "TransactionMobileMoney",
     "User",

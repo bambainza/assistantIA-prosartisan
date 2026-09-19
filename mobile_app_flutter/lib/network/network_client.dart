@@ -467,4 +467,108 @@ class NetworkClient {
       return null;
     }
   }
+
+  // --- Calculateurs Métier Normés ---
+  Future<Map<String, dynamic>> calculate(
+    String toolName,
+    Map<String, dynamic> parameters,
+  ) async {
+    try {
+      final response = await _dio.post(
+        '$_baseUrl/api/chat/calculate',
+        data: {
+          'tool_name': toolName,
+          'parameters': parameters,
+        },
+        options: Options(
+          headers: _token != null ? {'authorization': 'Bearer $_token'} : null,
+        ),
+      );
+      if (response.statusCode == 200 && response.data is Map) {
+        return Map<String, dynamic>.from(response.data as Map);
+      }
+      return {
+        'tool_name': toolName,
+        'result_text': 'Erreur: réponse invalide du serveur.',
+        'data': {},
+      };
+    } catch (e) {
+      return {
+        'tool_name': toolName,
+        'result_text': 'Erreur lors du calcul ($e).',
+        'data': {},
+      };
+    }
+  }
+
+  // --- Devis & Factures Pro-Forma ---
+  Future<Map<String, dynamic>> extractQuote(String prompt) async {
+    try {
+      final response = await _dio.post(
+        '$_baseUrl/api/quotes/extract',
+        data: {'prompt': prompt},
+        options: Options(
+          headers: _token != null ? {'authorization': 'Bearer $_token'} : null,
+        ),
+      );
+      if (response.statusCode == 200 && response.data is Map) {
+        return Map<String, dynamic>.from(response.data as Map);
+      }
+      return {};
+    } catch (e) {
+      throw Exception('Erreur lors de l\'analyse du devis : $e');
+    }
+  }
+
+  Future<Map<String, dynamic>> createQuote(Map<String, dynamic> quoteData) async {
+    try {
+      final response = await _dio.post(
+        '$_baseUrl/api/quotes',
+        data: quoteData,
+        options: Options(
+          headers: _token != null ? {'authorization': 'Bearer $_token'} : null,
+        ),
+      );
+      if ((response.statusCode == 200 || response.statusCode == 201) && response.data is Map) {
+        return Map<String, dynamic>.from(response.data as Map);
+      }
+      return {};
+    } catch (e) {
+      throw Exception('Erreur lors de la sauvegarde du devis : $e');
+    }
+  }
+
+  Future<List<dynamic>> listQuotes() async {
+    try {
+      final response = await _dio.get(
+        '$_baseUrl/api/quotes',
+        options: Options(
+          headers: _token != null ? {'authorization': 'Bearer $_token'} : null,
+        ),
+      );
+      if (response.statusCode == 200 && response.data is List) {
+        return response.data as List<dynamic>;
+      }
+      return [];
+    } catch (_) {
+      return [];
+    }
+  }
+
+  Future<Map<String, dynamic>> getQuote(String quoteId) async {
+    try {
+      final response = await _dio.get(
+        '$_baseUrl/api/quotes/$quoteId',
+        options: Options(
+          headers: _token != null ? {'authorization': 'Bearer $_token'} : null,
+        ),
+      );
+      if (response.statusCode == 200 && response.data is Map) {
+        return Map<String, dynamic>.from(response.data as Map);
+      }
+      return {};
+    } catch (e) {
+      throw Exception('Erreur lors de la récupération du devis : $e');
+    }
+  }
 }

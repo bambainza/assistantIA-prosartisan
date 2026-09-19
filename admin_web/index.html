@@ -147,6 +147,12 @@
                             </a>
                         </li>
                         <li class="nav-item" role="presentation">
+                            <a class="nav-link nav-menu-item" href="javascript:void(0);" data-tab="tab-quotes" role="tab" id="navtab-quotes" aria-selected="false" aria-controls="tab-quotes" tabindex="-1">
+                                <i class="iconoir-receipt menu-icon"></i>
+                                <span>Devis & Calculateurs</span>
+                            </a>
+                        </li>
+                        <li class="nav-item" role="presentation">
                             <a class="nav-link nav-menu-item" href="javascript:void(0);" data-tab="tab-parametres" role="tab" id="navtab-parametres" aria-selected="false" aria-controls="tab-parametres" tabindex="-1">
                                 <i class="iconoir-settings menu-icon"></i>
                                 <span>Paramètres</span>
@@ -934,10 +940,10 @@
                                         </button>
                                         <div id="totp-setup-block" class="d-none">
                                             <p class="small text-muted mb-1">Ajoutez ce code secret dans une application d'authentification (Google Authenticator, Authy...) :</p>
-                                            <div class="p-2 rounded bg-body-secondary border font-monospace small mb-2" id="totp-secret-display" style="word-break: break-all;"></div>
+                                            <div class="p-2 rounded bg-body-secondary border font-monospace small mb-2 totp-secret-box" id="totp-secret-display"></div>
                                             <label for="totp-enable-code" class="form-label fw-semibold">Code à 6 chiffres</label>
                                             <div class="d-flex gap-2">
-                                                <input type="text" id="totp-enable-code" class="form-control" style="max-width: 140px;" inputmode="numeric" maxlength="6" placeholder="123456">
+                                                <input type="text" id="totp-enable-code" class="form-control totp-input-code" inputmode="numeric" maxlength="6" placeholder="123456">
                                                 <button type="button" class="btn btn-primary btn-sm" onclick="confirmTotpEnable()">Confirmer l'activation</button>
                                             </div>
                                         </div>
@@ -947,7 +953,7 @@
                                     <div id="totp-disable-section" class="d-none">
                                         <label for="totp-disable-code" class="form-label fw-semibold">Code à 6 chiffres pour désactiver</label>
                                         <div class="d-flex gap-2">
-                                            <input type="text" id="totp-disable-code" class="form-control" style="max-width: 140px;" inputmode="numeric" maxlength="6" placeholder="123456">
+                                            <input type="text" id="totp-disable-code" class="form-control totp-input-code" inputmode="numeric" maxlength="6" placeholder="123456">
                                             <button type="button" class="btn btn-outline-danger btn-sm" onclick="confirmTotpDisable()">Désactiver la 2FA</button>
                                         </div>
                                     </div>
@@ -1222,6 +1228,185 @@
                                                 </tr>
                                             </thead>
                                             <tbody id="categories-tbody"><!-- Injected via JS --></tbody>
+                                        </table>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Tab: Devis & Calculateurs -->
+                <div id="tab-quotes" class="tab-page" role="tabpanel" aria-labelledby="navtab-quotes" tabindex="0">
+                    <div class="row mt-4">
+                        <!-- KPI 1 : Total Devis -->
+                        <div class="col-md-6 col-lg-3 mb-4">
+                            <div class="card report-card">
+                                <div class="card-body">
+                                    <div class="row d-flex justify-content-center">
+                                        <div class="col">
+                                            <p class="text-muted mb-0 fw-semibold">Devis & Factures</p>
+                                            <h3 class="my-1 fs-20" id="kpi-quotes-total">0</h3>
+                                            <p class="mb-0 text-truncate text-muted">Édités par les artisans</p>
+                                        </div>
+                                        <div class="col-auto align-self-center">
+                                            <div class="flex-shrink-0 bg-primary-subtle text-primary thumb-md rounded-circle d-flex align-items-center justify-content-center kpi-icon-circle">
+                                                <i class="iconoir-receipt fs-4"></i>
+                                            </div>
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+
+                        <!-- KPI 2 : Total Chiffré HT -->
+                        <div class="col-md-6 col-lg-3 mb-4">
+                            <div class="card report-card">
+                                <div class="card-body">
+                                    <div class="row d-flex justify-content-center">
+                                        <div class="col">
+                                            <p class="text-muted mb-0 fw-semibold">Volume Chiffré HT</p>
+                                            <h3 class="my-1 fs-20" id="kpi-quotes-volume-ht">0 F</h3>
+                                            <p class="mb-0 text-truncate text-muted">Valeur travaux cumulée</p>
+                                        </div>
+                                        <div class="col-auto align-self-center">
+                                            <div class="flex-shrink-0 bg-success-subtle text-success thumb-md rounded-circle d-flex align-items-center justify-content-center kpi-icon-circle">
+                                                <i class="iconoir-coins fs-4"></i>
+                                            </div>
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+
+                        <!-- KPI 3 : Total Chiffré TTC -->
+                        <div class="col-md-6 col-lg-3 mb-4">
+                            <div class="card report-card">
+                                <div class="card-body">
+                                    <div class="row d-flex justify-content-center">
+                                        <div class="col">
+                                            <p class="text-muted mb-0 fw-semibold">Volume TTC</p>
+                                            <h3 class="my-1 fs-20" id="kpi-quotes-volume-ttc">0 F</h3>
+                                            <p class="mb-0 text-truncate text-muted">TVA 18% incluse</p>
+                                        </div>
+                                        <div class="col-auto align-self-center">
+                                            <div class="flex-shrink-0 bg-info-subtle text-info thumb-md rounded-circle d-flex align-items-center justify-content-center kpi-icon-circle">
+                                                <i class="iconoir-wallet fs-4"></i>
+                                            </div>
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+
+                        <!-- KPI 4 : Calculs Normés Réalisés -->
+                        <div class="col-md-6 col-lg-3 mb-4">
+                            <div class="card report-card">
+                                <div class="card-body">
+                                    <div class="row d-flex justify-content-center">
+                                        <div class="col">
+                                            <p class="text-muted mb-0 fw-semibold">Calculs Normés</p>
+                                            <h3 class="my-1 fs-20" id="kpi-calc-total">0</h3>
+                                            <p class="mb-0 text-truncate text-muted">Outils certifiés exécutés</p>
+                                        </div>
+                                        <div class="col-auto align-self-center">
+                                            <div class="flex-shrink-0 bg-warning-subtle text-warning thumb-md rounded-circle d-flex align-items-center justify-content-center kpi-icon-circle">
+                                                <i class="iconoir-calculator fs-4"></i>
+                                            </div>
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Répartition des Calculateurs Métiers -->
+                    <div class="row mb-4">
+                        <div class="col-12">
+                            <div class="card">
+                                <div class="card-header bg-light-subtle d-flex justify-content-between align-items-center">
+                                    <h5 class="card-title my-0"><i class="iconoir-calculator me-2 text-warning"></i>Usage des Calculateurs Métier Déterministes</h5>
+                                    <button class="btn btn-sm btn-outline-primary" onclick="loadCalculatorsStats()"><i class="iconoir-refresh me-1"></i>Actualiser</button>
+                                </div>
+                                <div class="card-body">
+                                    <div class="row g-3" id="calc-stats-grid">
+                                        <div class="col-md-4 col-sm-6">
+                                            <div class="p-3 border rounded bg-body-tertiary">
+                                                <div class="d-flex justify-content-between align-items-center">
+                                                    <span class="fw-semibold">🏗️ Béton & Mortier</span>
+                                                    <span class="badge bg-primary fs-12" id="calc-count-beton">0</span>
+                                                </div>
+                                                <small class="text-muted">Dosages fondations, dalles, mortiers</small>
+                                            </div>
+                                        </div>
+                                        <div class="col-md-4 col-sm-6">
+                                            <div class="p-3 border rounded bg-body-tertiary">
+                                                <div class="d-flex justify-content-between align-items-center">
+                                                    <span class="fw-semibold">⚡ Câblage NF C 15-100</span>
+                                                    <span class="badge bg-primary fs-12" id="calc-count-cable">0</span>
+                                                </div>
+                                                <small class="text-muted">Sections cuivre, disjoncteurs</small>
+                                            </div>
+                                        </div>
+                                        <div class="col-md-4 col-sm-6">
+                                            <div class="p-3 border rounded bg-body-tertiary">
+                                                <div class="d-flex justify-content-between align-items-center">
+                                                    <span class="fw-semibold">🚿 Pente DTU 60.11</span>
+                                                    <span class="badge bg-primary fs-12" id="calc-count-plomb">0</span>
+                                                </div>
+                                                <small class="text-muted">Évacuations WC, douches, collecteurs</small>
+                                            </div>
+                                        </div>
+                                        <div class="col-md-6 col-sm-6">
+                                            <div class="p-3 border rounded bg-body-tertiary">
+                                                <div class="d-flex justify-content-between align-items-center">
+                                                    <span class="fw-semibold">🧱 Carrelage & Mortier-colle</span>
+                                                    <span class="badge bg-primary fs-12" id="calc-count-carr">0</span>
+                                                </div>
+                                                <small class="text-muted">Surface, découpes, sacs de colle</small>
+                                            </div>
+                                        </div>
+                                        <div class="col-md-6 col-sm-6">
+                                            <div class="p-3 border rounded bg-body-tertiary">
+                                                <div class="d-flex justify-content-between align-items-center">
+                                                    <span class="fw-semibold">❄️ Climatisation Tropicale</span>
+                                                    <span class="badge bg-primary fs-12" id="calc-count-clim">0</span>
+                                                </div>
+                                                <small class="text-muted">Bilan thermique BTU/h & kW</small>
+                                            </div>
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Tableau de supervision des Devis -->
+                    <div class="row">
+                        <div class="col-12">
+                            <div class="card">
+                                <div class="card-header bg-light-subtle d-flex justify-content-between align-items-center">
+                                    <h5 class="card-title my-0"><i class="iconoir-receipt me-2 text-primary"></i>Journal Global des Devis & Factures</h5>
+                                    <button class="btn btn-sm btn-outline-primary" onclick="loadAdminQuotes()"><i class="iconoir-refresh me-1"></i>Actualiser</button>
+                                </div>
+                                <div class="card-body">
+                                    <div class="table-responsive">
+                                        <table class="table table-hover align-middle mb-0">
+                                            <thead class="table-light">
+                                                <tr>
+                                                    <th scope="col">N° Devis</th>
+                                                    <th scope="col">Client</th>
+                                                    <th scope="col">Titre</th>
+                                                    <th scope="col">Total HT</th>
+                                                    <th scope="col">Total TTC</th>
+                                                    <th scope="col">Statut</th>
+                                                    <th scope="col">Date</th>
+                                                    <th scope="col">Action</th>
+                                                </tr>
+                                            </thead>
+                                            <tbody id="admin-quotes-tbody">
+                                                <!-- Injected via JS -->
+                                            </tbody>
                                         </table>
                                     </div>
                                 </div>

@@ -11,6 +11,8 @@
     <link rel="stylesheet" href="/chat/styles.css">
     <!-- PWA : installable, shell disponible hors-ligne (voir /chat/sw.js) -->
     <link rel="manifest" href="/chat/manifest.json">
+    <link rel="apple-touch-icon" href="/admin/assets/images/favicon.ico">
+    <link rel="shortcut icon" href="/admin/assets/images/favicon.ico">
     <meta name="theme-color" content="#0f0f17">
     <!-- Google Identity Services client library -->
     <script src="https://accounts.google.com/gsi/client" async defer></script>
@@ -60,13 +62,13 @@
             <!-- Sidebar Footer Options -->
             <div class="sidebar-footer">
                 <div class="footer-links">
-                    <a href="javascript:void(0);" onclick="showUnderConstruction('Images')">
-                        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="3" width="18" height="18" rx="2" ry="2"/><circle cx="8.5" cy="8.5" r="1.5"/><polyline points="21 15 16 10 5 21"/></svg>
-                        Images
+                    <a href="javascript:void(0);" onclick="openCalculatorsModal()" id="sidebar-calculators-btn">
+                        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="4" y="2" width="16" height="20" rx="2"/><line x1="8" y1="6" x2="16" y2="6"/><line x1="16" y1="14" x2="16" y2="18"/><path d="M8 10h.01M12 10h.01M16 10h.01M8 14h.01M12 14h.01M8 18h.01M12 18h.01"/></svg>
+                        Calculateurs Normés
                     </a>
-                    <a href="javascript:void(0);" onclick="showUnderConstruction('Plugins')">
-                        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 16V8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16z"/></svg>
-                        Plugins
+                    <a href="javascript:void(0);" onclick="openQuotesModal()" id="sidebar-quotes-btn">
+                        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="16" y1="13" x2="8" y2="13"/><line x1="16" y1="17" x2="8" y2="17"/><polyline points="10 9 9 9 8 9"/></svg>
+                        Devis & Factures
                     </a>
                     <a href="/admin/" target="_blank">
                         <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/></svg>
@@ -260,6 +262,255 @@
                     <p class="auth-switch-text">
                         Déjà inscrit ? <a href="javascript:void(0);" onclick="switchAuthView('login')" class="auth-switch-link">Se connecter</a>
                     </p>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Modal Calculateurs Métier Normés -->
+    <div class="modal-overlay hidden" id="calculators-modal" role="dialog" aria-modal="true" aria-labelledby="calc-modal-title">
+        <div class="modal-card modal-card-lg">
+            <button class="modal-close-btn" onclick="closeCalculatorsModal()" title="Fermer" aria-label="Fermer les calculateurs">×</button>
+            <div class="modal-header">
+                <h2 id="calc-modal-title">🧮 Calculateurs Métier Certifiés</h2>
+                <p>Calculs déterministes et conformes aux normes techniques (NF C 15-100, DTU 60.11, etc.).</p>
+            </div>
+            <div class="modal-body">
+                <!-- Tabs -->
+                <div class="calc-tabs">
+                    <button class="calc-tab-btn active" onclick="switchCalcTab('beton')" id="tab-btn-beton">🏗️ Béton & Mortier</button>
+                    <button class="calc-tab-btn" onclick="switchCalcTab('cable')" id="tab-btn-cable">⚡ Câblage Élec</button>
+                    <button class="calc-tab-btn" onclick="switchCalcTab('plomberie')" id="tab-btn-plomberie">🚿 Pente Évacuation</button>
+                    <button class="calc-tab-btn" onclick="switchCalcTab('carrelage')" id="tab-btn-carrelage">🧱 Carrelage & Colle</button>
+                    <button class="calc-tab-btn" onclick="switchCalcTab('clim')" id="tab-btn-clim">❄️ Climatisation</button>
+                </div>
+
+                <!-- Form Béton -->
+                <div class="calc-tab-content" id="tab-content-beton">
+                    <div class="calc-grid">
+                        <div class="form-group">
+                            <label for="calc-beton-type">Type d'ouvrage</label>
+                            <select id="calc-beton-type" class="form-control">
+                                <option value="beton_arme_fondation">Béton armé fondation / poteau (350 kg/m³)</option>
+                                <option value="dalle_sol">Dalle au sol / terrasse (300 kg/m³)</option>
+                                <option value="mortier_pose_agglo">Mortier de pose agglos (350 kg/m³)</option>
+                                <option value="enduit_facade">Enduit de façade / crépis (400 kg/m³)</option>
+                                <option value="chape_finition">Chape de finition (300 kg/m³)</option>
+                            </select>
+                        </div>
+                        <div class="form-group">
+                            <label for="calc-beton-vol">Volume (m³)</label>
+                            <input type="number" id="calc-beton-vol" class="form-control" placeholder="ex: 2.5" step="0.1" value="1.0">
+                        </div>
+                    </div>
+                    <button class="btn btn-primary" onclick="submitCalcBeton()">Calculer le dosage</button>
+                </div>
+
+                <!-- Form Câble -->
+                <div class="calc-tab-content hidden" id="tab-content-cable">
+                    <div class="calc-grid">
+                        <div class="form-group">
+                            <label for="calc-cable-power">Puissance cumulée (Watts)</label>
+                            <input type="number" id="calc-cable-power" class="form-control" placeholder="ex: 3500" value="3500">
+                        </div>
+                        <div class="form-group">
+                            <label for="calc-cable-voltage">Tension</label>
+                            <select id="calc-cable-voltage" class="form-control">
+                                <option value="230">Monophasé 230 V</option>
+                                <option value="400">Triphasé 400 V</option>
+                            </select>
+                        </div>
+                        <div class="form-group">
+                            <label for="calc-cable-length">Longueur de ligne (mètres)</label>
+                            <input type="number" id="calc-cable-length" class="form-control" placeholder="ex: 25" value="25">
+                        </div>
+                    </div>
+                    <button class="btn btn-primary" onclick="submitCalcCable()">Dimensionner selon NF C 15-100</button>
+                </div>
+
+                <!-- Form Plomberie -->
+                <div class="calc-tab-content hidden" id="tab-content-plomberie">
+                    <div class="calc-grid">
+                        <div class="form-group">
+                            <label for="calc-plomb-app">Type d'appareil sanitaire</label>
+                            <select id="calc-plomb-app" class="form-control">
+                                <option value="wc">WC (évacuation Ø100 mm)</option>
+                                <option value="douche">Douche / Baignoire (Ø40 mm)</option>
+                                <option value="evier">Évier cuisine / Lave-linge (Ø40-50 mm)</option>
+                                <option value="lavabo">Lavabo / Bidet (Ø32-40 mm)</option>
+                                <option value="collecteur">Collecteur principal / Colonne chute (Ø100-110 mm)</option>
+                            </select>
+                        </div>
+                        <div class="form-group">
+                            <label for="calc-plomb-length">Longueur du parcours (mètres)</label>
+                            <input type="number" id="calc-plomb-length" class="form-control" placeholder="ex: 4.5" step="0.5" value="4.0">
+                        </div>
+                    </div>
+                    <button class="btn btn-primary" onclick="submitCalcPlomb()">Calculer pente selon DTU 60.11</button>
+                </div>
+
+                <!-- Form Carrelage -->
+                <div class="calc-tab-content hidden" id="tab-content-carrelage">
+                    <div class="calc-grid">
+                        <div class="form-group">
+                            <label for="calc-carr-surf">Surface à carreler (m²)</label>
+                            <input type="number" id="calc-carr-surf" class="form-control" placeholder="ex: 30" value="25">
+                        </div>
+                        <div class="form-group">
+                            <label for="calc-carr-dim">Format des carreaux (cm)</label>
+                            <select id="calc-carr-dim" class="form-control">
+                                <option value="60x60">60 × 60 cm</option>
+                                <option value="30x30">30 × 30 cm</option>
+                                <option value="45x45">45 × 45 cm</option>
+                                <option value="20x20">20 × 20 cm</option>
+                                <option value="80x80">80 × 80 cm</option>
+                            </select>
+                        </div>
+                        <div class="form-group">
+                            <label for="calc-carr-waste">Marge chutes & découpes</label>
+                            <select id="calc-carr-waste" class="form-control">
+                                <option value="10">Pose droite standard (10%)</option>
+                                <option value="15">Pose diagonale / découpes complexes (15%)</option>
+                            </select>
+                        </div>
+                    </div>
+                    <button class="btn btn-primary" onclick="submitCalcCarrelage()">Estimer carreaux et colle</button>
+                </div>
+
+                <!-- Form Clim -->
+                <div class="calc-tab-content hidden" id="tab-content-clim">
+                    <div class="calc-grid">
+                        <div class="form-group">
+                            <label for="calc-clim-surf">Surface de la pièce (m²)</label>
+                            <input type="number" id="calc-clim-surf" class="form-control" placeholder="ex: 20" value="20">
+                        </div>
+                        <div class="form-group">
+                            <label for="calc-clim-height">Hauteur sous plafond (m)</label>
+                            <input type="number" id="calc-clim-height" class="form-control" placeholder="ex: 2.8" step="0.1" value="2.8">
+                        </div>
+                        <div class="form-group">
+                            <label for="calc-clim-sun">Exposition solaire</label>
+                            <select id="calc-clim-sun" class="form-control">
+                                <option value="normale">Normale / Est / Ombragé</option>
+                                <option value="forte">Forte / Ouest / Sous toiture tôle</option>
+                            </select>
+                        </div>
+                        <div class="form-group">
+                            <label for="calc-clim-pers">Nombre d'occupants</label>
+                            <input type="number" id="calc-clim-pers" class="form-control" value="2" min="1">
+                        </div>
+                    </div>
+                    <button class="btn btn-primary" onclick="submitCalcClim()">Calculer bilan frigorifique</button>
+                </div>
+
+                <!-- Result Box -->
+                <div class="calc-result-box hidden" id="calc-result-box">
+                    <div class="calc-result-header">
+                        <span class="calc-result-title">📋 Résultat Certifié</span>
+                        <div class="calc-result-actions">
+                            <button class="btn btn-sm btn-secondary" onclick="copyCalcResult()">Copier</button>
+                            <button class="btn btn-sm btn-primary" onclick="injectCalcResultToChat()">Insérer dans le chat</button>
+                        </div>
+                    </div>
+                    <pre id="calc-result-text" class="calc-result-body"></pre>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Modal Devis & Factures Pro-Forma -->
+    <div class="modal-overlay hidden" id="quotes-modal" role="dialog" aria-modal="true" aria-labelledby="quotes-modal-title">
+        <div class="modal-card modal-card-lg">
+            <button class="modal-close-btn" onclick="closeQuotesModal()" title="Fermer" aria-label="Fermer les devis">×</button>
+            <div class="modal-header">
+                <h2 id="quotes-modal-title">📄 Générateur de Devis & Factures</h2>
+                <p>Créez un devis professionnel en dictant ou saisissant vos notes de chantier.</p>
+            </div>
+            <div class="modal-body">
+                <div class="quote-voice-extract-box">
+                    <label for="quote-prompt-input">Notes de chantier / Demande du client :</label>
+                    <textarea id="quote-prompt-input" rows="3" class="form-control" placeholder="ex: Devis pour M. Konan (0701020304) à Cocody : Réfection salle de bain avec 1 receveur 90x90 à 75000 F, 1 mitigeur douche à 25000 F, 20m² carrelage mural à 4500 F/m², pose et plomberie à 60000 F."></textarea>
+                    <button class="btn btn-primary mt-2" onclick="extractQuoteFromText()" id="btn-extract-quote">
+                        ✨ Analyser & Chiffrer automatiquement
+                    </button>
+                </div>
+
+                <!-- Quote Form Details -->
+                <div class="quote-editor-section mt-4">
+                    <div class="calc-grid">
+                        <div class="form-group">
+                            <label for="quote-client-name">Nom du client</label>
+                            <input type="text" id="quote-client-name" class="form-control" placeholder="M. Konan">
+                        </div>
+                        <div class="form-group">
+                            <label for="quote-client-phone">Téléphone</label>
+                            <input type="tel" id="quote-client-phone" class="form-control" placeholder="+225 07 00 00 00 00">
+                        </div>
+                        <div class="form-group">
+                            <label for="quote-client-address">Localisation / Ville</label>
+                            <input type="text" id="quote-client-address" class="form-control" placeholder="Abidjan, Cocody">
+                        </div>
+                        <div class="form-group">
+                            <label for="quote-type">Type de document</label>
+                            <select id="quote-type" class="form-control">
+                                <option value="devis">Devis estimatif</option>
+                                <option value="facture_proforma">Facture Pro-Forma</option>
+                                <option value="facture">Facture finale</option>
+                            </select>
+                        </div>
+                    </div>
+
+                    <!-- Lignes du devis -->
+                    <div class="quote-items-container mt-3">
+                        <div class="quote-items-header">
+                            <label>Lignes du devis (Prestations & Fournitures)</label>
+                            <button class="btn btn-sm btn-secondary" onclick="addQuoteItemRow()">+ Ajouter une ligne</button>
+                        </div>
+                        <div class="quote-table-wrap">
+                            <table class="quote-table" id="quote-items-table">
+                                <thead>
+                                    <tr>
+                                        <th>Désignation</th>
+                                        <th class="col-qty">Qté</th>
+                                        <th class="col-unit">Unité</th>
+                                        <th class="col-unit-price">Prix Unit. (FCFA)</th>
+                                        <th class="col-total">Total (FCFA)</th>
+                                        <th class="col-actions"></th>
+                                    </tr>
+                                </thead>
+                                <tbody id="quote-items-tbody">
+                                    <!-- Dynamic rows -->
+                                </tbody>
+                            </table>
+                        </div>
+                    </div>
+
+                    <!-- Totaux -->
+                    <div class="quote-totals-card mt-3">
+                        <div class="quote-total-row">
+                            <span>Total HT :</span>
+                            <span id="quote-total-ht" class="quote-total-val">0 FCFA</span>
+                        </div>
+                        <div class="quote-total-row">
+                            <span>TVA (18%) :</span>
+                            <span id="quote-total-tva" class="quote-total-val">0 FCFA</span>
+                        </div>
+                        <div class="quote-total-row highlight">
+                            <span>Total TTC :</span>
+                            <span id="quote-total-ttc" class="quote-total-val">0 FCFA</span>
+                        </div>
+                    </div>
+
+                    <!-- Actions d'export -->
+                    <div class="quote-actions-bar mt-4">
+                        <button class="btn btn-secondary" onclick="saveQuoteToServer()" id="btn-save-quote">💾 Enregistrer</button>
+                        <button class="btn btn-whatsapp" onclick="exportQuoteWhatsApp()" id="btn-whatsapp-quote">
+                            📱 Exporter pour WhatsApp
+                        </button>
+                        <button class="btn btn-primary" onclick="previewQuoteHtml()" id="btn-preview-quote">
+                            🖨️ Imprimer / PDF
+                        </button>
+                    </div>
                 </div>
             </div>
         </div>

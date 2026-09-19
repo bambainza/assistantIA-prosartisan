@@ -44,6 +44,15 @@ def _isoler_cache():
     cache_service.reset()
 
 
+@pytest.fixture(autouse=True)
+def _isoler_services_externes(monkeypatch):
+    """Garantit que la suite de tests s'exécute de façon autonome et déterministe
+    en mode mock pour les APIs IA externes (Mistral LLM, Voxtral STT/TTS)."""
+    from app.config import settings
+
+    monkeypatch.setattr(settings, "mistral_api_key", "sk-placeholder-test")
+
+
 @pytest.fixture
 def anyio_backend():
     return "asyncio"

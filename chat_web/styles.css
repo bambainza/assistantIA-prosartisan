@@ -1206,3 +1206,288 @@ h1, h2, h3, h4, h5, h6 {
 .actualites-banner-close:hover {
     color: var(--text-main);
 }
+
+/* Modal Large */
+.modal-card-lg {
+    max-width: 780px;
+    width: 95%;
+    max-height: 90vh;
+    overflow-y: auto;
+}
+
+/* Tabs calculateurs */
+.calc-tabs {
+    display: flex;
+    gap: 8px;
+    overflow-x: auto;
+    padding-bottom: 8px;
+    margin-bottom: 16px;
+    border-bottom: 1px solid var(--border-color);
+}
+
+.calc-tab-btn {
+    background: var(--bg-card);
+    color: var(--text-muted);
+    border: 1px solid var(--border-color);
+    padding: 8px 14px;
+    border-radius: 8px;
+    font-size: 13px;
+    font-weight: 500;
+    cursor: pointer;
+    white-space: nowrap;
+    transition: all 0.2s ease;
+}
+
+.calc-tab-btn:hover, .calc-tab-btn.active {
+    background: var(--primary);
+    color: #121212;
+    border-color: var(--primary);
+    font-weight: 600;
+}
+
+.calc-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+    gap: 12px;
+    margin-bottom: 16px;
+}
+
+.form-group {
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+}
+
+.form-group label {
+    font-size: 12.5px;
+    color: var(--text-muted);
+    font-weight: 500;
+}
+
+.form-control {
+    padding: 10px 12px;
+    background: var(--bg-main);
+    border: 1px solid var(--border-color);
+    border-radius: 8px;
+    color: var(--text-main);
+    font-size: 14px;
+    outline: none;
+    font-family: inherit;
+}
+
+.form-control:focus {
+    border-color: var(--primary);
+}
+
+/* Result Box */
+.calc-result-box {
+    margin-top: 16px;
+    padding: 16px;
+    background: var(--bg-main);
+    border: 1px solid var(--primary);
+    border-radius: 10px;
+}
+
+.calc-result-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 10px;
+}
+
+.calc-result-title {
+    font-weight: 600;
+    font-size: 14px;
+    color: var(--primary);
+}
+
+.calc-result-actions {
+    display: flex;
+    gap: 8px;
+}
+
+.calc-result-body {
+    font-family: 'Consolas', 'Courier New', monospace;
+    font-size: 13px;
+    white-space: pre-wrap;
+    word-break: break-word;
+    color: var(--text-main);
+    line-height: 1.5;
+}
+
+/* Devis & Factures Table & Layout */
+.quote-voice-extract-box {
+    background: var(--bg-card);
+    padding: 14px;
+    border-radius: 10px;
+    border: 1px solid var(--border-color);
+}
+
+.quote-items-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 8px;
+    font-size: 13px;
+    font-weight: 600;
+}
+
+.quote-table-wrap {
+    overflow-x: auto;
+    border: 1px solid var(--border-color);
+    border-radius: 8px;
+    background: var(--bg-main);
+}
+
+.quote-table {
+    width: 100%;
+    border-collapse: collapse;
+    font-size: 13px;
+}
+
+.quote-table th {
+    background: var(--bg-card);
+    padding: 8px 10px;
+    text-align: left;
+    color: var(--text-muted);
+    font-weight: 500;
+    border-bottom: 1px solid var(--border-color);
+}
+
+.quote-table td {
+    padding: 6px 8px;
+    border-bottom: 1px solid var(--border-color);
+}
+
+.quote-table input {
+    width: 100%;
+    padding: 6px 8px;
+    background: var(--bg-card);
+    border: 1px solid var(--border-color);
+    border-radius: 6px;
+    color: var(--text-main);
+    font-size: 12.5px;
+}
+
+.quote-totals-card {
+    background: var(--bg-card);
+    padding: 12px 16px;
+    border-radius: 8px;
+    max-width: 300px;
+    margin-left: auto;
+}
+
+.quote-total-row {
+    display: flex;
+    justify-content: space-between;
+    font-size: 13px;
+    padding: 4px 0;
+    color: var(--text-muted);
+}
+
+.quote-total-row.highlight {
+    font-size: 15px;
+    font-weight: bold;
+    color: var(--primary);
+    border-top: 1px solid var(--border-color);
+    margin-top: 4px;
+    padding-top: 8px;
+}
+
+.quote-actions-bar {
+    display: flex;
+    gap: 10px;
+    justify-content: flex-end;
+    flex-wrap: wrap;
+}
+
+.btn-whatsapp {
+    background-color: #25D366;
+    color: #FFFFFF;
+    font-weight: 600;
+}
+
+.btn-whatsapp:hover {
+    background-color: #1EBE5D;
+}
+
+/* Micro vocal animé mains-libres */
+.recording-active {
+    background: #e53935 !important;
+    color: #ffffff !important;
+    animation: mic-pulse 1.2s infinite ease-in-out;
+}
+
+@keyframes mic-pulse {
+    0% {
+        box-shadow: 0 0 0 0 rgba(229, 57, 53, 0.7);
+        transform: scale(1);
+    }
+    50% {
+        box-shadow: 0 0 0 10px rgba(229, 57, 53, 0);
+        transform: scale(1.08);
+    }
+    100% {
+        box-shadow: 0 0 0 0 rgba(229, 57, 53, 0);
+        transform: scale(1);
+    }
+}
+
+/* Table du générateur de devis */
+.quote-table {
+    width: 100%;
+    border-collapse: collapse;
+    margin-top: 0.5rem;
+}
+
+.quote-table th,
+.quote-table td {
+    padding: 0.5rem;
+    font-size: 0.85rem;
+    border-bottom: 1px solid var(--border-color, #2d2d3d);
+}
+
+.quote-table th.col-qty,
+.quote-table td.col-qty {
+    width: 80px;
+}
+
+.quote-table th.col-unit,
+.quote-table td.col-unit {
+    width: 80px;
+}
+
+.quote-table th.col-unit-price,
+.quote-table td.col-unit-price {
+    width: 120px;
+}
+
+.quote-table th.col-total,
+.quote-table td.col-total {
+    width: 120px;
+}
+
+.quote-table th.col-actions,
+.quote-table td.col-actions {
+    width: 40px;
+}
+
+.quote-table input.item-unit {
+    width: 50px;
+}
+
+.quote-table .item-total-cell {
+    font-weight: 600;
+    text-align: right;
+}
+
+.quote-table .remove-item-btn {
+    background: none;
+    border: none;
+    color: #e53935;
+    cursor: pointer;
+    font-size: 1rem;
+    padding: 0.25rem;
+    line-height: 1;
+}
+

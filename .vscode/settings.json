@@ -111,14 +111,22 @@
     "mobile_app_flutter/build/**": true
   },
 
-  // ── Java/Gradle : empêche l'import du dossier android de Flutter ─
+  // ── Java/Gradle : désactive l'analyse Java/Gradle dans ce projet Python/Flutter ─
   "java.import.gradle.enabled": false,
+  "java.import.maven.enabled": false,
+  "java.autobuild.enabled": false,
+  "java.import.generatesMetadataFilesAtProjectRoot": false,
+  "java.configuration.updateBuildConfiguration": "disabled",
   "java.project.exclusionFilters": [
     "**/mobile_app_flutter/**",
+    "**/mobile_app/**",
     "**/node_modules/**",
-    "**/.venv/**"
+    "**/.venv/**",
+    "**/.gradle/**"
   ],
   "gradle.autoDetect": "off",
+  "gradle.nestedProjects": false,
+  "gradle.projects": [],
 
   "files.associations": {
     "Caddyfile": "caddyfile",

@@ -9,6 +9,7 @@ l'assemblage du prompt système multilingue et l'appel à l'API LLM
 from __future__ import annotations
 
 import asyncio
+import json
 import logging
 import os
 from typing import Any
@@ -25,6 +26,7 @@ from qdrant_client.http.models import (
 
 from app.config import settings
 from app.services.cache_service import cache_service
+from app.services.calculator_service import calculator_service
 
 logger = logging.getLogger(__name__)
 
@@ -298,12 +300,69 @@ class RAGService:
             messages.append({"role": "user", "content": question})
             model_to_use = settings.llm_model
 
+        tools = calculator_service.get_tool_definitions() if not image_url else None
+
         completion = await self.mistral_client.chat.complete_async(
             model=model_to_use,
             messages=messages,
+            tools=tools,
             temperature=settings.llm_temperature,
         )
-        answer = completion.choices[0].message.content or ""
+        choice = completion.choices[0]
+        tool_calls = getattr(choice.message, "tool_calls", None)
+
+        if tool_calls:
+            tool_results = []
+            for tc in tool_calls:
+                fn_name = tc.function.name
+                fn_args = (
+                    json.loads(tc.function.arguments)
+                    if isinstance(tc.function.arguments, str)
+                    else tc.function.arguments
+                )
+                try:
+                    res = calculator_service.execute_tool(fn_name, fn_args)
+                    tool_results.append(
+                        {"tool": fn_name, "args": fn_args, "result": res}
+                    )
+                except Exception as e:
+                    logger.warning(
+                        "Erreur lors de l'exécution de l'outil %s: %s", fn_name, e
+                    )
+                    tool_results.append({"tool": fn_name, "error": str(e)})
+
+            # Deuxième tour de complétion avec les résultats d'outils
+            messages.append(
+                choice.message.model_dump()
+                if hasattr(choice.message, "model_dump")
+                else {
+                    "role": "assistant",
+                    "content": None,
+                    "tool_calls": tool_calls,
+                }
+            )
+            for i, tc in enumerate(tool_calls):
+                messages.append(
+                    {
+                        "role": "tool",
+                        "name": tc.function.name,
+                        "content": json.dumps(
+                            tool_results[i]["result"]
+                            if i < len(tool_results) and "result" in tool_results[i]
+                            else tool_results[i]
+                        ),
+                        "tool_call_id": getattr(tc, "id", f"call_{i}"),
+                    }
+                )
+
+            completion2 = await self.mistral_client.chat.complete_async(
+                model=model_to_use,
+                messages=messages,
+                temperature=settings.llm_temperature,
+            )
+            answer = completion2.choices[0].message.content or ""
+        else:
+            answer = choice.message.content or ""
 
         final_res = {
             "reponse": answer,

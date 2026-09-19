@@ -301,3 +301,13 @@
     color: #8a92a6;
 }
 
+/* TOTP / 2FA Components */
+.totp-secret-box {
+    word-break: break-all;
+}
+
+.totp-input-code {
+    max-width: 140px;
+}
+
+
