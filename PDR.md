@@ -157,11 +157,11 @@ python -m ingestion.pipeline --docs-dir ./ingestion/documents --metier-id 1
 
 ## 📝 7. Gouvernance documentaire obligatoire
 
-Toute nouvelle implémentation, évolution fonctionnelle, modification d'API, changement d'architecture, nouveau garde-fou de sécurité ou changement de configuration doit mettre à jour, dans le **même lot de modifications** :
+Avant **chaque commit** puis avant **chaque push**, toute implémentation ou modification, même mineure, impose une vérification et une mise à jour systématiques de la documentation de référence dans le **même lot de modifications** :
 
 1. `PDR.md`, lorsque le comportement produit, l'architecture, les endpoints, les intégrations, les contraintes ou les procédures de validation changent ;
 2. `AGENTS.md`, lorsqu'une règle d'ingénierie, de sécurité, de qualité ou de livraison est ajoutée ou modifiée ;
 3. `CLAUDE.md` et `.agents/rules/project_rules.md`, afin que tous les assistants et IDE appliquent les mêmes règles ;
 4. `.env.example`, les fichiers de déploiement et le `README.md` lorsqu'une variable, une commande ou une procédure d'exploitation change.
 
-Une implémentation concernée par ces documents est **incomplète** tant que leur mise à jour synchronisée n'est pas livrée. La revue de code doit vérifier explicitement cette cohérence et demander une justification écrite lorsqu'aucune mise à jour documentaire n'est nécessaire.
+Le contrôle documentaire constitue une étape bloquante de la livraison : aucun `git commit` ni `git push` ne doit être exécuté avant d'avoir vérifié et, si nécessaire, actualisé chacun de ces fichiers. Même lorsqu'aucun contenu métier ne change, les fichiers doivent être relus avant le commit et le push ; le compte rendu doit alors confirmer explicitement qu'ils sont toujours à jour. Une implémentation est **incomplète** tant que cette vérification n'a pas été effectuée.

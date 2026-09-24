@@ -88,9 +88,10 @@ Consultez [`.env.example`](.env.example) pour la liste complète.
 - `PDR.md` est le PRD/PDR et la source de vérité produit et architecture.
 - `AGENTS.md`, `CLAUDE.md` et `.agents/rules/project_rules.md` portent les règles d'implémentation.
 
-Toute nouvelle implémentation doit mettre à jour dans le même lot les documents
-qu'elle affecte. Une livraison est incomplète si le PRD, les règles, les exemples
-d'environnement ou les procédures d'exploitation ne correspondent plus au code.
+Avant chaque commit puis avant chaque push, toute implémentation doit déclencher
+une relecture et une mise à jour systématiques du PRD/PDR et des fichiers de
+règles. Aucun commit ou push ne doit être effectué tant que ces documents, les
+exemples d'environnement et les procédures concernées ne correspondent pas au code.
 
 ## 📄 Licence
 

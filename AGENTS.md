@@ -58,8 +58,8 @@ Ce document définit les normes d'ingénierie, les conventions de code et les ga
 
 ## 📝 5. Synchronisation obligatoire de la documentation
 
-- **Mise à jour dans le même lot** : toute nouvelle implémentation ou modification structurante doit mettre à jour les documents qu'elle affecte dans le même commit ou la même pull request. Une fonctionnalité n'est pas terminée si sa documentation de référence est devenue inexacte.
+- **Contrôle bloquant avant Git** : avant chaque `git commit` puis avant chaque `git push`, relire et mettre à jour systématiquement la documentation de référence pour toute implémentation ou modification, même mineure. Il est interdit de committer ou pousser tant que ce contrôle n'est pas terminé.
 - **PRD/PDR** : mettre à jour `PDR.md` pour tout changement de comportement produit, parcours utilisateur, endpoint, architecture, intégration externe, configuration, offre commerciale ou procédure de validation.
 - **Règles agents/IDE** : lorsqu'une règle d'ingénierie, de sécurité, de qualité ou de livraison évolue, synchroniser obligatoirement `AGENTS.md`, `CLAUDE.md` et `.agents/rules/project_rules.md`. Aucun de ces fichiers ne doit contredire les autres.
 - **Exploitation** : mettre à jour `.env.example`, `README.md` et les manifests de déploiement concernés dès qu'une variable d'environnement, une dépendance, une commande ou une procédure opérationnelle change.
-- **Contrôle de livraison** : avant livraison, vérifier explicitement si chacun de ces documents nécessite une modification. Si aucune mise à jour n'est nécessaire, le signaler dans le compte rendu de livraison avec une justification concise.
+- **Traçabilité du contrôle** : si la relecture conclut qu'aucune modification documentaire supplémentaire n'est nécessaire, le signaler explicitement dans le compte rendu avant le commit et confirmer à nouveau la cohérence avant le push. Cette confirmation ne dispense jamais de la relecture systématique.
