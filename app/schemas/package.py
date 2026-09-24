@@ -5,7 +5,7 @@ from __future__ import annotations
 import uuid
 from datetime import datetime
 
-from pydantic import BaseModel, ConfigDict, Field
+from pydantic import BaseModel, ConfigDict, Field, model_validator
 
 
 class PackageBase(BaseModel):
@@ -40,15 +40,25 @@ class PackageBase(BaseModel):
     model_config = ConfigDict(populate_by_name=True)
 
     est_actif: bool = Field(
-        default=True,
-        alias="is_active",
-        description="Visible et souscriptible au catalogue",
+        default=True, description="Visible et souscriptible au catalogue"
     )
     fonctionnalites: list[str] = Field(
         default_factory=list,
-        alias="features",
         description="Liste des avantages inclus",
     )
+
+    @model_validator(mode="before")
+    @classmethod
+    def accepter_aliases_api(cls, data: object) -> object:
+        """Accepte les noms historiques anglais sans alias Pydantic ambigu."""
+        if not isinstance(data, dict):
+            return data
+        normalized = dict(data)
+        if "est_actif" not in normalized and "is_active" in normalized:
+            normalized["est_actif"] = normalized["is_active"]
+        if "fonctionnalites" not in normalized and "features" in normalized:
+            normalized["fonctionnalites"] = normalized["features"]
+        return normalized
 
 
 class PackageCreate(PackageBase):
@@ -67,8 +77,20 @@ class PackageUpdate(BaseModel):
     duree_jours: int | None = Field(default=None, ge=1)
     quota_requetes: int | None = Field(default=None, ge=1)
     auto_renouvelable: bool | None = None
-    est_actif: bool | None = Field(default=None, alias="is_active")
-    fonctionnalites: list[str] | None = Field(default=None, alias="features")
+    est_actif: bool | None = None
+    fonctionnalites: list[str] | None = None
+
+    @model_validator(mode="before")
+    @classmethod
+    def accepter_aliases_api(cls, data: object) -> object:
+        if not isinstance(data, dict):
+            return data
+        normalized = dict(data)
+        if "est_actif" not in normalized and "is_active" in normalized:
+            normalized["est_actif"] = normalized["is_active"]
+        if "fonctionnalites" not in normalized and "features" in normalized:
+            normalized["fonctionnalites"] = normalized["features"]
+        return normalized
 
 
 class PackageResponse(PackageBase):

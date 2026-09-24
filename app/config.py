@@ -89,6 +89,7 @@ class Settings(BaseSettings):
 
     # ── LLM (Mistral) & Vision / Audio ──
     mistral_api_key: str = "sk-placeholder"
+    google_client_id: str = ""
     llm_model: str = "mistral-small-latest"
     # Modèle utilisé pour l'analyse de photos de chantier (vision) — depuis les
     # familles Mistral 3.x/Magistral, la vision est intégrée nativement, plus

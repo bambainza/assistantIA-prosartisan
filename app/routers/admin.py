@@ -29,7 +29,7 @@ from sqlalchemy.orm import selectinload
 
 from app.config import settings
 from app.db.session import async_session, get_db
-from app.middleware.auth import get_current_admin_user_id, require_permission
+from app.middleware.auth import require_permission
 from app.models.actualite import ActualiteCategorie
 from app.models.audit_log import AuditLog
 from app.models.document_config import DocumentConfig
@@ -79,7 +79,7 @@ async def upload_pdf(
     secteur_id: int = Form(1),
     type_document: str = Form("guide_technique"),
     niveau_expertise: str = Form("intermédiaire"),
-    admin_id: uuid.UUID = Depends(get_current_admin_user_id),
+    admin_id: uuid.UUID = Depends(require_permission("documents.write")),
 ) -> dict[str, Any]:
     """Upload un document PDF technique et lance son ingestion vectorielle en
     arrière-plan (sécurisé admin). L'ingestion (extraction, découpage,
@@ -127,7 +127,7 @@ async def upload_pdf(
 
 @router.get("/stats")
 async def get_ingestion_stats(
-    admin_id: uuid.UUID = Depends(get_current_admin_user_id),
+    admin_id: uuid.UUID = Depends(require_permission("documents.write")),
 ) -> dict[str, Any]:
     """Retourne les statistiques réelles de la base de connaissances Qdrant."""
     total_chunks = 0
@@ -159,7 +159,7 @@ async def get_ingestion_stats(
 
 @router.get("/overview")
 async def get_admin_overview(
-    admin_id: uuid.UUID = Depends(get_current_admin_user_id),
+    admin_id: uuid.UUID = Depends(require_permission("users.read")),
     db: AsyncSession = Depends(get_db),
 ) -> dict[str, Any]:
     """Retourne la synthèse globale des KPIs réels pour le tableau de bord."""
@@ -243,7 +243,7 @@ async def get_admin_overview(
 
 @router.get("/users")
 async def get_users_list(
-    admin_id: uuid.UUID = Depends(get_current_admin_user_id),
+    admin_id: uuid.UUID = Depends(require_permission("users.read")),
     db: AsyncSession = Depends(get_db),
 ) -> dict[str, Any]:
     """Retourne la liste des artisans inscrits avec statut de quota."""
@@ -308,7 +308,7 @@ async def grant_pass_to_user(
     user_id: str,
     request: Request,
     type_pass: str = "pass_24h",
-    admin_id: uuid.UUID = Depends(get_current_admin_user_id),
+    admin_id: uuid.UUID = Depends(require_permission("users.grant_pass")),
     db: AsyncSession = Depends(get_db),
 ) -> dict[str, Any]:
     """Attribue ou prolonge manuellement un Pass Pro pour un artisan (écritures réelles)."""
@@ -367,7 +367,7 @@ async def grant_pass_to_user(
 
 @router.get("/documents")
 async def get_documents_list(
-    admin_id: uuid.UUID = Depends(get_current_admin_user_id),
+    admin_id: uuid.UUID = Depends(require_permission("documents.write")),
     db: AsyncSession = Depends(get_db),
 ) -> dict[str, Any]:
     """Retourne la liste des fiches et guides techniques ingérés dans Qdrant avec statut d'activation."""
@@ -444,7 +444,7 @@ async def get_documents_list(
 async def toggle_document_status(
     doc_name: str,
     request: Request,
-    admin_id: uuid.UUID = Depends(get_current_admin_user_id),
+    admin_id: uuid.UUID = Depends(require_permission("documents.write")),
     db: AsyncSession = Depends(get_db),
 ) -> dict[str, Any]:
     """Active ou désactive un document pour la consultation dans le chat RAG."""
@@ -486,7 +486,7 @@ async def toggle_document_status(
 
 @router.get("/metiers")
 async def get_metiers_list(
-    admin_id: uuid.UUID = Depends(get_current_admin_user_id),
+    admin_id: uuid.UUID = Depends(require_permission("parametres.read")),
     db: AsyncSession = Depends(get_db),
 ) -> dict[str, Any]:
     """Retourne la liste des métiers et leur statut d'activation pour le chat."""
@@ -512,7 +512,7 @@ async def get_metiers_list(
 async def toggle_metier_status(
     metier_id: int,
     request: Request,
-    admin_id: uuid.UUID = Depends(get_current_admin_user_id),
+    admin_id: uuid.UUID = Depends(require_permission("parametres.write")),
     db: AsyncSession = Depends(get_db),
 ) -> dict[str, Any]:
     """Active ou désactive un pôle de métier complet pour les utilisateurs du chat."""
@@ -550,7 +550,7 @@ async def toggle_metier_status(
 async def delete_document(
     doc_id: str,
     request: Request,
-    admin_id: uuid.UUID = Depends(get_current_admin_user_id),
+    admin_id: uuid.UUID = Depends(require_permission("documents.delete")),
     db: AsyncSession = Depends(get_db),
 ) -> dict[str, Any]:
     """Supprime un document technique de la base de connaissances Qdrant."""
@@ -599,7 +599,7 @@ async def delete_document(
 
 @router.get("/logs")
 async def get_system_logs(
-    admin_id: uuid.UUID = Depends(get_current_admin_user_id),
+    admin_id: uuid.UUID = Depends(require_permission("logs.read")),
     db: AsyncSession = Depends(get_db),
 ) -> dict[str, Any]:
     """Retourne les journaux d'activité récents."""
@@ -630,7 +630,7 @@ async def get_system_logs(
 @router.get("/packages")
 async def get_packages_list(
     only_active: bool = False,
-    admin_id: uuid.UUID = Depends(get_current_admin_user_id),
+    admin_id: uuid.UUID = Depends(require_permission("packages.read")),
     db: AsyncSession = Depends(get_db),
 ) -> dict[str, Any]:
     """Retourne la liste des packages commerciaux avec le nombre d'abonnés actifs."""
@@ -642,7 +642,7 @@ async def get_packages_list(
 async def create_package(
     payload: PackageCreate,
     request: Request,
-    admin_id: uuid.UUID = Depends(get_current_admin_user_id),
+    admin_id: uuid.UUID = Depends(require_permission("packages.write")),
     db: AsyncSession = Depends(get_db),
 ) -> dict[str, Any]:
     """Crée une nouvelle offre commerciale."""
@@ -687,7 +687,7 @@ async def update_package(
     package_id: uuid.UUID,
     payload: PackageUpdate,
     request: Request,
-    admin_id: uuid.UUID = Depends(get_current_admin_user_id),
+    admin_id: uuid.UUID = Depends(require_permission("packages.write")),
     db: AsyncSession = Depends(get_db),
 ) -> dict[str, Any]:
     """Met à jour une offre commerciale existante."""
@@ -732,7 +732,7 @@ async def toggle_package(
     package_id: uuid.UUID,
     request: Request,
     active: bool | None = None,
-    admin_id: uuid.UUID = Depends(get_current_admin_user_id),
+    admin_id: uuid.UUID = Depends(require_permission("packages.write")),
     db: AsyncSession = Depends(get_db),
 ) -> dict[str, Any]:
     """Bascule ou définit l'état actif/inactif d'un package dans le catalogue."""
@@ -772,7 +772,7 @@ async def delete_package(
     package_id: uuid.UUID,
     request: Request,
     force: bool = False,
-    admin_id: uuid.UUID = Depends(get_current_admin_user_id),
+    admin_id: uuid.UUID = Depends(require_permission("packages.write")),
     db: AsyncSession = Depends(get_db),
 ) -> dict[str, Any]:
     """Supprime un package du catalogue (vérifie les abonnements actifs si force=False)."""
@@ -807,7 +807,7 @@ async def get_subscriptions_list(
     statut: str | None = None,
     package: str | None = None,
     q: str | None = None,
-    admin_id: uuid.UUID = Depends(get_current_admin_user_id),
+    admin_id: uuid.UUID = Depends(require_permission("packages.read")),
     db: AsyncSession = Depends(get_db),
 ) -> dict[str, Any]:
     """Retourne la liste des inscrits et abonnements souscrits avec filtres."""
@@ -821,7 +821,7 @@ async def get_subscriptions_list(
 async def assign_subscription(
     payload: SubscriptionAssignRequest,
     request: Request,
-    admin_id: uuid.UUID = Depends(get_current_admin_user_id),
+    admin_id: uuid.UUID = Depends(require_permission("subscriptions.write")),
     db: AsyncSession = Depends(get_db),
 ) -> dict[str, Any]:
     """Assigne ou renouvelle manuellement un package à un artisan."""
@@ -854,7 +854,7 @@ async def extend_subscription(
     sub_id: uuid.UUID,
     payload: SubscriptionExtendRequest,
     request: Request,
-    admin_id: uuid.UUID = Depends(get_current_admin_user_id),
+    admin_id: uuid.UUID = Depends(require_permission("subscriptions.write")),
     db: AsyncSession = Depends(get_db),
 ) -> dict[str, Any]:
     """Prolonge la durée d'un abonnement existant."""
@@ -889,7 +889,7 @@ async def extend_subscription(
 async def cancel_subscription(
     sub_id: uuid.UUID,
     request: Request,
-    admin_id: uuid.UUID = Depends(get_current_admin_user_id),
+    admin_id: uuid.UUID = Depends(require_permission("subscriptions.write")),
     db: AsyncSession = Depends(get_db),
 ) -> dict[str, Any]:
     """Résilie un abonnement et réinitialise l'artisan en formule gratuite."""
@@ -918,7 +918,7 @@ async def cancel_subscription(
 
 @router.get("/subscriptions/stats")
 async def get_subscription_stats(
-    admin_id: uuid.UUID = Depends(get_current_admin_user_id),
+    admin_id: uuid.UUID = Depends(require_permission("packages.read")),
     db: AsyncSession = Depends(get_db),
 ) -> dict[str, Any]:
     """Indicateurs clés et KPIs du module packages."""

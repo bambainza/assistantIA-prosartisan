@@ -1,5 +1,6 @@
 # === Core ===
-fastapi==0.115.14
+fastapi==0.141.1
+starlette==1.3.1
 uvicorn[standard]==0.30.0
 # pydantic>=2.11.2 requis par mistralai==2.10.0 (bump depuis 2.9.0, 2026-09-14) —
 # pydantic-settings==2.5.0 reste compatible, suite de tests complète revérifiée.
@@ -36,12 +37,9 @@ mistralai==2.10.0
 httpx==0.28.1
 
 # === Sécurité ===
-# Note : pip signale un conflit pyasn1 entre python-jose (<0.5.0) et la chaîne
-# google-auth (>=0.6.1) installée plus bas. Vérifié sans impact : ce projet
-# n'utilise que HS256 via le backend `cryptography` de python-jose, qui
-# n'exerce jamais le code dépendant de pyasn1 (réservé aux algos RSA/EC via
-# le backend pur Python). Confirmé par la suite de tests complète (146/146).
-python-jose[cryptography]==3.4.0
+# PyJWT remplace python-jose, dont les dépendances ecdsa/pyasn1 imposaient des
+# versions affectées par plusieurs avis de sécurité sans correctif compatible.
+PyJWT[crypto]==2.15.0
 passlib[bcrypt]==1.7.4
 python-multipart==0.0.32
 pyotp==2.9.0
@@ -50,6 +48,7 @@ pywebpush==2.5.0
 # complet firebase-admin, dont les dépendances (httpx==0.28.1 exact) entrent
 # en conflit direct avec openai==1.43.0 déjà pinné dans ce projet.
 google-auth==2.58.0
+pyasn1==0.6.4
 
 # === Dev & Tests ===
 pytest==9.0.3

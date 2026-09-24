@@ -31,6 +31,9 @@ Fournit des réponses techniques précises via **RAG** (Retrieval-Augmented Gene
    # Éditez .env avec vos clés (Mistral, Wave, etc.)
    ```
 
+   Pour activer Google Sign-In, renseignez également `GOOGLE_CLIENT_ID` avec
+   l'identifiant OAuth Web public créé dans Google Cloud Console.
+
 3. **Lancer avec Docker** :
    ```bash
    docker compose up -d
@@ -79,6 +82,15 @@ docs/                   # Cahier des charges
 ## 🔑 Variables d'Environnement
 
 Consultez [`.env.example`](.env.example) pour la liste complète.
+
+## 📝 Documentation de référence
+
+- `PDR.md` est le PRD/PDR et la source de vérité produit et architecture.
+- `AGENTS.md`, `CLAUDE.md` et `.agents/rules/project_rules.md` portent les règles d'implémentation.
+
+Toute nouvelle implémentation doit mettre à jour dans le même lot les documents
+qu'elle affecte. Une livraison est incomplète si le PRD, les règles, les exemples
+d'environnement ou les procédures d'exploitation ne correspondent plus au code.
 
 ## 📄 Licence
 

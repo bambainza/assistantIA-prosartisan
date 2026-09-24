@@ -111,13 +111,22 @@ async def test_admin_get_and_toggle_metier_status(admin_user):
 
     async def mock_db():
         session = MagicMock()
+        admin_result = MagicMock(scalar_one_or_none=MagicMock(return_value=admin_user))
+        metiers_result = MagicMock(
+            scalar_one_or_none=MagicMock(return_value=test_metier),
+            scalars=MagicMock(
+                return_value=MagicMock(all=MagicMock(return_value=[test_metier]))
+            ),
+        )
         session.execute = AsyncMock(
-            return_value=MagicMock(
-                scalar_one_or_none=MagicMock(return_value=test_metier),
-                scalars=MagicMock(
-                    return_value=MagicMock(all=MagicMock(return_value=[test_metier]))
+            side_effect=[
+                admin_result,
+                metiers_result,
+                admin_result,
+                MagicMock(
+                    scalar_one_or_none=MagicMock(return_value=test_metier),
                 ),
-            )
+            ]
         )
         session.commit = AsyncMock()
         yield session

@@ -14,12 +14,11 @@ from starlette.responses import Response
 
 from app.config import settings
 
-# CSP volontairement permissive sur script-src/style-src ('unsafe-inline') :
-# admin_web (template Dastone) et chat_web embarquent des scripts/styles
-# inline statiques. Un durcissement complet (nonces/hashes) est un chantier
-# à part entière sur ces deux fronts — voir docs/PLAN_AMELIORATION.md (3.5).
+# Les blocs <script> inline sont interdits. Les attributs événementiels hérités
+# restent temporairement autorisés séparément, le temps de leur migration vers
+# addEventListener, sans autoriser pour autant l'injection de nouveaux scripts.
 _CSP_SCRIPT_SRC = (
-    "script-src 'self' 'unsafe-inline' "
+    "script-src 'self' "
     "https://accounts.google.com https://cdn.jsdelivr.net https://cdnjs.cloudflare.com"
 )
 _CSP_DIRECTIVES = (
@@ -27,6 +26,7 @@ _CSP_DIRECTIVES = (
     "img-src 'self' data: blob:",
     "style-src 'self' 'unsafe-inline'",
     _CSP_SCRIPT_SRC,
+    "script-src-attr 'unsafe-inline'",
     "connect-src 'self' https://accounts.google.com",
     "frame-src https://accounts.google.com",
     "frame-ancestors 'none'",

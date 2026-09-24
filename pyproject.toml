@@ -1,5 +1,6 @@
 [tool.pytest.ini_options]
 asyncio_mode = "auto"
+cache_dir = "scratch/.pytest_cache"
 
 [tool.ruff]
 target-version = "py312"

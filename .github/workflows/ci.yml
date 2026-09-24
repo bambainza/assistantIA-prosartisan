@@ -28,11 +28,6 @@ jobs:
           python-version: "3.12"
 
       - name: Audit Python dependencies (pip-audit)
-        # Non bloquant pour l'instant : plusieurs dépendances pinnées ont des
-        # avis connus (voir docs/PLAN_AMELIORATION.md, item 0.7) dont la
-        # correction implique des montées de version majeures à valider
-        # séparément. Le rapport reste visible dans les logs CI.
-        continue-on-error: true
         run: |
           python -m pip install --upgrade pip
           pip install pip-audit

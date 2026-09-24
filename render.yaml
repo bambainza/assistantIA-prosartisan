@@ -16,6 +16,8 @@ services:
         generateValue: true
       - key: MOBILE_MONEY_SECRET_KEY
         generateValue: true
+      - key: GOOGLE_CLIENT_ID
+        sync: false
       - key: DB_REQUIRE_POSTGRES
         value: "true"
       - key: DB_HOST
@@ -63,4 +65,3 @@ databases:
     user: prosartisan_user
     plan: standard
     region: frankfurt
-

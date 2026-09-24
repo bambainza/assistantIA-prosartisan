@@ -55,6 +55,11 @@ spec:
                 secretKeyRef:
                   name: prosartisan-secrets
                   key: mistral-api-key
+            - name: GOOGLE_CLIENT_ID
+              valueFrom:
+                secretKeyRef:
+                  name: prosartisan-secrets
+                  key: google-client-id
             - name: DB_HOST
               value: "/cloudsql/PROJECT_ID:REGION:prosartisan-db"
             - name: DB_PORT

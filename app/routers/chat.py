@@ -15,7 +15,6 @@ from fastapi import (
     Depends,
     File,
     HTTPException,
-    Query,
     Response,
     UploadFile,
     WebSocket,
@@ -280,7 +279,6 @@ async def chat_stream_endpoint(
 async def chat_websocket_endpoint(
     websocket: WebSocket,
     db: AsyncSession = Depends(get_db),
-    token: str | None = Query(default=None),
 ) -> None:
     """Connexion WebSocket bidirectionnelle temps réel pour mode texte et vocal mains-libres.
 
@@ -292,13 +290,6 @@ async def chat_websocket_endpoint(
     - Ping/Pong (`type="ping"` -> `type="pong"`)
     """
     user_id = ANONYMOUS_USER_ID
-    if token:
-        try:
-            user_id = get_user_id_from_token(token)
-        except HTTPException:
-            await websocket.close(code=status.WS_1008_POLICY_VIOLATION)
-            return
-
     await websocket.accept()
     try:
         while True:
@@ -311,6 +302,20 @@ async def chat_websocket_endpoint(
             try:
                 parsed = json.loads(raw_data)
                 if isinstance(parsed, dict):
+                    if parsed.get("action") == "auth":
+                        token = parsed.get("token")
+                        if token:
+                            try:
+                                user_id = get_user_id_from_token(str(token))
+                            except (HTTPException, ValueError):
+                                await websocket.close(
+                                    code=status.WS_1008_POLICY_VIOLATION
+                                )
+                                return
+                        else:
+                            user_id = ANONYMOUS_USER_ID
+                        continue
+
                     msg_type = parsed.get("type", "text")
 
                     if msg_type == "ping":

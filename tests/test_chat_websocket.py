@@ -10,9 +10,10 @@ from app.services.quota_service import quota_service
 
 
 def test_websocket_avec_token_valide_recoit_une_reponse():
-    """Un JWT valide passé en query param authentifie la connexion."""
+    """Un JWT valide envoyé dans le premier message authentifie la connexion."""
     token = create_access_token(data={"sub": str(uuid.uuid4())})
-    with TestClient(app).websocket_connect(f"/api/chat/ws?token={token}") as websocket:
+    with TestClient(app).websocket_connect("/api/chat/ws") as websocket:
+        websocket.send_json({"action": "auth", "token": token})
         websocket.send_text("Comment poser du carrelage ?")
         websocket.receive_json()
         end_msg = websocket.receive_json()
@@ -27,11 +28,21 @@ def test_websocket_token_invalide_ferme_la_connexion():
 
     with (
         pytest.raises(WebSocketDisconnect) as exc_info,
-        TestClient(app).websocket_connect("/api/chat/ws?token=invalide") as websocket,
+        TestClient(app).websocket_connect("/api/chat/ws") as websocket,
     ):
+        websocket.send_json({"action": "auth", "token": "invalide"})
         websocket.receive_json()
 
     assert exc_info.value.code == 1008
+
+
+def test_websocket_ignore_un_jeton_dans_url():
+    """Un JWT présent dans l'URL n'est plus utilisé par le serveur."""
+    with TestClient(app).websocket_connect(
+        "/api/chat/ws?token=secret-a-ne-pas-journaliser"
+    ) as websocket:
+        websocket.send_text('{"type":"ping"}')
+        assert websocket.receive_json()["type"] == "pong"
 
 
 def test_websocket_quota_epuise_renvoie_payment_required(monkeypatch):

@@ -8,13 +8,14 @@ import uuid
 from typing import Any
 
 import httpx
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, Depends, HTTPException, Response, status
 from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.config import settings
 from app.db.session import get_db
 from app.middleware.auth import (
+    ADMIN_SESSION_COOKIE,
     create_access_token,
     create_refresh_token,
     decode_token,
@@ -48,25 +49,35 @@ _LOGIN_FAILED_COUNTER_KEY = "prosartisan:security:login_failed_total"
 router = APIRouter(prefix="/api/auth", tags=["Authentification"])
 
 
+@router.get("/google/config")
+async def google_auth_config() -> dict[str, str | bool]:
+    """Expose uniquement l'identifiant OAuth public requis par Google GIS."""
+    return {
+        "enabled": bool(settings.google_client_id),
+        "client_id": settings.google_client_id,
+    }
+
+
 async def verify_google_token(token: str) -> dict[str, Any] | None:
     """Valide le token Google ID et retourne le profil de l'utilisateur."""
-    # Fallback pour le développement / simulateur local
-    if token.startswith("mock_google_"):
-        email = token.replace("mock_google_", "")
-        return {
-            "sub": f"google_{email}",
-            "email": email,
-            "name": f"Artisan {email.split('@')[0].capitalize()}",
-            "picture": "https://www.gravatar.com/avatar/00000000000000000000000000000000?d=mp",
-        }
-
+    if not settings.google_client_id:
+        return None
     try:
         async with httpx.AsyncClient() as client:
             response = await client.get(
-                f"https://oauth2.googleapis.com/tokeninfo?id_token={token}", timeout=5.0
+                "https://oauth2.googleapis.com/tokeninfo",
+                params={"id_token": token},
+                timeout=5.0,
             )
             if response.status_code == 200:
-                return response.json()
+                profile = response.json()
+                valid_issuers = {"accounts.google.com", "https://accounts.google.com"}
+                if (
+                    profile.get("aud") == settings.google_client_id
+                    and profile.get("iss") in valid_issuers
+                    and str(profile.get("email_verified", "")).lower() == "true"
+                ):
+                    return profile
     except Exception:
         pass
     return None
@@ -128,6 +139,7 @@ async def register(
 @router.post("/login", response_model=TokenResponse)
 async def login(
     payload: LoginRequest,
+    response: Response,
     db: AsyncSession = Depends(get_db),
 ) -> Any:
     """Connecte un artisan et retourne un token JWT."""
@@ -142,17 +154,7 @@ async def login(
             detail="Identifiants incorrects.",
         )
 
-    password_ok = verify_password(payload.password, user.password_hash)
-    # Tolérance de développement / test pour le compte administrateur
-    if (
-        not password_ok
-        and not settings.is_production
-        and user.is_admin
-        and payload.password in ("admin123", "dev_admin_password", "admin")
-    ):
-        password_ok = True
-
-    if not password_ok:
+    if not verify_password(payload.password, user.password_hash):
         await cache_service.increment(
             _LOGIN_FAILED_COUNTER_KEY, _SECURITY_COUNTER_TTL_SECONDS
         )
@@ -181,6 +183,19 @@ async def login(
 
     access_token = create_access_token(data={"sub": str(user.id)})
     refresh_token = create_refresh_token(data={"sub": str(user.id)})
+
+    if user.is_admin:
+        response.set_cookie(
+            key=ADMIN_SESSION_COOKIE,
+            value=access_token,
+            max_age=settings.jwt_expiration_minutes * 60,
+            httponly=True,
+            secure=settings.is_production,
+            samesite="strict",
+            path="/",
+        )
+    else:
+        response.delete_cookie(key=ADMIN_SESSION_COOKIE, path="/")
 
     return {
         "access_token": access_token,
@@ -339,6 +354,20 @@ async def logout(payload: RefreshRequest) -> None:
         return
     await revoke_refresh_token(decoded)
     return
+
+
+@router.post(
+    "/session/logout", status_code=status.HTTP_204_NO_CONTENT, response_model=None
+)
+async def session_logout(response: Response) -> None:
+    """Ferme la session navigateur HttpOnly du back-office."""
+    response.delete_cookie(
+        key=ADMIN_SESSION_COOKIE,
+        path="/",
+        secure=settings.is_production,
+        httponly=True,
+        samesite="strict",
+    )
 
 
 @router.post("/totp/setup", response_model=TotpSetupResponse)

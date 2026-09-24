@@ -13,9 +13,10 @@ from datetime import UTC, datetime, timedelta
 from typing import Any
 
 import bcrypt
-from fastapi import Depends, HTTPException, status
+import jwt
+from fastapi import Cookie, Depends, HTTPException, status
 from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
-from jose import JWTError, jwt
+from jwt import InvalidTokenError
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
@@ -33,6 +34,7 @@ REFRESH_TOKEN_EXPIRE_DAYS = 30
 
 # Security scheme
 bearer_scheme = HTTPBearer(auto_error=False)
+ADMIN_SESSION_COOKIE = "prosartisan_admin_session"
 
 
 def hash_password(password: str) -> str:
@@ -111,7 +113,7 @@ def decode_token(token: str) -> dict[str, Any]:
     try:
         payload = jwt.decode(token, settings.jwt_secret_key, algorithms=[ALGORITHM])
         return payload
-    except JWTError as exc:
+    except InvalidTokenError as exc:
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail="Token invalide ou expiré.",
@@ -133,19 +135,21 @@ def get_user_id_from_token(token: str) -> uuid.UUID:
 
 async def get_current_user_id(
     credentials: HTTPAuthorizationCredentials | None = Depends(bearer_scheme),
+    admin_session: str | None = Cookie(default=None, alias=ADMIN_SESSION_COOKIE),
 ) -> uuid.UUID:
     """Dépendance FastAPI : extrait et valide le user_id depuis le JWT.
 
     Retourne le UUID de l'utilisateur authentifié.
     Lève HTTP 401 si le token est absent ou invalide.
     """
-    if credentials is None:
+    token = credentials.credentials if credentials is not None else admin_session
+    if token is None:
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail="Authentification requise.",
             headers={"WWW-Authenticate": "Bearer"},
         )
-    return get_user_id_from_token(credentials.credentials)
+    return get_user_id_from_token(token)
 
 
 async def get_optional_user_id(

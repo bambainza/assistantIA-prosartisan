@@ -522,16 +522,5 @@
     </div>
 
     <script src="/chat/app.js"></script>
-    <script>
-        // PWA : enregistrement du service worker (shell hors-ligne + push à venir).
-        if ('serviceWorker' in navigator) {
-            window.addEventListener('load', () => {
-                navigator.serviceWorker.register('/chat/sw.js').catch(() => {
-                    // Environnement sans support SW (dev local sans HTTPS, etc.) :
-                    // l'app reste pleinement fonctionnelle sans PWA.
-                });
-            });
-        }
-    </script>
 </body>
 </html>

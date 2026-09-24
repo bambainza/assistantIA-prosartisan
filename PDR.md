@@ -1,6 +1,6 @@
-# 📘 Plan de Référence du Projet (PDR) — ProsArtisan IA Expert
+# 📘 Document des Exigences Produit (PRD/PDR) — ProsArtisan IA Expert
 
-Ce document constitue la **Fiche de Référence Produit & Architecture (PDR)** pour l'assistant IA **ProsArtisan**, conçu pour accompagner les artisans du BTP et des métiers d'art en Côte d'Ivoire et en Afrique de l'Ouest.
+Ce document constitue le **Product Requirements Document (PRD)** et la **Fiche de Référence Produit & Architecture (PDR)** de l'assistant IA **ProsArtisan**, conçu pour accompagner les artisans du BTP et des métiers d'art en Côte d'Ivoire et en Afrique de l'Ouest. Le fichier historique reste nommé `PDR.md`, mais il est la source de vérité produit du dépôt.
 
 ---
 
@@ -37,10 +37,11 @@ graph TD
 - **Intelligence Artificielle** : Mistral Small/Medium (texte & vision intégrées), Voxtral (STT/TTS vocal).
 - **Paiements & Webhooks** : Wave Business API, Orange Money API, Signatures HMAC SHA-256 (obligatoire, aucun contournement).
 - **Découpage & Ingestion PDF** : PyPDF, découpage par phrases entières (jamais coupées en deux) avec chevauchement en proportion du chunk (overlap 10-15%). Métadonnées obligatoires (`metier_id`, `secteur_id`, `type_document`, `niveau_expertise`) validées par document, avec surcharge possible par fichier via `ingestion/documents/metadata.json` (à placer dans le même dossier que les documents passés à `--docs-dir`). IDs de points Qdrant déterministes : ré-ingérer un document met à jour ses points au lieu d'en créer des doublons.
-- **Console d'Administration** : Interface statique HTML/JS/CSS (Template Dastone v2.1.0) montée sur `/admin` dans FastAPI.
+- **Console d'Administration** : Interface statique HTML/JS/CSS (Template Dastone v2.1.0) montée sur `/admin` dans FastAPI. La session du back-office repose sur un cookie JWT `HttpOnly`, `SameSite=Strict` (`Secure` en production), jamais sur `localStorage`.
 - **Résilience** : Mécanisme de démarrage dégradé (repli SQLite autonome, hors production uniquement) si PostgreSQL est injoignable. En production (`APP_ENV=production`) ou avec `DB_REQUIRE_POSTGRES=true`, une base injoignable fait échouer le démarrage plutôt que de basculer silencieusement.
 - **RBAC & Audit** : les comptes admin peuvent recevoir un rôle granulaire (`app/models/role.py`, permissions type `packages.write`, `audit.read`...) via `require_permission(...)`. Un admin historique sans rôle garde l'accès complet (compatibilité descendante). Toute mutation admin sensible (packages, abonnements, documents, rôles, Pass) est tracée dans `audit_logs` (`app/services/audit_service.py`) : acteur, action, ressource, état avant/après, IP.
-- **En-têtes de sécurité HTTP** : `SecurityHeadersMiddleware` pose CSP, `X-Content-Type-Options`, `X-Frame-Options`, `Referrer-Policy`, `Permissions-Policy` sur toutes les réponses, et HSTS en production. `/docs`, `/redoc` et `/openapi.json` sont désactivés quand `APP_ENV=production` (`app.main.docs_urls`).
+- **En-têtes de sécurité HTTP** : `SecurityHeadersMiddleware` pose CSP, `X-Content-Type-Options`, `X-Frame-Options`, `Referrer-Policy`, `Permissions-Policy` sur toutes les réponses, et HSTS en production. Les blocs `<script>` inline sont interdits ; les données dynamiques injectées dans le DOM sont encodées. `/docs`, `/redoc` et `/openapi.json` sont désactivés quand `APP_ENV=production` (`app.main.docs_urls`).
+- **Authentification & dépendances** : les JWT sont signés avec PyJWT ; les refresh tokens sont rotatifs et révocables par `jti`. Google OAuth valide obligatoirement l'audience (`GOOGLE_CLIENT_ID`), l'émetteur et l'état `email_verified`. L'audit `pip-audit` est bloquant en CI.
 - **Actualités & Notifications** : `app/models/actualite.py` et `app/services/notification_service.py` alimentent un centre de notifications in-app (source de vérité) avec providers push FCM (mobile, API HTTP v1 authentifiée par compte de service — `FCM_SERVICE_ACCOUNT_PATH`, volontairement pas le SDK `firebase-admin`, non réévalué depuis la bascule vers `mistralai`) et Web Push/VAPID (`chat_web`), et un module Actualités ciblable par métier, diffusable en tâche de fond.
 - **PWA (`chat_web`)** : `manifest.json` + `sw.js` — shell installable, disponible hors-ligne (jamais les réponses API), écoute des notifications Web Push. Clé VAPID de développement fonctionnelle par défaut, à régénérer en production.
 - **Mobile (`mobile_app_flutter`)** : `flutter_secure_storage` (JWT), `hive`/`connectivity_plus` (file d'attente hors-ligne), `local_auth` (verrouillage biométrique optionnel), `firebase_messaging`/`sentry_flutter` (inactifs sans credentials Firebase/Sentry fournis par l'opérateur).
@@ -94,8 +95,10 @@ Sur toutes les routes ci-dessous, l'identité de l'artisan est déduite du JWT (
 
 - `POST /register`, `POST /login` : inscription et connexion par email/mot de passe. `login` exige un `totp_code` supplémentaire si le compte admin a activé la 2FA.
 - `POST /google` : connexion/inscription via Google OAuth 2.0.
+- `GET /google/config` : expose uniquement l'identifiant client OAuth public nécessaire à Google Identity Services.
 - `POST /refresh` : renouvelle l'access token à partir d'un refresh token valide ; l'ancien refresh token est révoqué dès son utilisation (rotation à usage unique).
 - `POST /logout` : révoque explicitement un refresh token (déconnexion).
+- `POST /session/logout` : supprime le cookie de session `HttpOnly` du back-office.
 - `POST /totp/setup`, `POST /totp/enable`, `POST /totp/disable` : activation/désactivation de la 2FA (TOTP), réservée aux comptes admin.
 - `GET /me` : profil de l'artisan connecté (JWT requis).
 
@@ -104,7 +107,7 @@ Sur toutes les routes ci-dessous, l'identité de l'artisan est déduite du JWT (
 - `POST /api/chat` : Pose une question technique (texte + photo `image_url` optionnelle + filtre `metier_id`). Intercepte les quotas épuisés avec `HTTP 402 Payment Required`.
 - `POST /api/chat/stream` : équivalent en streaming SSE.
 - `POST /api/chat/transcribe` : transcription vocale (Mistral Voxtral) d'une note audio de chantier.
-- `WS /api/chat/ws` : Stream WebSocket en temps réel. Identité déduite d'un JWT optionnel en query param (`?token=...`, un WebSocket ne portant pas d'en-tête `Authorization` côté client), sinon compte anonyme partagé ; quota décrémenté à chaque message comme sur les routes HTTP.
+- `WS /api/chat/ws` : Stream WebSocket en temps réel. Le JWT optionnel est envoyé dans un premier message d'authentification (`{"action": "auth", "token": "..."}`), jamais dans l'URL ; sans jeton, le compte anonyme partagé est utilisé. Le quota est décrémenté à chaque message métier comme sur les routes HTTP.
 - `GET/POST /api/conversations`, `GET/PATCH/DELETE /api/conversations/{id}` : historique des discussions, strictement cloisonné par propriétaire.
 
 **Paiement Mobile Money** (`/api/payment`)
@@ -149,3 +152,16 @@ Pour exécuter le pipeline d'ingestion sémantique :
 ```bash
 python -m ingestion.pipeline --docs-dir ./ingestion/documents --metier-id 1
 ```
+
+---
+
+## 📝 7. Gouvernance documentaire obligatoire
+
+Toute nouvelle implémentation, évolution fonctionnelle, modification d'API, changement d'architecture, nouveau garde-fou de sécurité ou changement de configuration doit mettre à jour, dans le **même lot de modifications** :
+
+1. `PDR.md`, lorsque le comportement produit, l'architecture, les endpoints, les intégrations, les contraintes ou les procédures de validation changent ;
+2. `AGENTS.md`, lorsqu'une règle d'ingénierie, de sécurité, de qualité ou de livraison est ajoutée ou modifiée ;
+3. `CLAUDE.md` et `.agents/rules/project_rules.md`, afin que tous les assistants et IDE appliquent les mêmes règles ;
+4. `.env.example`, les fichiers de déploiement et le `README.md` lorsqu'une variable, une commande ou une procédure d'exploitation change.
+
+Une implémentation concernée par ces documents est **incomplète** tant que leur mise à jour synchronisée n'est pas livrée. La revue de code doit vérifier explicitement cette cohérence et demander une justification écrite lorsqu'aucune mise à jour documentaire n'est nécessaire.

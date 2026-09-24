@@ -2,17 +2,21 @@
 let selectedUserIdForGrant = null;
 let grantModal = null;
 
+// Encoder toute donnée non fiable avant son insertion dans une chaîne HTML.
+function escapeHtml(value) {
+    return String(value ?? '')
+        .replaceAll('&', '&amp;')
+        .replaceAll('<', '&lt;')
+        .replaceAll('>', '&gt;')
+        .replaceAll('"', '&quot;')
+        .replaceAll("'", '&#039;');
+}
+
 // Unified Admin Fetch Wrapper
 async function adminFetch(url, options = {}) {
-    const token = localStorage.getItem('prosartisan_admin_token');
-    if (!token) {
-        logoutAdmin();
-        throw new Error('Not authenticated');
-    }
-    
     options.headers = options.headers || {};
-    options.headers['Authorization'] = `Bearer ${token}`;
-    
+    options.credentials = 'same-origin';
+
     const res = await fetch(url, options);
     if (res.status === 401 || res.status === 403) {
         logoutAdmin();
@@ -21,15 +25,21 @@ async function adminFetch(url, options = {}) {
     return res;
 }
 
-window.logoutAdmin = function() {
+window.logoutAdmin = async function() {
     localStorage.removeItem('prosartisan_admin_token');
+    await fetch('/api/auth/session/logout', {
+        method: 'POST',
+        credentials: 'same-origin'
+    }).catch(() => {});
     document.getElementById('login-container').classList.remove('d-none');
     window.location.reload();
 };
 
 document.addEventListener('DOMContentLoaded', () => {
+    const year = document.getElementById('copyright-year');
+    if (year) year.textContent = String(new Date().getFullYear());
     if (window.location.search.includes('logout=1')) {
-        localStorage.removeItem('prosartisan_admin_token');
+        fetch('/api/auth/session/logout', { method: 'POST', credentials: 'same-origin' }).catch(() => {});
         window.history.replaceState({}, document.title, window.location.pathname);
     }
 
@@ -39,24 +49,13 @@ document.addEventListener('DOMContentLoaded', () => {
     loadPromptInspector();
 
     // Check if already authenticated
-    const token = localStorage.getItem('prosartisan_admin_token');
-    if (token) {
+    adminFetch('/api/auth/me').then(() => {
         document.getElementById('login-container').classList.add('d-none');
         refreshDashboard();
-    } else {
+    }).catch(() => {
         document.getElementById('login-container').classList.remove('d-none');
-    }
+    });
 });
-
-// Helper pour pré-remplir les identifiants démo
-window.fillDemoCredentials = function(pwd = 'admin123') {
-    const emailInput = document.getElementById('admin-email');
-    const pwdInput = document.getElementById('admin-password');
-    if (emailInput) emailInput.value = 'admin@prosartisan.ci';
-    if (pwdInput) pwdInput.value = pwd;
-    const errMsg = document.getElementById('login-error-msg');
-    if (errMsg) errMsg.classList.add('d-none');
-};
 
 // Login Form handler
 function initLoginForm() {
@@ -89,7 +88,7 @@ function initLoginForm() {
             if (res.status === 200) {
                 const data = await res.json();
                 if (data.user && data.user.is_admin) {
-                    localStorage.setItem('prosartisan_admin_token', data.access_token);
+                    localStorage.removeItem('prosartisan_admin_token');
                     document.getElementById('login-container').classList.add('d-none');
                     refreshDashboard();
                 } else {
@@ -235,7 +234,7 @@ async function fetchOverview() {
                 barChartList.innerHTML += `
                     <div class="bar-item mb-3">
                         <div class="bar-info d-flex justify-content-between mb-1" style="font-size: 13px;">
-                            <span>${m.nom}</span>
+                            <span>${escapeHtml(m.nom)}</span>
                             <span><strong>${m.requetes.toLocaleString()}</strong> req</span>
                         </div>
                         <div class="progress" style="height: 8px;">
@@ -266,13 +265,13 @@ async function fetchArtisans() {
 
             tbody.innerHTML += `
                 <tr>
-                    <td><strong>${u.nom}</strong></td>
-                    <td>${u.telephone}</td>
-                    <td>${u.metier}</td>
+                    <td><strong>${escapeHtml(u.nom)}</strong></td>
+                    <td>${escapeHtml(u.telephone)}</td>
+                    <td>${escapeHtml(u.metier)}</td>
                     <td><span class="${badgeClass}">${u.type_abonnement.toUpperCase()}</span></td>
                     <td>${reqLabel}</td>
                     <td>
-                        <button class="btn btn-sm btn-outline-primary" onclick="openGrantModal('${u.id}', '${u.nom}')">
+                        <button class="btn btn-sm btn-outline-primary" data-user-id="${escapeHtml(u.id)}" data-user-name="${escapeHtml(u.nom)}" onclick="openGrantModal(this.dataset.userId, this.dataset.userName)">
                             <i class="iconoir-plus-circle me-1"></i> Prolonger Pass
                         </button>
                     </td>
@@ -686,7 +685,7 @@ async function sendSimulatedChat() {
     if (!q) return;
 
     const messages = document.getElementById('chat-messages');
-    messages.innerHTML += `<div class="msg user">${q} ${imgInput.value ? '📷 [Photo jointe]' : ''}</div>`;
+    messages.innerHTML += `<div class="msg user">${escapeHtml(q)} ${imgInput.value ? '📷 [Photo jointe]' : ''}</div>`;
 
     qInput.value = '';
 
@@ -702,7 +701,7 @@ async function sendSimulatedChat() {
             })
         });
         const data = await res.json();
-        messages.innerHTML += `<div class="msg assistant">${data.reponse.replace(/\n/g, '<br>')}</div>`;
+        messages.innerHTML += `<div class="msg assistant">${escapeHtml(data.reponse).replace(/\n/g, '<br>')}</div>`;
         messages.scrollTop = messages.scrollHeight;
     } catch (err) {
         messages.innerHTML += `<div class="msg assistant text-danger">Erreur de génération RAG</div>`;
@@ -732,7 +731,9 @@ async function fetchLogs() {
         const data = await res.json();
         const logsConsole = document.getElementById('logs-console');
         if (logsConsole) {
-            logsConsole.innerHTML = data.logs.map(l => `[${l.timestamp}] [${l.level}] ${l.event}`).join('<br>');
+            logsConsole.innerHTML = data.logs.map(
+                l => `[${escapeHtml(l.timestamp)}] [${escapeHtml(l.level)}] ${escapeHtml(l.event)}`
+            ).join('<br>');
         }
     } catch (err) {
         console.error('Erreur chargement logs:', err);
@@ -792,7 +793,7 @@ function updatePackageFilterOptions(packages) {
     const currentVal = filterSelect.value;
     filterSelect.innerHTML = '<option value="ALL">Toutes les formules</option>';
     packages.forEach(p => {
-        filterSelect.innerHTML += `<option value="${p.code}">${p.nom} (${p.code})</option>`;
+        filterSelect.innerHTML += `<option value="${escapeHtml(p.code)}">${escapeHtml(p.nom)} (${escapeHtml(p.code)})</option>`;
     });
     if (currentVal) filterSelect.value = currentVal;
 }
@@ -810,7 +811,7 @@ function renderPackagesList(packages) {
     packages.forEach(pkg => {
         const isActive = (pkg.est_actif !== undefined) ? Boolean(pkg.est_actif) : (pkg.is_active !== undefined ? Boolean(pkg.is_active) : true);
         const features = Array.isArray(pkg.fonctionnalites) ? pkg.fonctionnalites : (Array.isArray(pkg.features) ? pkg.features : []);
-        const featuresHtml = features.map(f => `<li><i class="iconoir-check text-success me-1"></i>${f}</li>`).join('');
+        const featuresHtml = features.map(f => `<li><i class="iconoir-check text-success me-1"></i>${escapeHtml(f)}</li>`).join('');
         
         let durationBadge = '';
         if (pkg.duree_jours) {
@@ -820,7 +821,7 @@ function renderPackagesList(packages) {
             durationBadge += `<span class="badge bg-light text-dark"><i class="iconoir-chat-bubble-check me-1"></i>${pkg.quota_requetes} req.</span>`;
         }
 
-        const safeNom = (pkg.nom || '').replace(/'/g, "\\'").replace(/"/g, '&quot;');
+        const safeNom = encodeURIComponent(pkg.nom || '');
 
         grid.innerHTML += `
             <div class="col-md-6 col-xl-4 mb-3">
@@ -831,8 +832,8 @@ function renderPackagesList(packages) {
                                 <span class="badge ${isActive ? 'bg-success-subtle text-success' : 'badge-sub-expired text-danger'} mb-1">
                                     ${isActive ? '● En vente (Actif)' : '○ Désactivé (Inactif)'}
                                 </span>
-                                <h5 class="card-title mb-0 text-truncate" title="${pkg.nom}">${pkg.nom}</h5>
-                                <small class="text-muted font-monospace">${pkg.code}</small>
+                                <h5 class="card-title mb-0 text-truncate" title="${escapeHtml(pkg.nom)}">${escapeHtml(pkg.nom)}</h5>
+                                <small class="text-muted font-monospace">${escapeHtml(pkg.code)}</small>
                             </div>
                             <div class="dropdown">
                                 <button class="btn btn-sm btn-light border-0" type="button" data-bs-toggle="dropdown" aria-expanded="false">
@@ -842,7 +843,7 @@ function renderPackagesList(packages) {
                                     <li><a class="dropdown-item" href="javascript:void(0)" onclick="openEditPackageModal('${pkg.id}')"><i class="iconoir-edit me-2 text-primary"></i>Modifier la formule</a></li>
                                     <li><a class="dropdown-item" href="javascript:void(0)" onclick="togglePackageActive('${pkg.id}', ${!isActive})"><i class="${isActive ? 'iconoir-eye-closed text-warning' : 'iconoir-eye text-success'} me-2"></i>${isActive ? 'Désactiver de la vente' : 'Réactiver la formule'}</a></li>
                                     <li><hr class="dropdown-divider"></li>
-                                    <li><a class="dropdown-item text-danger" href="javascript:void(0)" onclick="deletePackagePrompt('${pkg.id}', '${safeNom}')"><i class="iconoir-trash me-2"></i>Supprimer définitivement</a></li>
+                                    <li><a class="dropdown-item text-danger" href="javascript:void(0)" onclick="deletePackagePrompt('${pkg.id}', decodeURIComponent('${safeNom}'))"><i class="iconoir-trash me-2"></i>Supprimer définitivement</a></li>
                                 </ul>
                             </div>
                         </div>
@@ -853,7 +854,7 @@ function renderPackagesList(packages) {
                         <div class="mb-2">
                             ${durationBadge}
                         </div>
-                        <p class="text-muted small flex-grow-0 mb-3">${pkg.description || 'Aucune description'}</p>
+                        <p class="text-muted small flex-grow-0 mb-3">${escapeHtml(pkg.description || 'Aucune description')}</p>
                         <ul class="package-features-list flex-grow-1">
                             ${featuresHtml || '<li class="text-muted fst-italic">Accès standard à la plateforme</li>'}
                         </ul>
@@ -870,7 +871,7 @@ function renderPackagesList(packages) {
                                     <i class="iconoir-eye me-1"></i> Réactiver
                                 </button>
                             `}
-                            <button class="btn btn-sm btn-outline-danger" onclick="deletePackagePrompt('${pkg.id}', '${safeNom}')" title="Supprimer définitivement cette formule" aria-label="Supprimer définitivement cette formule">
+                            <button class="btn btn-sm btn-outline-danger" onclick="deletePackagePrompt('${pkg.id}', decodeURIComponent('${safeNom}'))" title="Supprimer définitivement cette formule" aria-label="Supprimer définitivement cette formule">
                                 <i class="iconoir-trash"></i>
                             </button>
                         </div>
@@ -954,19 +955,19 @@ function renderSubscriptionsTable(subs) {
                 <td>
                     <div class="d-flex align-items-center">
                         <div class="avatar-sm bg-primary-subtle text-primary rounded-circle d-flex align-items-center justify-content-center me-2 fw-bold" style="width:32px; height:32px;">
-                            ${(s.artisan_nom || 'A')[0].toUpperCase()}
+                            ${escapeHtml((s.artisan_nom || 'A')[0].toUpperCase())}
                         </div>
                         <div>
-                            <strong>${s.artisan_nom || 'Artisan #' + s.user_id}</strong>
-                            <div class="text-muted small">${s.artisan_email || ''}</div>
+                            <strong>${escapeHtml(s.artisan_nom || 'Artisan #' + s.user_id)}</strong>
+                            <div class="text-muted small">${escapeHtml(s.artisan_email || '')}</div>
                         </div>
                     </div>
                 </td>
-                <td><small>${s.artisan_telephone || '-'}</small></td>
-                <td><span class="badge bg-light text-dark">${s.artisan_metier || 'BTP'}</span></td>
+                <td><small>${escapeHtml(s.artisan_telephone || '-')}</small></td>
+                <td><span class="badge bg-light text-dark">${escapeHtml(s.artisan_metier || 'BTP')}</span></td>
                 <td>
-                    <strong>${s.package_nom}</strong>
-                    <div class="text-muted font-monospace small">${s.package_code}</div>
+                    <strong>${escapeHtml(s.package_nom)}</strong>
+                    <div class="text-muted font-monospace small">${escapeHtml(s.package_code)}</div>
                 </td>
                 <td><small>${dateDebut}</small></td>
                 <td>
@@ -1128,7 +1129,7 @@ async function openAssignPackageModal() {
             if (userSelect) {
                 userSelect.innerHTML = '<option value="">-- Sélectionner un artisan --</option>';
                 (data.users || []).forEach(u => {
-                    userSelect.innerHTML += `<option value="${u.id}">${u.nom} (${u.telephone || u.email || 'Sans contact'}) - ${u.metier || 'Métier'}</option>`;
+                    userSelect.innerHTML += `<option value="${escapeHtml(u.id)}">${escapeHtml(u.nom)} (${escapeHtml(u.telephone || u.email || 'Sans contact')}) - ${escapeHtml(u.metier || 'Métier')}</option>`;
                 });
             }
         }
@@ -1142,7 +1143,7 @@ async function openAssignPackageModal() {
         allPackagesCache.forEach(p => {
             const isAct = (p.est_actif !== undefined) ? Boolean(p.est_actif) : (p.is_active !== undefined ? Boolean(p.is_active) : true);
             const actifLabel = isAct ? '' : ' (inactif)';
-            pkgSelect.innerHTML += `<option value="${p.code}">${p.nom} - ${p.prix.toLocaleString()} F CFA${actifLabel}</option>`;
+            pkgSelect.innerHTML += `<option value="${escapeHtml(p.code)}">${escapeHtml(p.nom)} - ${p.prix.toLocaleString()} F CFA${actifLabel}</option>`;
         });
     }
 
@@ -1413,8 +1414,8 @@ function renderRolesList(roles) {
     container.innerHTML = roles.map(role => `
         <div class="d-flex justify-content-between align-items-center border-bottom py-2">
             <div>
-                <span class="fw-semibold">${role.label}</span>
-                <br><small class="text-muted font-monospace">${role.code}</small>
+                <span class="fw-semibold">${escapeHtml(role.label)}</span>
+                <br><small class="text-muted font-monospace">${escapeHtml(role.code)}</small>
             </div>
             <div class="d-flex align-items-center gap-2">
                 <span class="badge bg-primary-subtle text-primary">${role.permissions.length} permission(s)</span>
@@ -1445,10 +1446,10 @@ function renderPermissionChecklist(checkedCodes) {
 
     container.innerHTML = allPermissionsCache.map(perm => `
         <div class="form-check">
-            <input class="form-check-input" type="checkbox" value="${perm.code}" id="perm-check-${perm.code}" ${checkedSet.has(perm.code) ? 'checked' : ''}>
-            <label class="form-check-label small" for="perm-check-${perm.code}">
-                <span class="font-monospace">${perm.code}</span>
-                ${perm.description ? `<br><span class="text-muted">${perm.description}</span>` : ''}
+            <input class="form-check-input" type="checkbox" value="${escapeHtml(perm.code)}" id="perm-check-${escapeHtml(perm.code)}" ${checkedSet.has(perm.code) ? 'checked' : ''}>
+            <label class="form-check-label small" for="perm-check-${escapeHtml(perm.code)}">
+                <span class="font-monospace">${escapeHtml(perm.code)}</span>
+                ${perm.description ? `<br><span class="text-muted">${escapeHtml(perm.description)}</span>` : ''}
             </label>
         </div>
     `).join('');
@@ -1709,9 +1710,9 @@ function renderAuditLog(logs) {
         return `
             <tr>
                 <td class="text-muted small">${date}</td>
-                <td class="font-monospace small" title="${entry.actor_id || ''}">${actor}</td>
-                <td><span class="badge bg-light text-dark">${entry.action}</span></td>
-                <td class="text-muted small">${resource}</td>
+                <td class="font-monospace small" title="${escapeHtml(entry.actor_id || '')}">${escapeHtml(actor)}</td>
+                <td><span class="badge bg-light text-dark">${escapeHtml(entry.action)}</span></td>
+                <td class="text-muted small">${escapeHtml(resource)}</td>
             </tr>
         `;
     }).join('');
@@ -1736,7 +1737,7 @@ async function populateMetierSelects() {
                 const data = await res.json();
                 metiersCache = data.metiers || [];
                 const optionsHtml = '<option value="">Tous les métiers</option>' + metiersCache.map(m =>
-                    `<option value="${m.id}">${m.nom}${m.is_active ? '' : ' (désactivé)'}</option>`
+                    `<option value="${m.id}">${escapeHtml(m.nom)}${m.is_active ? '' : ' (désactivé)'}</option>`
                 ).join('');
                 ['actu-metier', 'notif-metier'].forEach(id => {
                     const sel = document.getElementById(id);
@@ -1757,7 +1758,7 @@ async function populateMetierSelects() {
                 const sel = document.getElementById('actu-category');
                 if (sel && actuCategoriesCache.length > 0) {
                     sel.innerHTML = actuCategoriesCache.map(c =>
-                        `<option value="${c.code}">${c.label}</option>`
+                        `<option value="${escapeHtml(c.code)}">${escapeHtml(c.label)}</option>`
                     ).join('');
                 }
             }
@@ -1870,13 +1871,13 @@ function renderActualitesList(actualites) {
             <div class="border-bottom py-2">
                 <div class="d-flex justify-content-between align-items-start flex-wrap gap-1">
                     <div>
-                        <span class="fw-semibold">${a.titre}</span> ${badge}
+                        <span class="fw-semibold">${escapeHtml(a.titre)}</span> ${badge}
                         <span class="badge bg-light text-dark border">${categoryLabel}</span>
                         <br><small class="text-muted">${metierLabel}${scheduledLabel}</small>
                     </div>
                     <div class="d-flex gap-1 flex-wrap">${actions.join('')}</div>
                 </div>
-                <p class="mb-0 text-muted small mt-1">${a.contenu}</p>
+                <p class="mb-0 text-muted small mt-1">${escapeHtml(a.contenu)}</p>
             </div>
         `;
     }).join('');
@@ -2100,9 +2101,9 @@ async function loadBroadcastHistory() {
             const metierLabel = metierLabelFor(after.metier_id);
             return `
                 <div class="border-bottom px-2 py-2">
-                    <div class="fw-semibold">${after.titre || '(sans titre)'}</div>
-                    <div class="text-muted">${new Date(l.created_at).toLocaleString()} • ${metierLabel} • ${audienceLabel}</div>
-                    <div class="text-muted">${after.cible_count ?? '?'} destinataire(s) • canal ${after.channel || 'in_app'}</div>
+                    <div class="fw-semibold">${escapeHtml(after.titre || '(sans titre)')}</div>
+                    <div class="text-muted">${escapeHtml(new Date(l.created_at).toLocaleString())} • ${escapeHtml(metierLabel)} • ${escapeHtml(audienceLabel)}</div>
+                    <div class="text-muted">${escapeHtml(after.cible_count ?? '?')} destinataire(s) • canal ${escapeHtml(after.channel || 'in_app')}</div>
                 </div>
             `;
         }).join('');
@@ -2162,8 +2163,8 @@ function renderMetiersTable(metiers) {
     tbody.innerHTML = metiers.map(m => `
         <tr>
             <td>
-                <div class="fw-semibold">${m.nom}</div>
-                <div class="text-muted small">${m.slug}</div>
+                <div class="fw-semibold">${escapeHtml(m.nom)}</div>
+                <div class="text-muted small">${escapeHtml(m.slug)}</div>
             </td>
             <td>${(m.sous_metiers || []).length}</td>
             <td>${m.is_active ? '<span class="badge bg-success-subtle text-success">Actif</span>' : '<span class="badge bg-secondary-subtle text-secondary">Désactivé</span>'}</td>
@@ -2283,10 +2284,10 @@ function renderSousMetiersTable(metiers) {
     tbody.innerHTML = rows.map(sm => `
         <tr>
             <td>
-                <div class="fw-semibold">${sm.nom}</div>
-                <div class="text-muted small">${sm.slug}</div>
+                <div class="fw-semibold">${escapeHtml(sm.nom)}</div>
+                <div class="text-muted small">${escapeHtml(sm.slug)}</div>
             </td>
-            <td>${sm.metierNom}</td>
+            <td>${escapeHtml(sm.metierNom)}</td>
             <td class="text-nowrap">
                 <button type="button" class="btn btn-sm btn-outline-secondary" onclick="openSousMetierForm(${sm.id})" title="Modifier" aria-label="Modifier ${sm.nom}"><i class="iconoir-edit-pencil"></i></button>
                 <button type="button" class="btn btn-sm btn-outline-danger" onclick="deleteSousMetierPrompt(${sm.id})" title="Supprimer" aria-label="Supprimer ${sm.nom}"><i class="iconoir-trash"></i></button>
@@ -2298,7 +2299,7 @@ function renderSousMetiersTable(metiers) {
 function populateSousMetierSelect() {
     const sel = document.getElementById('sm-form-metier');
     if (!sel) return;
-    sel.innerHTML = (parametresMetiersCache || []).map(m => `<option value="${m.id}">${m.nom}</option>`).join('');
+    sel.innerHTML = (parametresMetiersCache || []).map(m => `<option value="${m.id}">${escapeHtml(m.nom)}</option>`).join('');
 }
 
 window.openSousMetierForm = function(sousMetierId) {
@@ -2390,8 +2391,8 @@ function renderCategoriesTable(categories) {
     }
     tbody.innerHTML = categories.map(c => `
         <tr>
-            <td class="font-monospace small">${c.code}</td>
-            <td>${c.label}</td>
+            <td class="font-monospace small">${escapeHtml(c.code)}</td>
+            <td>${escapeHtml(c.label)}</td>
             <td>${c.is_active ? '<span class="badge bg-success-subtle text-success">Active</span>' : '<span class="badge bg-secondary-subtle text-secondary">Désactivée</span>'}</td>
             <td class="text-nowrap">
                 <button type="button" class="btn btn-sm btn-outline-secondary" onclick="openCategorieForm(${c.id})" title="Modifier" aria-label="Modifier ${c.label}"><i class="iconoir-edit-pencil"></i></button>
@@ -2597,4 +2598,3 @@ window.loadCalculatorsStats = async function() {
         console.error("Erreur chargement stats calculateurs:", err);
     }
 };
-

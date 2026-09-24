@@ -71,6 +71,12 @@ async def test_security_headers_present():
     assert response.headers["X-Frame-Options"] == "DENY"
     assert response.headers["Referrer-Policy"] == "strict-origin-when-cross-origin"
     assert "default-src 'self'" in response.headers["Content-Security-Policy"]
+    script_src = next(
+        directive
+        for directive in response.headers["Content-Security-Policy"].split("; ")
+        if directive.startswith("script-src ")
+    )
+    assert "'unsafe-inline'" not in script_src
     assert "Permissions-Policy" in response.headers
     # HSTS ne doit apparaître qu'en production (jamais en dev, où HTTPS n'est pas garanti).
     assert "Strict-Transport-Security" not in response.headers

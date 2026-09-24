@@ -7,9 +7,11 @@ from unittest.mock import AsyncMock, MagicMock
 import pytest
 from httpx import ASGITransport, AsyncClient
 
+from app.config import settings
 from app.db.session import get_db
 from app.main import app
 from app.middleware.auth import (
+    ADMIN_SESSION_COOKIE,
     create_access_token,
     create_refresh_token,
     hash_password,
@@ -160,9 +162,22 @@ async def test_login_incorrect_password():
 
 
 @pytest.mark.asyncio
-async def test_google_auth_new_user():
+async def test_google_auth_new_user(monkeypatch):
     """POST /api/auth/google crée un nouvel utilisateur si l'email n'existe pas."""
-    payload = {"credential": "mock_google_google_user@example.com"}
+    payload = {"credential": "valid-provider-token"}
+
+    async def mock_verify_google_token(token: str):
+        assert token == "valid-provider-token"
+        return {
+            "sub": "google-123",
+            "email": "google_user@example.com",
+            "name": "Google User",
+            "picture": None,
+        }
+
+    monkeypatch.setattr(
+        "app.routers.auth.verify_google_token", mock_verify_google_token
+    )
 
     async def custom_mock_db():
         session = MagicMock()
@@ -186,6 +201,118 @@ async def test_google_auth_new_user():
         assert "access_token" in data
         assert data["user"]["email"] == "google_user@example.com"
         assert data["user"]["auth_provider"] == "google"
+    finally:
+        from tests.conftest import mock_get_db
+
+        app.dependency_overrides[get_db] = mock_get_db
+
+
+@pytest.mark.asyncio
+async def test_google_auth_rejette_un_ancien_jeton_mock(monkeypatch):
+    """Le préfixe historique de test ne doit jamais authentifier un compte."""
+    provider_get = AsyncMock(return_value=MagicMock(status_code=400))
+    monkeypatch.setattr("httpx.AsyncClient.get", provider_get)
+    monkeypatch.setattr(settings, "google_client_id", "client-id-test")
+    transport = ASGITransport(app=app)
+    async with AsyncClient(transport=transport, base_url="http://test") as client:
+        response = await client.post(
+            "/api/auth/google",
+            json={"credential": "mock_google_admin@example.com"},
+        )
+
+    assert response.status_code == 400
+    provider_get.assert_awaited_once()
+
+
+@pytest.mark.asyncio
+async def test_google_auth_config_n_expose_que_identifiant_public(monkeypatch):
+    monkeypatch.setattr(
+        settings, "google_client_id", "public.apps.googleusercontent.com"
+    )
+    transport = ASGITransport(app=app)
+    async with AsyncClient(transport=transport, base_url="http://test") as client:
+        response = await client.get("/api/auth/google/config")
+
+    assert response.status_code == 200
+    assert response.json() == {
+        "enabled": True,
+        "client_id": "public.apps.googleusercontent.com",
+    }
+
+
+@pytest.mark.asyncio
+async def test_login_admin_rejette_les_anciens_mots_de_passe_universels():
+    """Un administrateur doit toujours valider son propre hash."""
+    mock_user = User(
+        id=uuid.uuid4(),
+        email="admin-secure@example.com",
+        password_hash=hash_password("mot-de-passe-reel"),
+        auth_provider="local",
+        is_admin=True,
+    )
+
+    async def custom_mock_db():
+        session = MagicMock()
+        session.execute = AsyncMock(
+            return_value=MagicMock(scalar_one_or_none=MagicMock(return_value=mock_user))
+        )
+        yield session
+
+    app.dependency_overrides[get_db] = custom_mock_db
+    try:
+        transport = ASGITransport(app=app)
+        async with AsyncClient(transport=transport, base_url="http://test") as client:
+            for password in ("admin123", "dev_admin_password", "admin"):
+                response = await client.post(
+                    "/api/auth/login",
+                    json={"email": mock_user.email, "password": password},
+                )
+                assert response.status_code == 401
+    finally:
+        from tests.conftest import mock_get_db
+
+        app.dependency_overrides[get_db] = mock_get_db
+
+
+@pytest.mark.asyncio
+async def test_login_admin_emet_cookie_httponly_et_deconnexion_le_supprime():
+    """La session du back-office ne doit pas être lisible par JavaScript."""
+    mock_user = User(
+        id=uuid.uuid4(),
+        email="cookie-admin@example.com",
+        password_hash=hash_password("mot-de-passe-fort"),
+        auth_provider="local",
+        is_admin=True,
+        type_abonnement="FREE",
+    )
+
+    async def custom_mock_db():
+        session = MagicMock()
+        session.execute = AsyncMock(
+            return_value=MagicMock(scalar_one_or_none=MagicMock(return_value=mock_user))
+        )
+        yield session
+
+    app.dependency_overrides[get_db] = custom_mock_db
+    try:
+        transport = ASGITransport(app=app)
+        async with AsyncClient(transport=transport, base_url="http://test") as client:
+            login_response = await client.post(
+                "/api/auth/login",
+                json={
+                    "email": mock_user.email,
+                    "password": "mot-de-passe-fort",
+                },
+            )
+            cookie_header = login_response.headers["set-cookie"]
+            assert f"{ADMIN_SESSION_COOKIE}=" in cookie_header
+            assert "HttpOnly" in cookie_header
+            assert "SameSite=strict" in cookie_header
+
+            logout_response = await client.post("/api/auth/session/logout")
+            assert logout_response.status_code == 204
+            assert f"{ADMIN_SESSION_COOKIE}=" in logout_response.headers["set-cookie"]
+            assert "Max-Age=0" in logout_response.headers["set-cookie"]
     finally:
         from tests.conftest import mock_get_db
 

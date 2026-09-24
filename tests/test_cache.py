@@ -2,6 +2,7 @@
 
 import pytest
 
+from app.config import settings
 from app.services.cache_service import CacheService
 from app.services.rag_service import rag_service
 
@@ -33,6 +34,17 @@ async def test_cache_service_increment_fallback_memoire():
 
     # Fenêtre expirée -> le compteur repart de 1
     assert await cache.increment("test:compteur_exp", ttl_seconds=-1) == 1
+
+
+@pytest.mark.asyncio
+async def test_cache_securite_refuse_repli_memoire_en_production(monkeypatch):
+    """Un état de sécurité ne doit jamais devenir local à un worker en prod."""
+    cache = CacheService()
+    cache._redis_available = False
+    monkeypatch.setattr(settings, "app_env", "production")
+
+    with pytest.raises(RuntimeError, match="stockage de sécurité partagé"):
+        await cache.set("prosartisan:revoked_jti:test", "1", ttl_seconds=60)
     assert await cache.increment("test:compteur_exp", ttl_seconds=-1) == 1
 
 

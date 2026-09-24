@@ -5,7 +5,7 @@ from unittest.mock import AsyncMock, MagicMock
 import pytest
 from httpx import ASGITransport, AsyncClient
 
-from app.db.session import get_db
+from app.db.session import engine, get_db
 from app.main import app
 
 
@@ -51,6 +51,13 @@ def _isoler_services_externes(monkeypatch):
     from app.config import settings
 
     monkeypatch.setattr(settings, "mistral_api_key", "sk-placeholder-test")
+
+
+@pytest.fixture(autouse=True)
+async def _fermer_pool_sqlalchemy_apres_test():
+    """Évite que des connexions asyncpg survivent à la boucle d'un test."""
+    yield
+    await engine.dispose()
 
 
 @pytest.fixture

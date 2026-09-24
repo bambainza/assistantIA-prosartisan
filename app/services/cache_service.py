@@ -80,6 +80,19 @@ class CacheService:
         for k in expired_keys:
             self._memory_cache.pop(k, None)
 
+    @staticmethod
+    def _require_shared_backend(key: str) -> None:
+        """Refuse un repli local pour les états de sécurité en production."""
+        security_prefixes = (
+            "prosartisan:security:",
+            "prosartisan:revoked_jti:",
+            "prosartisan:rate_limit:",
+        )
+        if settings.is_production and key.startswith(security_prefixes):
+            raise RuntimeError(
+                "Redis est indisponible : le stockage de sécurité partagé est requis."
+            )
+
     async def get(self, key: str) -> str | None:
         """Récupère une valeur textuelle depuis Redis ou le cache mémoire."""
         client = await self._get_redis()
@@ -90,6 +103,7 @@ class CacheService:
                 logger.warning("Erreur lecture Redis pour la clé %s: %s", key, e)
 
         # Fallback mémoire
+        self._require_shared_backend(key)
         self._clean_expired_memory_cache()
         entry = self._memory_cache.get(key)
         if entry:
@@ -117,6 +131,7 @@ class CacheService:
                 logger.warning("Erreur incrément Redis pour la clé %s: %s", key, e)
 
         # Fallback mémoire
+        self._require_shared_backend(key)
         self._clean_expired_memory_cache()
         now = time.time()
         entry = self._memory_cache.get(key)
@@ -143,6 +158,7 @@ class CacheService:
                 logger.warning("Erreur écriture Redis pour la clé %s: %s", key, e)
 
         # Fallback mémoire
+        self._require_shared_backend(key)
         self._clean_expired_memory_cache()
         expiry = time.time() + ttl_seconds
         self._memory_cache[key] = (expiry, value)

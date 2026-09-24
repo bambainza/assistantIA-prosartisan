@@ -49,19 +49,9 @@
                         <label for="admin-totp" class="form-label text-muted fs-12">Code d'authentification à deux facteurs</label>
                         <input type="text" class="form-control login-input" id="admin-totp" placeholder="123456" inputmode="numeric" pattern="[0-9]{6}" maxlength="6" autocomplete="one-time-code">
                     </div>
-                    <div class="d-flex justify-content-between align-items-center mb-3">
-                        <span class="text-muted fs-12">Pré-remplissage rapide :</span>
-                        <button type="button" class="btn btn-sm btn-outline-info py-0 px-2 fs-11" onclick="fillDemoCredentials('admin123')">
-                            Remplir Démo
-                        </button>
-                    </div>
                     <button type="submit" class="btn btn-primary w-100 py-2 fw-semibold login-button mb-3" id="btn-login-submit">
                         Se connecter
                     </button>
-                    <div class="p-2 rounded bg-dark border border-secondary text-start text-muted fs-11">
-                        <div><strong>Compte :</strong> <code>admin@prosartisan.ci</code></div>
-                        <div><strong>Mots de passe :</strong> <code>admin123</code> ou <code>dev_admin_password</code></div>
-                    </div>
                 </form>
             </div>
         </div>
@@ -1424,7 +1414,7 @@
                             <div class="card mb-0 border-bottom-0 rounded-bottom-0">
                                 <div class="card-body">
                                     <p class="text-muted mb-0">
-                                        © <script> document.write(new Date().getFullYear()) </script> ProsArtisan IA • Panel d'Administration
+                                        © <span id="copyright-year"></span> ProsArtisan IA • Panel d'Administration
                                     </p>
                                 </div>
                             </div>

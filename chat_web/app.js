@@ -86,11 +86,14 @@ document.addEventListener('DOMContentLoaded', () => {
     });
 
     // Google Identity Services setup
-    setTimeout(() => {
+    setTimeout(async () => {
         if (window.google && window.google.accounts) {
             try {
+                const configResponse = await fetch('/api/auth/google/config');
+                const googleConfig = await configResponse.json();
+                if (!googleConfig.enabled || !googleConfig.client_id) return;
                 google.accounts.id.initialize({
-                    client_id: "YOUR_GOOGLE_CLIENT_ID.apps.googleusercontent.com",
+                    client_id: googleConfig.client_id,
                     callback: handleGoogleCredentialResponse
                 });
                 google.accounts.id.renderButton(
@@ -2024,4 +2027,9 @@ function appendAssistantStreamingBubble() {
         }
     };
 }
-
+// PWA : enregistrement depuis un fichier externe, compatible avec la CSP.
+if ('serviceWorker' in navigator) {
+    window.addEventListener('load', () => {
+        navigator.serviceWorker.register('/chat/sw.js').catch(() => {});
+    });
+}

@@ -82,6 +82,7 @@ Séparation stricte imposée : logique métier dans `app/services/`, jamais dans
 12. **2FA & refresh tokens** : un admin avec `totp_enabled=True` doit toujours fournir un code TOTP valide à la connexion. Les refresh tokens sont à usage unique (rotation via `jti` + liste noire) — `/auth/refresh` révoque l'ancien token à chaque renouvellement, `/auth/logout` permet une révocation explicite.
 13. **Notifications** : toujours passer par `notification_service.notify(...)` (écrit l'entrée in-app avant toute tentative de canal externe) — jamais d'appel direct à un provider externe (FCM...) depuis un router.
 14. **Diffusion de masse en tâche de fond** : toute diffusion vers potentiellement tous les artisans (composer de notifications, publication d'actualité) s'exécute via `BackgroundTasks` avec sa propre session DB — jamais dans la requête HTTP d'origine.
+15. **Documentation synchronisée avec chaque implémentation** : toute fonctionnalité ou modification structurante doit mettre à jour dans le même lot `PDR.md` (produit/architecture/API), ainsi que `AGENTS.md`, `CLAUDE.md` et `.agents/rules/project_rules.md` lorsqu'une règle évolue. Mettre également à jour `.env.example`, `README.md` et les manifests de déploiement concernés si la configuration ou l'exploitation change. Une livraison est incomplète si ces documents deviennent inexacts ; si aucune mise à jour n'est requise, le compte rendu doit le justifier explicitement.
 
 ## Contexte marché
 

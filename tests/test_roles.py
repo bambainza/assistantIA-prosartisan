@@ -132,6 +132,23 @@ async def test_role_restreint_bloque_permission_non_accordee(restricted_admin_us
 
 
 @pytest.mark.asyncio
+async def test_role_restreint_bloque_ancienne_route_packages(restricted_admin_user):
+    """Les anciennes routes admin appliquent désormais elles aussi le RBAC."""
+    app.dependency_overrides[get_db] = _db_returning_acting_user(restricted_admin_user)
+    token = create_access_token(data={"sub": str(restricted_admin_user.id)})
+    try:
+        transport = ASGITransport(app=app)
+        async with AsyncClient(transport=transport, base_url="http://test") as client:
+            res = await client.get(
+                "/api/admin/packages", headers={"Authorization": f"Bearer {token}"}
+            )
+        assert res.status_code == 403
+        assert "packages.read" in res.json()["detail"]
+    finally:
+        app.dependency_overrides[get_db] = mock_get_db
+
+
+@pytest.mark.asyncio
 async def test_non_admin_rejete_sur_roles():
     """Un utilisateur non-admin n'a jamais accès aux routes RBAC."""
     non_admin_id = uuid.uuid4()

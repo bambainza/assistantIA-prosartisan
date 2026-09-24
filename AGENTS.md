@@ -53,3 +53,13 @@ Ce document définit les normes d'ingénierie, les conventions de code et les ga
 - **Exécution pytest** : La commande `.\.venv\Scripts\pytest.exe tests/ -v` doit s'exécuter avec **100% de réussite** avant tout commit ou livraison.
 - **Tests de régression sécurité** : toute correction d'une faille (IDOR, usurpation d'identité, contournement d'authentification ou de signature webhook) doit être accompagnée d'un test qui échoue de façon démontrable sans le correctif.
 - **Fallback DB en test** : Les services doivent intégrer un fallback gracieux lors des tests autonomes si la base de données PostgreSQL ou Redis n'est pas active sur la machine de dev. Ce repli reste strictement un confort de développement/test : voir §2 pour les garde-fous de production associés (`DB_REQUIRE_POSTGRES`, `APP_ENV=production`).
+
+---
+
+## 📝 5. Synchronisation obligatoire de la documentation
+
+- **Mise à jour dans le même lot** : toute nouvelle implémentation ou modification structurante doit mettre à jour les documents qu'elle affecte dans le même commit ou la même pull request. Une fonctionnalité n'est pas terminée si sa documentation de référence est devenue inexacte.
+- **PRD/PDR** : mettre à jour `PDR.md` pour tout changement de comportement produit, parcours utilisateur, endpoint, architecture, intégration externe, configuration, offre commerciale ou procédure de validation.
+- **Règles agents/IDE** : lorsqu'une règle d'ingénierie, de sécurité, de qualité ou de livraison évolue, synchroniser obligatoirement `AGENTS.md`, `CLAUDE.md` et `.agents/rules/project_rules.md`. Aucun de ces fichiers ne doit contredire les autres.
+- **Exploitation** : mettre à jour `.env.example`, `README.md` et les manifests de déploiement concernés dès qu'une variable d'environnement, une dépendance, une commande ou une procédure opérationnelle change.
+- **Contrôle de livraison** : avant livraison, vérifier explicitement si chacun de ces documents nécessite une modification. Si aucune mise à jour n'est nécessaire, le signaler dans le compte rendu de livraison avec une justification concise.
