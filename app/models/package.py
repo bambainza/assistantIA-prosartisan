@@ -6,7 +6,7 @@ import uuid
 from datetime import datetime
 from typing import TYPE_CHECKING, Any
 
-from sqlalchemy import Boolean, Integer, String, Text, func
+from sqlalchemy import JSON, Boolean, Integer, String, Text, func
 from sqlalchemy.dialects.postgresql import JSONB, UUID
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
@@ -43,7 +43,7 @@ class Package(Base):
 
     # Fonctionnalités incluses (stockées en JSON / string pour SQLite/PG)
     fonctionnalites: Mapped[list[str] | dict[str, Any] | None] = mapped_column(
-        JSONB().with_variant(Text, "sqlite"), default=list
+        JSONB().with_variant(JSON, "sqlite"), default=list
     )
 
     created_at: Mapped[datetime] = mapped_column(server_default=func.now())

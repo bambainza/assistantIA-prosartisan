@@ -240,6 +240,10 @@ async function updateQuotaUI() {
 
 // Update UI based on connection state
 function updateAuthUI() {
+    // Lien vers la console : réservé aux administrateurs (l'accès reste contrôlé côté serveur).
+    const adminLink = document.getElementById('admin-console-link');
+    if (adminLink) adminLink.classList.toggle('hidden', !(state.isLoggedIn && state.user && state.user.is_admin));
+
     if (state.isLoggedIn) {
         // Logged-in view
         ctaSidebarLogin.classList.add('hidden');
@@ -535,19 +539,48 @@ function triggerImageUpload() {
 }
 
 // Handle Image Selection
-function handleImageSelection() {
-    const file = document.getElementById('image-upload').files[0];
+// Photos réencodées en JPEG côté navigateur avant l'envoi : le serveur n'accepte
+// que PNG/JPEG/WebP/GIF (une photo HEIC d'iPhone est convertie par les navigateurs
+// qui savent la lire), et une photo réduite part bien plus vite en 3G.
+const IMAGE_MAX_DIMENSION = 1600;
+const IMAGE_JPEG_QUALITY = 0.85;
+
+function encodeImageAsJpeg(file) {
+    return new Promise((resolve, reject) => {
+        const url = URL.createObjectURL(file);
+        const img = new Image();
+        img.onload = () => {
+            const scale = Math.min(1, IMAGE_MAX_DIMENSION / Math.max(img.naturalWidth, img.naturalHeight));
+            const canvas = document.createElement('canvas');
+            canvas.width = Math.round(img.naturalWidth * scale);
+            canvas.height = Math.round(img.naturalHeight * scale);
+            canvas.getContext('2d').drawImage(img, 0, 0, canvas.width, canvas.height);
+            URL.revokeObjectURL(url);
+            resolve(canvas.toDataURL('image/jpeg', IMAGE_JPEG_QUALITY));
+        };
+        img.onerror = () => {
+            URL.revokeObjectURL(url);
+            reject(new Error('image illisible'));
+        };
+        img.src = url;
+    });
+}
+
+async function handleImageSelection() {
+    const input = document.getElementById('image-upload');
+    const file = input.files[0];
     if (!file) return;
 
-    // Convert file to Base64
-    const reader = new FileReader();
-    reader.onload = function(e) {
-        state.selectedImage = e.target.result;
-        previewImgName.textContent = file.name;
-        imagePreviewBox.classList.remove('hidden');
-        sendBtn.classList.remove('disabled');
-    };
-    reader.readAsDataURL(file);
+    try {
+        state.selectedImage = await encodeImageAsJpeg(file);
+    } catch (e) {
+        input.value = '';
+        showToast("Format de photo non lu par ce navigateur (HEIC ?). Envoyez une photo JPEG ou PNG.");
+        return;
+    }
+    previewImgName.textContent = file.name;
+    imagePreviewBox.classList.remove('hidden');
+    sendBtn.classList.remove('disabled');
 }
 
 // Clear selected image
@@ -1298,6 +1331,13 @@ function handleLoginModalKeydown(e) {
     if (e.key === 'Escape') {
         e.preventDefault();
         closeLoginModal();
+        return;
+    }
+    // Entrée dans un champ valide le formulaire affiché (connexion ou inscription).
+    if (e.key === 'Enter' && e.target.tagName === 'INPUT') {
+        e.preventDefault();
+        if (e.target.id.startsWith('login-')) submitLogin();
+        else if (e.target.id.startsWith('register-')) submitRegister();
         return;
     }
     if (e.key !== 'Tab') return;
