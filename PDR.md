@@ -111,8 +111,9 @@ Sur toutes les routes ci-dessous, l'identité de l'artisan est déduite du JWT (
 
 **Chat & Historique**
 
-- `POST /api/chat` : Pose une question technique (texte + photo `image_url` optionnelle + filtre `metier_id`). Intercepte les quotas épuisés avec `HTTP 402 Payment Required` (`503` si le compteur de quota est indisponible). Entrées bornées : question ≤ 4000 caractères, `image_url` ≤ 10 M caractères (`422` au-delà).
-- `POST /api/chat/stream` : équivalent en streaming SSE (mêmes garanties que `/api/chat`, dont calculateurs et cache). Une erreur du fournisseur IA en cours de flux produit un `event: error` dont la donnée est un message texte, suivi de `[DONE]`.
+- `POST /api/chat` : Pose une question technique (texte + photo `image_url` optionnelle + filtre `metier_id`). Intercepte les quotas épuisés avec `HTTP 402 Payment Required` (`503` si le compteur de quota est indisponible). Panne du fournisseur IA : `503` explicite et **question rendue** (`quota_service.restituer_quota` : compteur du jour décrémenté, ou crédit acheté recrédité). Sans `metier_id`, la recherche couvre tous les métiers. Entrées bornées : question ≤ 4000 caractères, `image_url` ≤ 10 M caractères (`422` au-delà).
+- `POST /api/chat/stream` : équivalent en streaming SSE (mêmes garanties que `/api/chat`, dont calculateurs et cache). Une erreur du fournisseur IA en cours de flux produit un `event: error` dont la donnée est un message texte, suivi de `[DONE]` ; la question est rendue et les clients (chat_web, Flutter) l'affichent comme une erreur, jamais comme une réponse (ni historique, ni file hors-ligne). Chaque morceau de réponse est une chaîne JSON (`data: "texte"`).
+- `GET /api/metiers` : métiers actifs (`id`, `nom`, `slug`), public. Les identifiants sont propres à chaque base : les clients les lisent ici, jamais codés en dur.
 - `GET /api/media/chat-images/{nom}?exp=&sig=` : photo de chantier via URL signée (404 identique pour signature invalide, expirée ou fichier absent).
 - `POST /api/chat/transcribe` : transcription vocale (Mistral Voxtral) d'une note audio de chantier (10 Mo maximum, `413` au-delà).
 - `POST /api/chat/synthesize` : synthèse vocale (Voxtral TTS) d'un texte de 2000 caractères maximum.

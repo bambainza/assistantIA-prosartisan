@@ -26,6 +26,12 @@ class ParametresService:
         res = await db.execute(stmt)
         return list(res.scalars().all())
 
+    async def list_metiers_actifs(self, db: AsyncSession) -> list[Metier]:
+        """Métiers proposés aux artisans (filtre du RAG), par identifiant."""
+        stmt = select(Metier).where(Metier.is_active.is_(True)).order_by(Metier.id)
+        res = await db.execute(stmt)
+        return list(res.scalars().all())
+
     async def get_metier(self, db: AsyncSession, metier_id: int) -> Metier | None:
         stmt = (
             select(Metier)

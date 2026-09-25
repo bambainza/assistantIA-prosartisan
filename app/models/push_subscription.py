@@ -24,7 +24,7 @@ class PushSubscription(Base):
     user_id: Mapped[uuid.UUID] = mapped_column(
         ForeignKey("users.id", ondelete="CASCADE"), index=True, nullable=False
     )
-    endpoint: Mapped[str] = mapped_column(Text, nullable=False, unique=True)
+    endpoint: Mapped[str] = mapped_column(Text, nullable=False, unique=True, index=True)
     p256dh_key: Mapped[str] = mapped_column(String(255), nullable=False)
     auth_key: Mapped[str] = mapped_column(String(100), nullable=False)
 

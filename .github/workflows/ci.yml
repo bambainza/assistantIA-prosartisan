@@ -90,6 +90,20 @@ jobs:
           ruff check app/ tests/ ingestion/
           ruff format --check app/ tests/ ingestion/
 
+      # Toutes les migrations s'appliquent sur une base PostgreSQL vide, et les
+      # modèles ORM n'ont aucun écart avec le schéma migré (sinon : migration manquante).
+      - name: Alembic migrations & schema drift check
+        env:
+          DB_HOST: localhost
+          DB_PORT: 5432
+          DB_DATABASE: prosartisan_test
+          DB_USERNAME: prosartisan
+          DB_PASSWORD: test_password
+          APP_ENV: testing
+        run: |
+          alembic upgrade head
+          alembic check
+
       - name: Run test suite
         env:
           DB_HOST: localhost

@@ -781,7 +781,8 @@ async function sendMessage() {
     // 3. Prepare payload
     const payload = {
         question: text,
-        metier_id: 1, // Default Batiment
+        // Pas de filtre métier : chat_web n'a pas de sélecteur, et un identifiant
+        // codé en dur (ex. 1, absent de la base) écartait tous les documents.
         image_url: image
     };
 
@@ -826,6 +827,10 @@ async function sendMessage() {
         let fullResponseText = "";
         let buffer = "";
         let sources = [];
+        // Type SSE courant : un `event: error` porte un message d'erreur, jamais
+        // une réponse (ni affichée comme telle, ni enregistrée dans l'historique).
+        let currentEvent = "message";
+        let streamError = null;
 
         while (true) {
             const { value, done } = await reader.read();
@@ -841,10 +846,8 @@ async function sendMessage() {
                 const cleanLine = line.trim();
                 if (!cleanLine) continue;
 
-                if (cleanLine.startsWith("event: info")) {
-                    // event info contains meta like conversation ID and sources list
-                } else if (cleanLine.startsWith("event: chunk")) {
-                    // chunk identifier
+                if (cleanLine.startsWith("event:")) {
+                    currentEvent = cleanLine.substring(6).trim();
                 } else if (cleanLine.startsWith("data:")) {
                     const dataStr = cleanLine.substring(5).trim();
                     try {
@@ -859,6 +862,8 @@ async function sendMessage() {
                             if (parsed.sources) {
                                 sources = parsed.sources;
                             }
+                        } else if (typeof parsed === 'string' && currentEvent === 'error') {
+                            streamError = parsed;
                         } else if (typeof parsed === 'string') {
                             fullResponseText += parsed;
                             // Update assistant bubble content
@@ -872,6 +877,15 @@ async function sendMessage() {
             }
         }
 
+        if (streamError && !fullResponseText.trim()) {
+            // Échec côté serveur (ex. modèle indisponible) : message d'erreur seul,
+            // sans actions (copier, écouter...) ni enregistrement de l'échange.
+            bubble.querySelector('.streaming-text').textContent = streamError;
+            announceToScreenReader(streamError);
+            updateQuotaUI();
+            return;
+        }
+
         // Remove cursor when finished
         bubble.querySelector('.streaming-text').innerHTML = formatMarkdownText(fullResponseText);
         announceToScreenReader(fullResponseText ? `Réponse de l'assistant : ${fullResponseText}` : "L'assistant n'a pas pu générer de réponse.");
@@ -880,7 +894,7 @@ async function sendMessage() {
         let sourcesHtml = '';
         if (sources && sources.length > 0) {
             const listItems = sources.map(s => {
-                const docName = s.document_name || "Document technique";
+                const docName = escapeHtml(s.document_name || "Document technique");
                 const scorePct = s.relevance_score ? ` (Pertinence: ${Math.round(s.relevance_score * 100)}%)` : '';
                 return `<li style="margin-bottom: 4px; font-size: 13px; color: var(--text-muted);">📄 ${docName}${scorePct}</li>`;
             }).join('');
@@ -975,7 +989,7 @@ function appendMessageBubble(role, content, imageSrc = null, sources = null) {
         
         if (sources && sources.length > 0) {
             const listItems = sources.map(s => {
-                const docName = s.document_name || "Document technique";
+                const docName = escapeHtml(s.document_name || "Document technique");
                 const scorePct = s.relevance_score ? ` (Pertinence: ${Math.round(s.relevance_score * 100)}%)` : '';
                 return `<li style="margin-bottom: 4px; font-size: 13px; color: var(--text-muted);">📄 ${docName}${scorePct}</li>`;
             }).join('');

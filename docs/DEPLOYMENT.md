@@ -105,6 +105,7 @@ Le projet est configuré avec 2 workflows GitHub Actions dans `.github/workflows
 - **`ci.yml` (Intégration Continue)** :
   - Exécuté sur chaque `push` et `pull_request`.
   - Lance les linters et formatteurs `ruff check` et `ruff format`.
+  - Applique toutes les migrations sur une base PostgreSQL vide puis `alembic check` (aucun écart entre modèles ORM et schéma migré).
   - Exécute la suite de tests backend `pytest` avec PostgreSQL, Redis et Qdrant éphémères.
   - Exécute `flutter analyze` et `flutter test` sur l'application mobile.
   - Vérifie la compilation de l'image Docker.

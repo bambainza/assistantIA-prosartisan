@@ -38,8 +38,9 @@ class User(Base):
     password_hash: Mapped[str | None] = mapped_column(String(255), default=None)
 
     # Google OAuth fields
+    # Index unique (et non contrainte) : aligné sur la migration f9a3a3385da9.
     google_id: Mapped[str | None] = mapped_column(
-        String(255), unique=True, nullable=True, default=None
+        String(255), unique=True, index=True, nullable=True, default=None
     )
     avatar_url: Mapped[str | None] = mapped_column(String(500), default=None)
     auth_provider: Mapped[str] = mapped_column(
@@ -60,7 +61,7 @@ class User(Base):
     # Un admin sans rôle assigné conserve l'accès complet historique (compatibilité
     # descendante) — voir app.middleware.auth.require_permission.
     role_id: Mapped[uuid.UUID | None] = mapped_column(
-        ForeignKey("roles.id"), default=None
+        ForeignKey("roles.id"), default=None, index=True
     )
 
     # Authentification à deux facteurs (TOTP) — réservée aux comptes admin.

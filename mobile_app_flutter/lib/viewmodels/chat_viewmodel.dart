@@ -56,8 +56,12 @@ class ChatViewModel extends ChangeNotifier {
   List<Map<String, dynamic>> _messages = [];
   List<Map<String, dynamic>> get messages => _messages;
 
-  int? _activeMetierId = 1; // 1: Maçonnerie, 2: Électricité, 3: Plomberie, 4: Menuiserie, 5: Carrelage, 6: Peinture
+  // null = tous les métiers (aucun filtre RAG). Les identifiants réels viennent
+  // de `/api/metiers` : une liste codée en dur ne correspondait pas à la base.
+  int? _activeMetierId;
   int? get activeMetierId => _activeMetierId;
+  List<Map<String, dynamic>> _metiers = [];
+  List<Map<String, dynamic>> get metiers => _metiers;
 
   bool _isStreaming = false;
   bool get isStreaming => _isStreaming;
@@ -110,6 +114,7 @@ class ChatViewModel extends ChangeNotifier {
 
     // Attendre la détection automatique du serveur
     await autoDetectServer();
+    await refreshMetiers();
 
     // Rejoue automatiquement les questions en file dès que le réseau revient.
     _connectivitySubscription =
@@ -257,6 +262,17 @@ class ChatViewModel extends ChangeNotifier {
   }
 
   // --- Actions Chat & Métiers ---
+  Future<void> refreshMetiers() async {
+    final metiers = await client.getMetiers();
+    if (metiers.isEmpty) return; // hors-ligne : on garde la dernière liste
+    _metiers = metiers;
+    // Métier choisi disparu (désactivé) : retour à « Tous ».
+    if (_activeMetierId != null && !_metiers.any((m) => m['id'] == _activeMetierId)) {
+      _activeMetierId = null;
+    }
+    notifyListeners();
+  }
+
   void selectMetier(int? id) {
     _activeMetierId = id;
     notifyListeners();
@@ -549,8 +565,15 @@ class ChatViewModel extends ChangeNotifier {
       await for (final data in stream) {
         try {
           final parsed = jsonDecode(data);
-          
-          if (parsed is Map) {
+
+          // Le serveur envoie chaque morceau de réponse comme une chaîne JSON
+          // (`data: "texte"`) : sans ce cas, aucune réponse ne s'affichait.
+          if (parsed is String) {
+            fullResponseText =
+                fullResponseText == '...' ? parsed : fullResponseText + parsed;
+            _currentStreamText = fullResponseText;
+            notifyListeners();
+          } else if (parsed is Map) {
             if (parsed.containsKey('conversation_id')) {
               _activeConversationId = parsed['conversation_id'];
               notifyListeners();
@@ -603,6 +626,11 @@ class ChatViewModel extends ChangeNotifier {
       if (e is QuotaEpuiseException) {
         // Quota épuisé : proposer un Pass, jamais de mise en file hors-ligne.
         _showPaywall = true;
+      } else if (e is AssistantIndisponibleException) {
+        // Panne du fournisseur IA : le serveur a rendu la question ; message
+        // clair, sans mise en file hors-ligne (le réseau fonctionne).
+        _chatError = e.message;
+        refreshQuota();
       } else {
         _isOffline = true;
         if (!isRetry) {

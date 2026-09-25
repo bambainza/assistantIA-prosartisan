@@ -59,6 +59,16 @@ class MetierOut(BaseModel):
         return value if value is not None else True
 
 
+class MetierPublic(BaseModel):
+    """Métier proposé dans les clients (sélecteur du chat)."""
+
+    model_config = ConfigDict(from_attributes=True)
+
+    id: int
+    nom: str
+    slug: str
+
+
 class MetierCreateRequest(BaseModel):
     """Création d'un nouveau métier."""
 

@@ -45,6 +45,14 @@ Future<void> main() async {
   );
 }
 
+// `surface: Colors.transparent` rend transparente la couleur de texte par défaut
+// des SnackBar (onInverseSurface) : tous les bandeaux étaient illisibles.
+const SnackBarThemeData _snackBarTheme = SnackBarThemeData(
+  backgroundColor: Color(0xFF232333),
+  contentTextStyle: TextStyle(color: Colors.white, fontSize: 14),
+  actionTextColor: Color(0xFFE2A000),
+);
+
 class ProsArtisanApp extends StatelessWidget {
   const ProsArtisanApp({super.key});
 
@@ -65,6 +73,7 @@ class ProsArtisanApp extends StatelessWidget {
           secondary: Color(0xFFE2A000),
           surface: Colors.transparent,
         ),
+        snackBarTheme: _snackBarTheme,
         useMaterial3: true,
       ),
       theme: ThemeData(
@@ -75,6 +84,7 @@ class ProsArtisanApp extends StatelessWidget {
           secondary: Color(0xFFE2A000),
           surface: Colors.transparent,
         ),
+        snackBarTheme: _snackBarTheme,
         useMaterial3: true,
       ),
       home: const MainLayoutWrapper(),
