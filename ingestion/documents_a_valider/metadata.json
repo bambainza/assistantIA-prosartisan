@@ -1,0 +1,33 @@
+{
+    "_README": "Fiches à fort enjeu santé/sécurité, NON indexées : l'ingestion ne lit que ingestion/documents/. Après relecture par un professionnel (dermatologue ou médecin, vétérinaire, conseiller ANADER, sécurité incendie), déplacer la fiche dans ingestion/documents/, copier son entrée ci-dessous dans ingestion/documents/metadata.json, puis relancer l'ingestion.",
+    "guide_coiffure_defrisage_securite.md": {
+        "metier_id": 8,
+        "secteur_id": 2,
+        "type_document": "guide_technique",
+        "niveau_expertise": "intermédiaire"
+    },
+    "fiche_produits_interdits_depigmentation.md": {
+        "metier_id": 8,
+        "secteur_id": 2,
+        "type_document": "guide_technique",
+        "niveau_expertise": "debutant"
+    },
+    "guide_securite_batteries_lithium.md": {
+        "metier_id": 9,
+        "secteur_id": 1,
+        "type_document": "guide_technique",
+        "niveau_expertise": "debutant"
+    },
+    "guide_elevage_volaille_hygiene.md": {
+        "metier_id": 10,
+        "secteur_id": 2,
+        "type_document": "guide_technique",
+        "niveau_expertise": "intermédiaire"
+    },
+    "guide_phytosanitaires_securite.md": {
+        "metier_id": 10,
+        "secteur_id": 2,
+        "type_document": "guide_technique",
+        "niveau_expertise": "debutant"
+    }
+}

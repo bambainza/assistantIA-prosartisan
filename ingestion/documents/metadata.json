@@ -131,6 +131,107 @@
         "secteur_id": 2,
         "type_document": "guide_technique",
         "niveau_expertise": "avance"
+    },
+    "guide_couture_patronage_retouches.md": {
+        "metier_id": 7,
+        "secteur_id": 2,
+        "type_document": "guide_technique",
+        "niveau_expertise": "debutant"
+    },
+    "guide_machines_coudre_reglage_entretien.md": {
+        "metier_id": 7,
+        "secteur_id": 2,
+        "type_document": "guide_technique",
+        "niveau_expertise": "intermédiaire"
+    },
+    "guide_tissus_pagne_wax_teinture.md": {
+        "metier_id": 7,
+        "secteur_id": 2,
+        "type_document": "guide_technique",
+        "niveau_expertise": "intermédiaire"
+    },
+    "guide_broderie_finitions_atelier.md": {
+        "metier_id": 7,
+        "secteur_id": 2,
+        "type_document": "guide_technique",
+        "niveau_expertise": "avance"
+    },
+    "guide_hygiene_desinfection_salon.md": {
+        "metier_id": 8,
+        "secteur_id": 2,
+        "type_document": "guide_technique",
+        "niveau_expertise": "debutant"
+    },
+    "guide_tresses_extensions_protection.md": {
+        "metier_id": 8,
+        "secteur_id": 2,
+        "type_document": "guide_technique",
+        "niveau_expertise": "intermédiaire"
+    },
+    "guide_reparation_smartphones_ecrans_batteries.md": {
+        "metier_id": 9,
+        "secteur_id": 1,
+        "type_document": "guide_technique",
+        "niveau_expertise": "intermédiaire"
+    },
+    "guide_soudure_electronique_esd.md": {
+        "metier_id": 9,
+        "secteur_id": 1,
+        "type_document": "guide_technique",
+        "niveau_expertise": "debutant"
+    },
+    "guide_depannage_tv_electromenager_onduleurs.md": {
+        "metier_id": 9,
+        "secteur_id": 1,
+        "type_document": "guide_technique",
+        "niveau_expertise": "avance"
+    },
+    "guide_dechets_electroniques_deee.md": {
+        "metier_id": 9,
+        "secteur_id": 1,
+        "type_document": "guide_technique",
+        "niveau_expertise": "intermédiaire"
+    },
+    "guide_compostage_fertilisation_organique.md": {
+        "metier_id": 10,
+        "secteur_id": 2,
+        "type_document": "guide_technique",
+        "niveau_expertise": "debutant"
+    },
+    "guide_maraichage_irrigation_goutte_a_goutte.md": {
+        "metier_id": 10,
+        "secteur_id": 2,
+        "type_document": "guide_technique",
+        "niveau_expertise": "intermédiaire"
+    },
+    "guide_recyclage_plastique_pave.md": {
+        "metier_id": 10,
+        "secteur_id": 2,
+        "type_document": "guide_technique",
+        "niveau_expertise": "intermédiaire"
+    },
+    "guide_conservation_aliments_chaine_froid.md": {
+        "metier_id": 5,
+        "secteur_id": 2,
+        "type_document": "guide_technique",
+        "niveau_expertise": "intermédiaire"
+    },
+    "guide_boulangerie_patisserie_artisanale.md": {
+        "metier_id": 5,
+        "secteur_id": 2,
+        "type_document": "guide_technique",
+        "niveau_expertise": "intermédiaire"
+    },
+    "guide_sculpture_bois_finitions.md": {
+        "metier_id": 6,
+        "secteur_id": 2,
+        "type_document": "guide_technique",
+        "niveau_expertise": "intermédiaire"
+    },
+    "guide_bijouterie_orfevrerie_atelier.md": {
+        "metier_id": 6,
+        "secteur_id": 2,
+        "type_document": "guide_technique",
+        "niveau_expertise": "avance"
     }
 }
-
