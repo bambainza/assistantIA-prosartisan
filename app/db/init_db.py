@@ -418,7 +418,9 @@ async def seed_data() -> None:
             )
             existing_role = (await session.execute(role_stmt)).scalar_one_or_none()
             if existing_role is None:
-                existing_role = Role(code=role_code, label=label)
+                # Collection initialisée : sinon lire `permissions` juste après
+                # déclenche un chargement paresseux interdit en async (MissingGreenlet).
+                existing_role = Role(code=role_code, label=label, permissions=[])
                 session.add(existing_role)
                 await session.flush()
             existing_role.label = label

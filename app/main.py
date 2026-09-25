@@ -29,6 +29,7 @@ from app.routers import (
     finance,
     health,
     media,
+    metiers,
     notification,
     parametres,
     payment,
@@ -149,6 +150,7 @@ app.include_router(finance.router)
 app.include_router(quote.router)
 app.include_router(parametres.router)
 app.include_router(media.router)
+app.include_router(metiers.router)
 app.include_router(admin.router)
 
 # ── Back-Office Admin Frontend ──

@@ -21,7 +21,6 @@ async function sendSimulatedChat() {
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({
                 question: q,
-                metier_id: 1,
                 image_url: imgInput.value || null
             })
         });

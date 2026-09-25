@@ -172,5 +172,42 @@ class QuotaService:
             return False
         return await self._consommer_credit(db, user_id)
 
+    async def restituer_quota(
+        self,
+        db: AsyncSession,
+        user_id: uuid.UUID | None,
+        client_ip: str | None = None,
+    ) -> None:
+        """Rend la question consommée quand la réponse n'a pas pu être produite.
+
+        Appelé si le fournisseur IA (ou la transcription vocale) échoue après
+        `consume_quota` : l'artisan ne doit pas perdre une question pour une
+        panne qui n'est pas de son fait. Pass premium : rien à rendre. Sinon le
+        compteur du jour est décrémenté ; si la question avait dépassé le quota
+        gratuit, c'est un crédit acheté qui avait été pris et il est recrédité.
+        Jamais bloquant : un échec est journalisé, la réponse d'erreur part.
+        """
+        try:
+            if user_id is not None:
+                quota_obj = await self._charger_quota(db, user_id)
+                if self._fin_premium_active(quota_obj) is not None:
+                    return
+
+            cle = cle_quota_journalier(identite_quota(user_id, client_ip))
+            restant = await cache_service.increment(cle, _DAILY_KEY_TTL_SECONDS, -1)
+            if restant < 0:
+                # Compteur expiré entre-temps (changement de jour) : rien à rendre.
+                await cache_service.increment(cle, _DAILY_KEY_TTL_SECONDS, 1)
+                return
+            if restant + 1 > settings.max_questions_gratuites_par_jour and user_id:
+                await db.execute(
+                    update(QuotaUtilisateur)
+                    .where(QuotaUtilisateur.user_id == user_id)
+                    .values(credits_requetes=QuotaUtilisateur.credits_requetes + 1)
+                )
+                await db.commit()
+        except Exception:
+            logger.exception("Restitution de quota impossible (user=%s).", user_id)
+
 
 quota_service = QuotaService()

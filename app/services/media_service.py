@@ -88,7 +88,8 @@ class MediaService:
         match = _DATA_URL_RE.match(image_url)
         if not match:
             raise ImageInvalideError(
-                "Format de photo non supporté (PNG, JPEG, WebP ou GIF attendu)."
+                "Format de photo non supporté (PNG, JPEG, WebP ou GIF attendu ; "
+                "HEIC non pris en charge, convertissez la photo en JPEG)."
             )
         extension = "jpg" if match["mime"] in ("jpeg", "jpg") else match["mime"]
         try:

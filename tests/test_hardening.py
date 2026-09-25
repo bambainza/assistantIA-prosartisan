@@ -77,6 +77,10 @@ async def test_security_headers_present():
         if directive.startswith("script-src ")
     )
     assert "'unsafe-inline'" not in script_src
+    # Les feuilles de style et polices externes utilisées par les fronts sont permises.
+    csp = response.headers["Content-Security-Policy"]
+    assert "https://fonts.googleapis.com" in csp
+    assert "font-src 'self' data: https://fonts.gstatic.com" in csp
     assert "Permissions-Policy" in response.headers
     # HSTS ne doit apparaître qu'en production (jamais en dev, où HTTPS n'est pas garanti).
     assert "Strict-Transport-Security" not in response.headers

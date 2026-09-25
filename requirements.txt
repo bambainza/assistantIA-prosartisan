@@ -10,6 +10,8 @@ pydantic-settings==2.5.0
 # === Base de données ===
 sqlalchemy[asyncio]==2.0.32
 asyncpg==0.29.0
+# Repli SQLite du développement (DB_PORT injoignable hors production).
+aiosqlite==0.22.1
 alembic==1.13.2
 
 # === Cache (Redis) ===

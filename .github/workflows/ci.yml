@@ -13,17 +13,17 @@ jobs:
 
     steps:
       - name: Checkout repository
-        uses: actions/checkout@v4
+        uses: actions/checkout@v5
         with:
           fetch-depth: 0
 
       - name: Scan for committed secrets (gitleaks)
-        uses: gitleaks/gitleaks-action@v2
+        uses: gitleaks/gitleaks-action@v3
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
       - name: Setup Python 3.12
-        uses: actions/setup-python@v5
+        uses: actions/setup-python@v6
         with:
           python-version: "3.12"
 
@@ -71,10 +71,10 @@ jobs:
 
     steps:
       - name: Checkout repository
-        uses: actions/checkout@v4
+        uses: actions/checkout@v5
 
       - name: Setup Python 3.12
-        uses: actions/setup-python@v5
+        uses: actions/setup-python@v6
         with:
           python-version: "3.12"
           cache: "pip"
@@ -89,6 +89,20 @@ jobs:
         run: |
           ruff check app/ tests/ ingestion/
           ruff format --check app/ tests/ ingestion/
+
+      # Toutes les migrations s'appliquent sur une base PostgreSQL vide, et les
+      # modèles ORM n'ont aucun écart avec le schéma migré (sinon : migration manquante).
+      - name: Alembic migrations & schema drift check
+        env:
+          DB_HOST: localhost
+          DB_PORT: 5432
+          DB_DATABASE: prosartisan_test
+          DB_USERNAME: prosartisan
+          DB_PASSWORD: test_password
+          APP_ENV: testing
+        run: |
+          alembic upgrade head
+          alembic check
 
       - name: Run test suite
         env:
@@ -115,7 +129,7 @@ jobs:
 
     steps:
       - name: Checkout repository
-        uses: actions/checkout@v4
+        uses: actions/checkout@v5
 
       - name: Setup Flutter
         uses: subosito/flutter-action@v2
@@ -139,13 +153,13 @@ jobs:
 
     steps:
       - name: Checkout repository
-        uses: actions/checkout@v4
+        uses: actions/checkout@v5
 
       - name: Set up Docker Buildx
-        uses: docker/setup-buildx-action@v3
+        uses: docker/setup-buildx-action@v4
 
       - name: Build Docker Image (Dry-Run / Cache Check)
-        uses: docker/build-push-action@v6
+        uses: docker/build-push-action@v7
         with:
           context: .
           file: ./Dockerfile

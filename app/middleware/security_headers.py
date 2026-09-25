@@ -24,7 +24,12 @@ _CSP_SCRIPT_SRC = (
 _CSP_DIRECTIVES = (
     "default-src 'self'",
     "img-src 'self' data: blob:",
-    "style-src 'self' 'unsafe-inline'",
+    # Polices Google (chat_web, thème Dastone de l'admin) et thème highlight.js.
+    (
+        "style-src 'self' 'unsafe-inline' "
+        "https://fonts.googleapis.com https://cdnjs.cloudflare.com"
+    ),
+    "font-src 'self' data: https://fonts.gstatic.com",
     _CSP_SCRIPT_SRC,
     "script-src-attr 'unsafe-inline'",
     "connect-src 'self' https://accounts.google.com",

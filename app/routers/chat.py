@@ -238,13 +238,24 @@ async def chat_endpoint(
             detail=QuotaEpuiseResponse().model_dump(),
         )
 
-    # 2. Génération RAG / Vision via Mistral avec historique
-    rag_result = await rag_service.generate_response(
-        question=payload.question,
-        metier_id=payload.metier_id,
-        image_url=payload.image_url,
-        history=history_messages,
-    )
+    # 2. Génération RAG / Vision via Mistral avec historique. Panne du
+    # fournisseur IA : la question est rendue et un 503 explicite remplace le 500.
+    try:
+        rag_result = await rag_service.generate_response(
+            question=payload.question,
+            metier_id=payload.metier_id,
+            image_url=payload.image_url,
+            history=history_messages,
+        )
+    except Exception:
+        logger.exception("Échec de génération de la réponse.")
+        await quota_service.restituer_quota(
+            db=db, user_id=current_user_id, client_ip=client_ip
+        )
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail=ASSISTANT_INDISPONIBLE_MESSAGE,
+        ) from None
 
     # 3. Enregistrement (utilisateurs connectés uniquement)
     try:
@@ -288,8 +299,9 @@ async def chat_stream_endpoint(
     )
 
     # 1. Vérification et décrémentation des quotas
+    client_ip = get_client_ip(request)
     allowed = await quota_service.consume_quota(
-        db=db, user_id=current_user_id, client_ip=get_client_ip(request)
+        db=db, user_id=current_user_id, client_ip=client_ip
     )
     if not allowed:
         raise HTTPException(
@@ -302,13 +314,23 @@ async def chat_stream_endpoint(
         db, current_user_id, payload.conversation_id, payload.question
     )
 
-    # 3. Sources et générateur du RAG
-    sources, stream_generator = await rag_service.generate_response_stream(
-        question=payload.question,
-        metier_id=payload.metier_id,
-        image_url=payload.image_url,
-        history=history_messages,
-    )
+    # 3. Sources et générateur du RAG (embeddings, recherche : peut échouer).
+    try:
+        sources, stream_generator = await rag_service.generate_response_stream(
+            question=payload.question,
+            metier_id=payload.metier_id,
+            image_url=payload.image_url,
+            history=history_messages,
+        )
+    except Exception:
+        logger.exception("Échec de préparation de la réponse en streaming.")
+        await quota_service.restituer_quota(
+            db=db, user_id=current_user_id, client_ip=client_ip
+        )
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail=ASSISTANT_INDISPONIBLE_MESSAGE,
+        ) from None
 
     async def event_generator():
         info_data = {
@@ -327,6 +349,9 @@ async def chat_stream_endpoint(
             # sans explication. Le message est envoyé comme un fragment texte
             # (compatible chat_web et Flutter) et rien n'est enregistré.
             logger.exception("Échec de génération en streaming SSE.")
+            await quota_service.restituer_quota(
+                db=db, user_id=current_user_id, client_ip=client_ip
+            )
             yield f"event: error\ndata: {json.dumps(ASSISTANT_INDISPONIBLE_MESSAGE)}\n\n"
             yield "event: end\ndata: [DONE]\n\n"
             return
@@ -527,6 +552,9 @@ async def chat_websocket_endpoint(
                         filename=f"voice.{turn.audio_ext}",
                     )
                 except Exception as exc:
+                    await quota_service.restituer_quota(
+                        db=db, user_id=user_id, client_ip=client_ip
+                    )
                     await _ws_send(
                         websocket,
                         type="error",
@@ -535,6 +563,9 @@ async def chat_websocket_endpoint(
                     continue
                 question_text = transcription.strip()
                 if not question_text:
+                    await quota_service.restituer_quota(
+                        db=db, user_id=user_id, client_ip=client_ip
+                    )
                     await _ws_send(
                         websocket,
                         type="error",
@@ -559,6 +590,9 @@ async def chat_websocket_endpoint(
             except Exception:
                 # Une erreur du fournisseur IA ne doit pas fermer la session.
                 logger.exception("Échec de génération en streaming WebSocket.")
+                await quota_service.restituer_quota(
+                    db=db, user_id=user_id, client_ip=client_ip
+                )
                 await _ws_send(
                     websocket, type="error", message=ASSISTANT_INDISPONIBLE_MESSAGE
                 )

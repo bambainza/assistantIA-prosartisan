@@ -27,12 +27,13 @@ import uuid
 from datetime import UTC, datetime, timedelta
 from typing import Any
 
-from sqlalchemy import select
+from sqlalchemy import select, update
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.config import settings
 from app.models.quota import QuotaUtilisateur
 from app.models.transaction import TransactionMobileMoney
+from app.models.user import User
 from app.services.payment_providers import OPERATEURS, get_provider
 from app.services.payment_providers.base import (
     CheckoutRequest,
@@ -181,6 +182,13 @@ class PaymentService:
             )
             quota_obj.date_fin_premium = start_base + timedelta(
                 hours=info_pass["duree_heures"]
+            )
+            # Même effet qu'une attribution admin : les statistiques et le ciblage
+            # (actualités « premium ») lisent `users.type_abonnement`.
+            await db.execute(
+                update(User)
+                .where(User.id == txn.user_id)
+                .values(type_abonnement=txn.type_achat)
             )
         elif "requetes" in info_pass:
             quota_obj.credits_requetes = (quota_obj.credits_requetes or 0) + info_pass[

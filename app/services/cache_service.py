@@ -123,17 +123,18 @@ class CacheService:
             self._memory_cache.pop(key, None)
         return None
 
-    async def increment(self, key: str, ttl_seconds: int) -> int:
-        """Incrémente un compteur avec expiration et retourne sa nouvelle valeur.
+    async def increment(self, key: str, ttl_seconds: int, amount: int = 1) -> int:
+        """Incrémente (``amount`` < 0 : décrémente) un compteur avec expiration.
 
-        Utilisé pour le rate limiting en fenêtre fixe. Redis est primaire
-        (atomique via pipeline ``INCR`` + ``EXPIRE``) ; sinon compteur en mémoire.
+        Retourne sa nouvelle valeur. Utilisé pour le rate limiting en fenêtre
+        fixe et les quotas. Redis est primaire (atomique via pipeline
+        ``INCRBY`` + ``EXPIRE``) ; sinon compteur en mémoire.
         """
         client = await self._get_redis()
         if client is not None:
             try:
                 async with client.pipeline(transaction=True) as pipe:
-                    pipe.incr(key)
+                    pipe.incrby(key, amount)
                     pipe.expire(key, ttl_seconds)
                     results = await pipe.execute()
                 return int(results[0])
@@ -146,10 +147,10 @@ class CacheService:
         now = time.time()
         entry = self._memory_cache.get(key)
         if entry and entry[0] > now:
-            count = int(entry[1]) + 1
+            count = int(entry[1]) + amount
             self._memory_cache[key] = (entry[0], str(count))
         else:
-            count = 1
+            count = amount
             self._memory_cache[key] = (now + ttl_seconds, str(count))
         return count
 

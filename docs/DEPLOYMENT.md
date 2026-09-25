@@ -105,6 +105,7 @@ Le projet est configuré avec 2 workflows GitHub Actions dans `.github/workflows
 - **`ci.yml` (Intégration Continue)** :
   - Exécuté sur chaque `push` et `pull_request`.
   - Lance les linters et formatteurs `ruff check` et `ruff format`.
+  - Applique toutes les migrations sur une base PostgreSQL vide puis `alembic check` (aucun écart entre modèles ORM et schéma migré).
   - Exécute la suite de tests backend `pytest` avec PostgreSQL, Redis et Qdrant éphémères.
   - Exécute `flutter analyze` et `flutter test` sur l'application mobile.
   - Vérifie la compilation de l'image Docker.
@@ -112,8 +113,11 @@ Le projet est configuré avec 2 workflows GitHub Actions dans `.github/workflows
 - **`cd.yml` (Déploiement Continu)** :
   - Déclenché lors d'un `push` sur la branche `main` ou de la publication d'un tag `v*`.
   - Construit et publie l'image multi-architecture vers `ghcr.io`.
-  - Déclenche le webhook de déploiement sécurisé.
-  - Valide automatiquement la disponibilité de l'application via le healthcheck `/api/health`.
+  - Déclenche le webhook de déploiement sécurisé (secret `DEPLOY_WEBHOOK_URL` ; une réponse HTTP en erreur fait échouer le job).
+  - Valide automatiquement la disponibilité de l'application via le healthcheck `/api/health` (secret `PROD_URL`).
+  - Sans ces secrets, le job reste vert mais affiche un avertissement (« Aucun déploiement » / « Vérification de santé ignorée ») et le signale dans le résumé du run : seule l'image est publiée.
+
+Au démarrage, le conteneur applique `alembic upgrade head` (désactivable avec `RUN_MIGRATIONS=false`) ; **un échec de migration arrête le conteneur** au lieu de servir l'API sur un schéma en retard — consulter ses logs en cas de redémarrages en boucle.
 
 ## Tâches d'exploitation
 

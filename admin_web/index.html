@@ -231,7 +231,7 @@
                                         <div class="col">
                                             <p class="text-muted mb-0 fw-semibold">Artisans Inscrits</p>
                                             <h3 class="my-1 fs-20" id="kpi-artisans">0</h3>
-                                            <p class="mb-0 text-truncate text-muted"><span class="text-success"><i class="las la-trending-up"></i>+12%</span> cette semaine</p>
+                                            <p class="mb-0 text-truncate text-muted">Comptes artisans</p>
                                         </div>
                                         <div class="col-auto align-self-center">
                                             <div class="flex-shrink-0 bg-primary-subtle text-primary thumb-md rounded-circle d-flex align-items-center justify-content-center kpi-icon-circle">
@@ -251,7 +251,7 @@
                                         <div class="col">
                                             <p class="text-muted mb-0 fw-semibold">Actifs (DAU)</p>
                                             <h3 class="my-1 fs-20" id="kpi-dau">0</h3>
-                                            <p class="mb-0 text-truncate text-muted"><span class="text-success"><i class="las la-trending-up"></i>26.6%</span> d'engagement</p>
+                                            <p class="mb-0 text-truncate text-muted"><span class="text-success" id="kpi-engagement">—</span> d'engagement</p>
                                         </div>
                                         <div class="col-auto align-self-center">
                                             <div class="flex-shrink-0 bg-info-subtle text-info thumb-md rounded-circle d-flex align-items-center justify-content-center kpi-icon-circle">
@@ -291,7 +291,7 @@
                                         <div class="col">
                                             <p class="text-muted mb-0 fw-semibold">Questions RAG</p>
                                             <h3 class="my-1 fs-20" id="kpi-questions">0</h3>
-                                            <p class="mb-0 text-truncate text-muted"><span class="text-success"><i class="las la-trending-up"></i>99.4%</span> Zéro Hallucination</p>
+                                            <p class="mb-0 text-truncate text-muted"><span id="kpi-documents">—</span> documents indexés</p>
                                         </div>
                                         <div class="col-auto align-self-center">
                                             <div class="flex-shrink-0 bg-warning-subtle text-warning thumb-md rounded-circle d-flex align-items-center justify-content-center kpi-icon-circle">
@@ -330,23 +330,23 @@
                                         <div class="dist-item d-flex align-items-center mb-3">
                                             <span class="dist-label w-50">Pass Mensuel Pro (3000 F)</span>
                                             <div class="progress flex-grow-1 mx-3 progress-h-8">
-                                                <div class="progress-bar bg-success progress-w-45"></div>
+                                                <div class="progress-bar bg-success" id="sub-bar-mois"></div>
                                             </div>
-                                            <span class="dist-val">134</span>
+                                            <span class="dist-val" id="sub-val-mois">—</span>
                                         </div>
                                         <div class="dist-item d-flex align-items-center mb-3">
                                             <span class="dist-label w-50">Pass 24H Urgence (500 F)</span>
                                             <div class="progress flex-grow-1 mx-3 progress-h-8">
-                                                <div class="progress-bar bg-primary progress-w-65"></div>
+                                                <div class="progress-bar bg-primary" id="sub-bar-24h"></div>
                                             </div>
-                                            <span class="dist-val">210</span>
+                                            <span class="dist-val" id="sub-val-24h">—</span>
                                         </div>
                                         <div class="dist-item d-flex align-items-center">
                                             <span class="dist-label w-50">Pass Gratuit (5 q/jour)</span>
                                             <div class="progress flex-grow-1 mx-3 progress-h-8">
-                                                <div class="progress-bar bg-secondary progress-w-85"></div>
+                                                <div class="progress-bar bg-secondary" id="sub-bar-free"></div>
                                             </div>
-                                            <span class="dist-val">940</span>
+                                            <span class="dist-val" id="sub-val-free">—</span>
                                         </div>
                                     </div>
                                 </div>

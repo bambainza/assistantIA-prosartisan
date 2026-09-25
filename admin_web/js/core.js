@@ -52,12 +52,28 @@ document.addEventListener('DOMContentLoaded', () => {
     initUploadForm();
     loadPromptInspector();
 
-    // Check if already authenticated
-    adminFetch('/api/auth/me').then(() => {
+    // Check if already authenticated: only a 2xx response opens the dashboard.
+    // Plain fetch, not adminFetch: a 401 here just means "not logged in yet";
+    // adminFetch would call logoutAdmin(), whose reload re-runs this check
+    // forever (infinite reload loop until the rate limiter answers 429).
+    // A 429/5xx must not leave a blank page (neither login nor dashboard).
+    fetch('/api/auth/me', { credentials: 'same-origin' }).then((res) => {
+        if (!res.ok) {
+            const err = new Error(`HTTP ${res.status}`);
+            err.status = res.status;
+            throw err;
+        }
         document.getElementById('login-container').classList.add('d-none');
         refreshDashboard();
-    }).catch(() => {
+    }).catch((err) => {
         document.getElementById('login-container').classList.remove('d-none');
+        const errMsg = document.getElementById('login-error-msg');
+        if (errMsg && err && err.status && err.status !== 401 && err.status !== 403) {
+            errMsg.textContent = err.status === 429
+                ? 'Trop de requêtes. Patientez une minute puis réessayez.'
+                : 'Serveur momentanément indisponible. Réessayez dans un instant.';
+            errMsg.classList.remove('d-none');
+        }
     });
 });
 
@@ -205,10 +221,9 @@ function initTabs() {
 }
 
 // Refresh Dashboard & Data
+// La session admin repose sur le cookie HttpOnly (plus de jeton localStorage) :
+// adminFetch renvoie vers l'écran de connexion si elle a expiré.
 async function refreshDashboard() {
-    const token = localStorage.getItem('prosartisan_admin_token');
-    if (!token) return;
-
     await fetchOverview();
     await fetchArtisans();
     await fetchDocuments();
@@ -227,6 +242,12 @@ async function fetchOverview() {
         document.getElementById('kpi-dau').textContent = data.kpis.artisans_actifs_dau.toLocaleString();
         document.getElementById('kpi-ca').textContent = data.kpis.chiffre_affaires_mfa.toLocaleString() + ' F';
         document.getElementById('kpi-questions').textContent = data.kpis.total_questions_rag.toLocaleString();
+        const total = data.kpis.total_artisans || 0;
+        document.getElementById('kpi-engagement').textContent = total
+            ? `${Math.round((data.kpis.artisans_actifs_dau / total) * 1000) / 10}%`
+            : '—';
+        document.getElementById('kpi-documents').textContent = (data.kpis.total_documents_qdrant || 0).toLocaleString();
+        renderSubscriptionDistribution(data.abonnements || {});
 
         const barChartList = document.getElementById('top-metiers-list');
         barChartList.innerHTML = '';
@@ -251,6 +272,18 @@ async function fetchOverview() {
     } catch (err) {
         console.error('Erreur chargement overview:', err);
     }
+}
+
+// Répartition réelle des abonnements (réponse de /api/admin/overview).
+function renderSubscriptionDistribution(abonnements) {
+    const rows = { mois: abonnements.pass_mois || 0, '24h': abonnements.pass_24h || 0, free: abonnements.free || 0 };
+    const max = Math.max(...Object.values(rows), 1);
+    Object.entries(rows).forEach(([key, count]) => {
+        const val = document.getElementById(`sub-val-${key}`);
+        const bar = document.getElementById(`sub-bar-${key}`);
+        if (val) val.textContent = count.toLocaleString();
+        if (bar) bar.style.width = `${(count / max) * 100}%`;
+    });
 }
 
 // 2. Fetch Artisans Table

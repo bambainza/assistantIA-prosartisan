@@ -48,11 +48,16 @@ class _ChatViewState extends State<ChatView> {
       _scrollToBottom();
     }
 
-    if (viewModel.chatError != null && viewModel.chatError!.startsWith("Erreur")) {
+    // Toute erreur est affichée (auparavant seules celles commençant par
+    // « Erreur » l'étaient : panne de l'IA, réseau, caméra... restaient muettes).
+    final chatError = viewModel.chatError;
+    if (chatError != null) {
       WidgetsBinding.instance.addPostFrameCallback((_) {
+        // Plusieurs reconstructions avant ce rappel : un seul bandeau.
+        if (viewModel.chatError != chatError) return;
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
-            content: Text(viewModel.chatError!),
+            content: Text(chatError),
             action: SnackBarAction(
               label: "OK",
               textColor: const Color(0xFFE2A000),
@@ -335,13 +340,10 @@ class _ChatViewState extends State<ChatView> {
   }
 
   Widget _buildMetierSelectorRow(ChatViewModel viewModel, bool isDark, Color textColor) {
-    final metiers = [
-      {'id': 1, 'label': '🧱 Maçonnerie'},
-      {'id': 2, 'label': '⚡ Électricité'},
-      {'id': 3, 'label': '🚰 Plomberie'},
-      {'id': 4, 'label': '🪵 Menuiserie'},
-      {'id': 5, 'label': '📐 Carrelage'},
-      {'id': 6, 'label': '🎨 Peinture'},
+    // « Tous » (aucun filtre) puis les métiers actifs renvoyés par le serveur.
+    final metiers = <Map<String, dynamic>>[
+      {'id': null, 'label': '🧰 Tous'},
+      for (final m in viewModel.metiers) {'id': m['id'], 'label': m['nom']},
     ];
 
     final barColor = isDark ? const Color(0xFF171721) : const Color(0xFFE5E5EA);
@@ -361,7 +363,7 @@ class _ChatViewState extends State<ChatView> {
           return Padding(
             padding: const EdgeInsets.only(right: 8.0),
             child: InkWell(
-              onTap: () => viewModel.selectMetier(m['id'] as int),
+              onTap: () => viewModel.selectMetier(m['id'] as int?),
               borderRadius: BorderRadius.circular(16),
               child: Container(
                 padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),

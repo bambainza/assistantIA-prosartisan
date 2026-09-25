@@ -16,6 +16,50 @@ class QuotaEpuiseException implements Exception {
   String toString() => 'Quota de questions épuisé (402).';
 }
 
+/// Réponse impossible côté serveur (fournisseur IA en panne, `503` ou
+/// `event: error` du flux) : la question a été rendue, rien à mettre en file.
+class AssistantIndisponibleException implements Exception {
+  const AssistantIndisponibleException([this.message = assistantIndisponibleMessage]);
+
+  final String message;
+
+  @override
+  String toString() => message;
+}
+
+const String assistantIndisponibleMessage =
+    "L'assistant est momentanément indisponible. Réessayez dans un instant.";
+
+/// Lit un flux SSE ligne à ligne et renvoie le contenu des lignes `data:`
+/// (jusqu'à `[DONE]`). Un `event: error` lève [AssistantIndisponibleException]
+/// au lieu d'être affiché comme un morceau de réponse.
+Stream<String> lireFluxSse(Stream<String> lignes) async* {
+  var evenement = 'message';
+  await for (final ligne in lignes) {
+    final l = ligne.trim();
+    if (l.isEmpty) {
+      evenement = 'message';
+      continue;
+    }
+    if (l.startsWith('event:')) {
+      evenement = l.substring(6).trim();
+      continue;
+    }
+    if (!l.startsWith('data:')) continue;
+    final data = l.substring(5).trim();
+    if (data == '[DONE]') return;
+    if (evenement == 'error') {
+      var message = assistantIndisponibleMessage;
+      try {
+        final decode = jsonDecode(data);
+        if (decode is String && decode.isNotEmpty) message = decode;
+      } catch (_) {}
+      throw AssistantIndisponibleException(message);
+    }
+    yield data;
+  }
+}
+
 class NetworkClient {
   // Le token JWT et l'email de session sont sensibles : ils sont stockés dans
   // le Keychain (iOS) / Keystore (Android) via flutter_secure_storage, jamais
@@ -310,6 +354,23 @@ class NetworkClient {
     }
   }
 
+  /// Métiers actifs (`id`, `nom`, `slug`) : les identifiants viennent de la
+  /// base et ne doivent jamais être codés en dur dans l'application.
+  Future<List<Map<String, dynamic>>> getMetiers() async {
+    try {
+      final response = await _dio.get('$_baseUrl/api/metiers');
+      if (response.statusCode == 200 && response.data is List) {
+        return (response.data as List)
+            .whereType<Map>()
+            .map((m) => Map<String, dynamic>.from(m))
+            .toList();
+      }
+      return [];
+    } catch (_) {
+      return [];
+    }
+  }
+
   Future<Map<String, dynamic>?> getConversationDetail(String convId) async {
     try {
       final response = await _dio.get(
@@ -386,23 +447,19 @@ class NetworkClient {
         );
         
         final Stream<List<int>> stream = (response.data as ResponseBody).stream;
-        await for (final chunk in stream
-            .transform(utf8.decoder)
-            .transform(const LineSplitter())) {
-          final trimmed = chunk.trim();
-          if (trimmed.startsWith('data: ')) {
-            final data = trimmed.substring(6).trim();
-            if (data == '[DONE]') {
-              break;
-            }
-            yield data;
-          }
-        }
+        yield* lireFluxSse(
+          stream.transform(utf8.decoder).transform(const LineSplitter()),
+        );
       } on DioException catch (e) {
         if (e.response?.statusCode == 402) {
           throw const QuotaEpuiseException();
         }
+        if (e.response?.statusCode == 503) {
+          throw const AssistantIndisponibleException();
+        }
         throw Exception('Erreur de transmission : $e');
+      } on AssistantIndisponibleException {
+        rethrow;
       } catch (e) {
         throw Exception('Erreur de transmission : $e');
       }
@@ -424,24 +481,17 @@ class NetworkClient {
         if (response.statusCode == 402) {
           throw const QuotaEpuiseException();
         }
+        if (response.statusCode == 503) {
+          throw const AssistantIndisponibleException();
+        }
         if (response.statusCode != 200) {
           throw Exception('Serveur indisponible (code ${response.statusCode})');
         }
         
         // Lire ligne par ligne (SSE)
-        await for (final line in response
-            .transform(utf8.decoder)
-            .transform(const LineSplitter())) {
-          
-          final trimmed = line.trim();
-          if (trimmed.startsWith('data: ')) {
-            final data = trimmed.substring(6).trim();
-            if (data == '[DONE]') {
-              break;
-            }
-            yield data;
-          }
-        }
+        yield* lireFluxSse(
+          response.transform(utf8.decoder).transform(const LineSplitter()),
+        );
       } finally {
         client.close();
       }

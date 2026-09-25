@@ -6,7 +6,7 @@ import uuid
 from datetime import datetime
 from typing import Any
 
-from sqlalchemy import ForeignKey, String, Text, func
+from sqlalchemy import JSON, ForeignKey, String, func
 from sqlalchemy.dialects.postgresql import JSONB, UUID
 from sqlalchemy.orm import Mapped, mapped_column
 
@@ -30,10 +30,10 @@ class AuditLog(Base):
     resource_id: Mapped[str | None] = mapped_column(String(100), default=None)
 
     before_json: Mapped[dict[str, Any] | list[Any] | None] = mapped_column(
-        JSONB().with_variant(Text, "sqlite"), default=None
+        JSONB().with_variant(JSON, "sqlite"), default=None
     )
     after_json: Mapped[dict[str, Any] | list[Any] | None] = mapped_column(
-        JSONB().with_variant(Text, "sqlite"), default=None
+        JSONB().with_variant(JSON, "sqlite"), default=None
     )
 
     ip_address: Mapped[str | None] = mapped_column(String(45), default=None)
