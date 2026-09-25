@@ -12,8 +12,69 @@ let state = {
     selectedImage: null, // base64 string or file URL
 };
 
+// Historique local des visiteurs non connectés : le serveur ne conserve
+// aucune discussion anonyme (plus de compte partagé lisible par tous). Stocké
+// dans ce navigateur uniquement, borné, sans les photos (quota localStorage).
+const LOCAL_HISTORY_KEY = 'prosartisan_local_history';
+const LOCAL_HISTORY_MAX_CONVERSATIONS = 20;
+const LOCAL_HISTORY_MAX_MESSAGES = 60;
+
+const localHistory = {
+    _read() {
+        try {
+            const value = JSON.parse(localStorage.getItem(LOCAL_HISTORY_KEY) || '[]');
+            return Array.isArray(value) ? value : [];
+        } catch (e) {
+            return [];
+        }
+    },
+    _write(conversations) {
+        try {
+            localStorage.setItem(LOCAL_HISTORY_KEY, JSON.stringify(conversations));
+        } catch (e) {
+            // Stockage plein : on sacrifie la discussion la plus ancienne.
+            if (conversations.length > 1) this._write(conversations.slice(0, -1));
+        }
+    },
+    list(query = null) {
+        const q = (query || '').toLowerCase();
+        return this._read()
+            .filter(c => !q || (c.title || '').toLowerCase().includes(q))
+            .map(c => ({ id: c.id, title: c.title }));
+    },
+    get(id) {
+        return this._read().find(c => c.id === id) || null;
+    },
+    addExchange(id, question, answer) {
+        const conversations = this._read();
+        let conv = conversations.find(c => c.id === id);
+        if (!conv) {
+            conv = {
+                id: `local-${Date.now()}`,
+                title: question.length > 30 ? question.slice(0, 30) + '...' : question,
+                messages: []
+            };
+        }
+        conv.messages.push({ role: 'user', content: question }, { role: 'assistant', content: answer });
+        conv.messages = conv.messages.slice(-LOCAL_HISTORY_MAX_MESSAGES);
+        const others = conversations.filter(c => c.id !== conv.id);
+        this._write([conv, ...others].slice(0, LOCAL_HISTORY_MAX_CONVERSATIONS));
+        return conv.id;
+    },
+    rename(id, title) {
+        this._write(this._read().map(c => (c.id === id ? { ...c, title } : c)));
+    },
+    remove(id) {
+        this._write(this._read().filter(c => c.id !== id));
+    }
+};
+
+function isLocalConversation(id) {
+    return typeof id === 'string' && id.startsWith('local-');
+}
+
 // Dom Elements
-const sidebar = document.getElementById('sidebar');
+const sidebar= document.getElementById('sidebar');
 const conversationsList = document.getElementById('conversations-list');
 const historyEmpty = document.getElementById('history-empty');
 const ctaSidebarLogin = document.getElementById('cta-sidebar-login');
@@ -70,6 +131,7 @@ document.addEventListener('DOMContentLoaded', () => {
     }
 
     loadActualitesBanner();
+    handlePaymentReturn();
 
     // Auto-expand textarea input
     chatInput.addEventListener('input', () => {
@@ -203,20 +265,22 @@ function updateAuthUI() {
         // Header buttons
         authButtonsHeader.classList.remove('hidden');
         userAvatarHeader.classList.add('hidden');
-        historyEmpty.classList.remove('hidden');
-        
-        // Clear list
-        conversationsList.innerHTML = '';
-        state.conversations = [];
-        
+        // Historique local (ce navigateur uniquement)
+        state.conversations = localHistory.list();
+        renderConversationsList();
+
         const searchBar = document.getElementById('sidebar-search-container');
-        if (searchBar) searchBar.classList.add('hidden');
+        if (searchBar) searchBar.classList.toggle('hidden', state.conversations.length === 0);
     }
 }
 
 // Fetch Conversations list for connected user
 async function loadConversations(q = null) {
-    if (!state.isLoggedIn) return;
+    if (!state.isLoggedIn) {
+        state.conversations = localHistory.list(q);
+        renderConversationsList();
+        return;
+    }
 
     try {
         const token = localStorage.getItem('prosartisan_token');
@@ -265,16 +329,19 @@ function renderConversationsList() {
     state.conversations.forEach(conv => {
         const li = document.createElement('li');
         const activeClass = state.currentConversationId === conv.id ? 'active' : '';
+        // Titre issu de la question de l'utilisateur : toujours encodé.
+        const convId = escapeHtml(conv.id);
+        const convTitle = escapeHtml(conv.title || "Discussions");
         
         li.innerHTML = `
-            <button class="conv-item ${activeClass}" onclick="selectConversation('${conv.id}')" id="conv-btn-${conv.id}">
+            <button class="conv-item ${activeClass}" onclick="selectConversation('${convId}')" id="conv-btn-${convId}">
                 <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="margin-right: 8px; flex-shrink: 0;"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/></svg>
-                <span class="conv-title-text" style="overflow: hidden; text-overflow: ellipsis; white-space: nowrap; width: 100%; display: block;">${conv.title || "Discussions"}</span>
+                <span class="conv-title-text" style="overflow: hidden; text-overflow: ellipsis; white-space: nowrap; width: 100%; display: block;">${convTitle}</span>
             </button>
-            <button class="edit-conv-btn" onclick="startRenameConversation('${conv.id}', event)" title="Renommer">
+            <button class="edit-conv-btn" onclick="startRenameConversation('${convId}', event)" title="Renommer">
                 <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 20h9"/><path d="M16.5 3.5a2.121 2.121 0 0 1 3 3L7 19l-4 1 1-4L16.5 3.5z"/></svg>
             </button>
-            <button class="delete-conv-btn" onclick="deleteConversation('${conv.id}', event)" title="Supprimer la discussion">
+            <button class="delete-conv-btn" onclick="deleteConversation('${convId}', event)" title="Supprimer la discussion">
                 <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="3 6 5 6 21 6"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/></svg>
             </button>
         `;
@@ -311,6 +378,13 @@ function startRenameConversation(id, event) {
         const newTitle = input.value.trim();
         if (!newTitle || newTitle === oldTitle) {
             input.replaceWith(titleSpan);
+            return;
+        }
+        if (isLocalConversation(id)) {
+            localHistory.rename(id, newTitle);
+            titleSpan.textContent = newTitle;
+            input.replaceWith(titleSpan);
+            loadConversations();
             return;
         }
         
@@ -358,6 +432,20 @@ async function selectConversation(id) {
     state.currentConversationId = id;
     renderConversationsList(); // Update active highlights
 
+    if (isLocalConversation(id)) {
+        const conv = localHistory.get(id);
+        if (!conv) {
+            showToast("Discussion introuvable sur cet appareil.");
+            return;
+        }
+        landingContainer.classList.add('hidden');
+        messagesStream.classList.remove('hidden');
+        messagesStream.innerHTML = '';
+        conv.messages.forEach(msg => appendMessageBubble(msg.role, msg.content));
+        scrollToBottom();
+        return;
+    }
+
     try {
         const token = localStorage.getItem('prosartisan_token');
         const response = await fetch(`/api/conversations/${id}`, {
@@ -392,6 +480,14 @@ async function deleteConversation(id, event) {
     event.stopPropagation(); // Avoid selecting the item
 
     if (!confirm("Voulez-vous supprimer cette discussion ?")) return;
+
+    if (isLocalConversation(id)) {
+        localHistory.remove(id);
+        if (state.currentConversationId === id) startNewChat();
+        loadConversations();
+        showToast("Discussion supprimée.");
+        return;
+    }
 
     try {
         const token = localStorage.getItem('prosartisan_token');
@@ -685,7 +781,10 @@ async function sendMessage() {
                 || "Désolé chef, une erreur s'est produite lors de la connexion à l'assistant. Veuillez réessayer.";
             bubble.querySelector('.streaming-text').textContent = `⚠️ ${errorText}`;
             announceToScreenReader(errorText);
-            if (response.status === 402) updateQuotaUI();
+            if (response.status === 402) {
+                updateQuotaUI();
+                openPaywallModal();
+            }
             return;
         }
 
@@ -786,10 +885,13 @@ async function sendMessage() {
         // Update quota display
         updateQuotaUI();
 
-        // Reload conversations to update names if connected
-        if (state.isLoggedIn) {
-            loadConversations();
+        // Connecté : historique serveur. Anonyme : historique local uniquement.
+        if (!state.isLoggedIn && fullResponseText.trim()) {
+            state.currentConversationId = localHistory.addExchange(
+                state.currentConversationId, text, fullResponseText
+            );
         }
+        loadConversations();
 
     } catch (e) {
         console.error("Send message error:", e);
@@ -2020,6 +2122,7 @@ function handleVoiceWebSocketMessage(msg) {
     } else if (msg.type === 'payment_required') {
         showToast(msg.message || "Quota gratuit épuisé. Passez à la version Pro.");
         updateQuotaUI();
+        openPaywallModal();
     } else if (msg.type === 'error') {
         showToast(msg.message || "Erreur lors du traitement vocal.");
     }
@@ -2058,4 +2161,124 @@ if ('serviceWorker' in navigator) {
     window.addEventListener('load', () => {
         navigator.serviceWorker.register('/chat/sw.js').catch(() => {});
     });
+}
+
+// ── Paiement Mobile Money (Wave / Orange Money) ──
+// Parcours : POST /api/payment/init → redirection vers l'URL de l'opérateur
+// (simulateur en mode démo) → retour sur /chat/?transaction=…&paiement=… →
+// suivi de GET /api/payment/transactions/{id} jusqu'à la confirmation, qui
+// arrive par le webhook opérateur indépendamment du retour navigateur.
+let paywallTrigger = null;
+
+async function openPaywallModal() {
+    const modal = document.getElementById('paywall-modal');
+    if (!modal) return;
+    paywallTrigger = document.activeElement;
+    modal.classList.remove('hidden');
+    const hint = document.getElementById('paywall-mode-hint');
+    if (hint) {
+        hint.textContent = state.isLoggedIn ? '' : "Connexion requise pour activer un Pass.";
+        try {
+            const response = await fetch('/api/payment/tarifs');
+            if (response.ok) {
+                const tarifs = await response.json();
+                if (!tarifs.disponible) {
+                    hint.textContent = "Paiement Mobile Money bientôt disponible.";
+                } else if (tarifs.mode === 'demo') {
+                    hint.textContent += " Mode démonstration : aucun montant ne sera débité.";
+                }
+            }
+        } catch (e) {
+            // Indication facultative : la modale reste utilisable hors ligne.
+        }
+    }
+    setTimeout(() => modal.querySelector('input[name="paywall-offre"]:checked')?.focus(), 0);
+}
+
+function closePaywallModal() {
+    document.getElementById('paywall-modal')?.classList.add('hidden');
+    if (paywallTrigger && typeof paywallTrigger.focus === 'function') {
+        paywallTrigger.focus();
+    }
+    paywallTrigger = null;
+}
+
+async function startPayment(operateur) {
+    const typePass = document.querySelector('input[name="paywall-offre"]:checked')?.value || 'pass_24h';
+    if (!state.isLoggedIn) {
+        closePaywallModal();
+        showToast("Connectez-vous pour activer un Pass.");
+        openLoginModal();
+        return;
+    }
+    const buttons = document.querySelectorAll('.paywall-pay-btn');
+    buttons.forEach(b => { b.disabled = true; });
+    try {
+        const response = await fetch('/api/payment/init', {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+                'Authorization': `Bearer ${localStorage.getItem('prosartisan_token')}`
+            },
+            body: JSON.stringify({ type_pass: typePass, operateur })
+        });
+        if (response.status === 401) {
+            logout();
+            closePaywallModal();
+            openLoginModal();
+            return;
+        }
+        if (!response.ok) {
+            const err = await response.json().catch(() => ({}));
+            showToast(err.detail || "Paiement momentanément indisponible.");
+            return;
+        }
+        const data = await response.json();
+        window.location.assign(data.payment_url);
+    } catch (e) {
+        showToast("Erreur de connexion : paiement non initialisé.");
+    } finally {
+        buttons.forEach(b => { b.disabled = false; });
+    }
+}
+
+async function handlePaymentReturn() {
+    const params = new URLSearchParams(window.location.search);
+    const transactionId = params.get('transaction');
+    const issue = params.get('paiement');
+    if (!transactionId) return;
+    // Nettoie l'URL : un rechargement ne relance pas le suivi.
+    history.replaceState(null, '', window.location.pathname);
+
+    if (issue !== 'succes') {
+        showToast("Paiement annulé ou refusé : aucun montant n'a été débité.");
+        return;
+    }
+    const token = localStorage.getItem('prosartisan_token');
+    if (!token) return;
+    showToast("Paiement en cours de confirmation…");
+    for (let tentative = 0; tentative < 15; tentative++) {
+        try {
+            const response = await fetch(`/api/payment/transactions/${encodeURIComponent(transactionId)}`, {
+                headers: { 'Authorization': `Bearer ${token}` }
+            });
+            if (response.ok) {
+                const txn = await response.json();
+                if (txn.statut === 'ACCEPTED') {
+                    showToast("✅ Paiement confirmé : votre Pass est actif !");
+                    announceToScreenReader("Paiement confirmé, votre Pass est actif.");
+                    updateQuotaUI();
+                    return;
+                }
+                if (txn.statut === 'FAILED' || txn.statut === 'EXPIRED') {
+                    showToast("Paiement refusé ou expiré : aucun montant n'a été débité.");
+                    return;
+                }
+            }
+        } catch (e) {
+            // Réseau instable : nouvelle tentative.
+        }
+        await new Promise(resolve => setTimeout(resolve, 2000));
+    }
+    showToast("Confirmation en attente : votre Pass sera activé dès la confirmation de l'opérateur.");
 }

@@ -45,7 +45,9 @@ async def test_init_payment_success():
     assert response.status_code == 200
     data = response.json()
     assert data["status"] == "success"
-    assert "wave.com" in data["payment_url"] or "orange.ci" in data["payment_url"]
+    # Mode démo par défaut : URL du simulateur d'opérateur.
+    assert "/api/payment/demo/checkout/cos-" in data["payment_url"]
+    assert data["mode"] == "demo"
 
 
 @pytest.mark.asyncio

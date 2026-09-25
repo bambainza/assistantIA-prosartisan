@@ -7,6 +7,7 @@ import pytest
 from httpx import ASGITransport, AsyncClient
 
 from app.main import app
+from app.middleware.auth import create_access_token
 
 
 @pytest.mark.asyncio
@@ -49,9 +50,14 @@ async def test_feedback_pouce_bas_avec_conversation(monkeypatch):
         "message_id": "msg-67890",
         "comment": "Manque de précision sur la marque du disjoncteur.",
     }
+    token = create_access_token(data={"sub": str(uuid.uuid4())})
     transport = ASGITransport(app=app)
     async with AsyncClient(transport=transport, base_url="http://test") as client:
-        response = await client.post("/api/chat/feedback", json=payload)
+        response = await client.post(
+            "/api/chat/feedback",
+            json=payload,
+            headers={"Authorization": f"Bearer {token}"},
+        )
 
     assert response.status_code == 201
     data = response.json()

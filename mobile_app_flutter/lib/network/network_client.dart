@@ -6,6 +6,16 @@ import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:dio/dio.dart';
 
+/// Quota de questions épuisé (HTTP 402) : l'interface doit proposer un Pass,
+/// et surtout ne pas traiter l'erreur comme une coupure réseau (sinon la
+/// question serait remise en file hors-ligne et rejouée indéfiniment).
+class QuotaEpuiseException implements Exception {
+  const QuotaEpuiseException();
+
+  @override
+  String toString() => 'Quota de questions épuisé (402).';
+}
+
 class NetworkClient {
   // Le token JWT et l'email de session sont sensibles : ils sont stockés dans
   // le Keychain (iOS) / Keystore (Android) via flutter_secure_storage, jamais
@@ -356,7 +366,9 @@ class NetworkClient {
     String? imageUrl,
   }) async* {
     final payload = {
-      'message': message,
+      // Le serveur attend `question` (ExtendedChatRequest) : avec l'ancienne
+      // clé `message`, chaque envoi était refusé en 422.
+      'question': message,
       'conversation_id': conversationId,
       'metier_id': metierId,
       if (imageUrl != null && imageUrl.isNotEmpty) 'image_url': imageUrl,
@@ -386,6 +398,11 @@ class NetworkClient {
             yield data;
           }
         }
+      } on DioException catch (e) {
+        if (e.response?.statusCode == 402) {
+          throw const QuotaEpuiseException();
+        }
+        throw Exception('Erreur de transmission : $e');
       } catch (e) {
         throw Exception('Erreur de transmission : $e');
       }
@@ -404,6 +421,9 @@ class NetworkClient {
         request.write(jsonEncode(payload));
         final response = await request.close();
         
+        if (response.statusCode == 402) {
+          throw const QuotaEpuiseException();
+        }
         if (response.statusCode != 200) {
           throw Exception('Serveur indisponible (code ${response.statusCode})');
         }
@@ -425,6 +445,47 @@ class NetworkClient {
       } finally {
         client.close();
       }
+    }
+  }
+
+  // --- Paiement Mobile Money (Wave / Orange Money) ---
+
+  /// Crée le paiement chez l'opérateur ; renvoie `payment_url` et
+  /// `transaction_id`, ou `{'error': ...}` si le paiement est impossible.
+  Future<Map<String, dynamic>> initPayment(String typePass, String operateur) async {
+    try {
+      final response = await _dio.post(
+        '$_baseUrl/api/payment/init',
+        data: {'type_pass': typePass, 'operateur': operateur},
+        options: Options(
+          headers: _token != null ? {'authorization': 'Bearer $_token'} : null,
+        ),
+      );
+      return Map<String, dynamic>.from(response.data as Map);
+    } on DioException catch (e) {
+      final data = e.response?.data;
+      final detail = data is Map ? data['detail'] : null;
+      return {
+        'error': detail is String ? detail : 'Paiement momentanément indisponible.',
+      };
+    } catch (_) {
+      return {'error': 'Erreur de connexion : paiement non initialisé.'};
+    }
+  }
+
+  /// Statut d'une transaction ("PENDING", "ACCEPTED", "FAILED", "EXPIRED"),
+  /// ou null si le serveur est injoignable.
+  Future<String?> getTransactionStatus(String transactionId) async {
+    try {
+      final response = await _dio.get(
+        '$_baseUrl/api/payment/transactions/$transactionId',
+        options: Options(
+          headers: _token != null ? {'authorization': 'Bearer $_token'} : null,
+        ),
+      );
+      return (response.data as Map)['statut'] as String?;
+    } catch (_) {
+      return null;
     }
   }
 

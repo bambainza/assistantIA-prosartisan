@@ -122,6 +122,39 @@ class Settings(BaseSettings):
     mobile_money_secret_key: str = "placeholder_hmac_secret"
     webhook_secret: str = "placeholder_webhook_secret"
 
+    # Mode de paiement : "demo" (simulateur local reproduisant fidèlement les
+    # parcours officiels Wave Checkout et Orange Money WebPay : mêmes formats de
+    # requêtes, de webhooks et de signatures) ou "live" (API officielles).
+    payment_mode: str = "demo"
+    # En production, le mode démo refuse tout paiement (503) — sinon n'importe
+    # qui obtiendrait un Pass gratuit — sauf activation explicite (bêta fermée).
+    payment_demo_in_production: bool = False
+    # URL publique de l'API : base des URLs de retour et de notification
+    # transmises aux opérateurs (success/error/return/cancel/notif).
+    public_base_url: str = "http://localhost:8000"
+    # Fenêtre anti-rejeu des webhooks signés (écart max. horodatage / horloge).
+    payment_webhook_tolerance_seconds: int = 300
+
+    # Wave Checkout API (https://docs.wave.com/checkout)
+    wave_api_base: str = "https://api.wave.com"
+    # Secret de signature des webhooks (en-tête `Wave-Signature`).
+    wave_webhook_secret: str = "placeholder_wave_webhook_secret"
+
+    # Orange Money WebPay (https://developer.orange.com/apis/om-webpay)
+    orange_api_base: str = "https://api.orange.com"
+    # "/orange-money-webpay/dev/v1" (bac à sable) ; en production CI :
+    # "/orange-money-webpay/ci/v1".
+    orange_webpay_path: str = "/orange-money-webpay/dev/v1"
+    orange_client_id: str = ""
+    orange_client_secret: str = ""
+    orange_merchant_key: str = ""
+    # "OUV" en bac à sable, "XOF" en production.
+    orange_currency: str = "OUV"
+
+    @property
+    def payment_demo_mode(self) -> bool:
+        return self.payment_mode.lower() != "live"
+
     # ── Compte administrateur initial (seed) ──
     admin_email: str = "admin@prosartisan.ci"
     admin_password: str | None = None  # requis en production, sinon pas de seed admin
@@ -173,6 +206,29 @@ class Settings(BaseSettings):
             erreurs.append("CORS_ALLOWED_ORIGINS (le joker '*' est interdit)")
         if self.app_debug:
             erreurs.append("APP_DEBUG (doit être false)")
+        if self.payment_mode.lower() not in {"demo", "live"}:
+            erreurs.append("PAYMENT_MODE (demo ou live)")
+        if not self.payment_demo_mode:
+            # Paiements réels : identifiants opérateurs et URL publique HTTPS.
+            if (
+                self.wave_api_key in _SECRETS_FAIBLES
+                or "placeholder" in self.wave_api_key
+            ):
+                erreurs.append("WAVE_API_KEY")
+            if (
+                self.wave_webhook_secret in _SECRETS_FAIBLES
+                or "placeholder" in self.wave_webhook_secret
+            ):
+                erreurs.append("WAVE_WEBHOOK_SECRET")
+            for nom, valeur in (
+                ("ORANGE_CLIENT_ID", self.orange_client_id),
+                ("ORANGE_CLIENT_SECRET", self.orange_client_secret),
+                ("ORANGE_MERCHANT_KEY", self.orange_merchant_key),
+            ):
+                if not valeur:
+                    erreurs.append(nom)
+            if not self.public_base_url.startswith("https://"):
+                erreurs.append("PUBLIC_BASE_URL (HTTPS requis)")
 
         if erreurs:
             raise ValueError(

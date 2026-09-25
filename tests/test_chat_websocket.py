@@ -197,7 +197,9 @@ def test_websocket_discussion_d_un_tiers_refusee(monkeypatch):
         chat_history_service, "get_conversation_with_messages", _introuvable
     )
 
+    token = create_access_token(data={"sub": str(uuid.uuid4())})
     with TestClient(app).websocket_connect("/api/chat/ws") as websocket:
+        websocket.send_json({"action": "auth", "token": token})
         websocket.send_json(
             {"content": "Dosage béton ?", "conversation_id": str(uuid.uuid4())}
         )
@@ -205,6 +207,18 @@ def test_websocket_discussion_d_un_tiers_refusee(monkeypatch):
 
     assert msg["type"] == "error"
     assert "Discussion" in msg["message"]
+
+
+def test_websocket_anonyme_ne_peut_pas_rattacher_une_discussion():
+    """Sans connexion, aucune discussion n'est chargée ni enregistrée côté serveur."""
+    with TestClient(app).websocket_connect("/api/chat/ws") as websocket:
+        websocket.send_json(
+            {"content": "Dosage béton ?", "conversation_id": str(uuid.uuid4())}
+        )
+        msg = websocket.receive_json()
+
+    assert msg["type"] == "error"
+    assert "Connectez-vous" in msg["message"]
 
 
 def test_websocket_enregistre_l_historique_de_la_discussion(monkeypatch):

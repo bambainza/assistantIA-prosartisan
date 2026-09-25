@@ -33,6 +33,10 @@ spec:
             # (qui ajoute sa propre IP à X-Forwarded-For) : 2.
             - name: TRUSTED_PROXY_HOPS
               value: "1"
+            - name: PAYMENT_MODE
+              value: "demo"
+            - name: PAYMENT_DEMO_IN_PRODUCTION
+              value: "false"
             - name: PORT
               value: "8000"
             - name: WORKERS

@@ -71,7 +71,8 @@ class _ChatViewState extends State<ChatView> {
           barrierDismissible: false,
           builder: (context) => PaywallDialog(
             onDismiss: () => viewModel.dismissPaywall(),
-            onPaymentSuccess: () => viewModel.triggerFakePaymentSuccess(),
+            startPayment: viewModel.startPayment,
+            checkPayment: viewModel.checkPayment,
           ),
         );
         viewModel.dismissPaywall();

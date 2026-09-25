@@ -11,6 +11,12 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.models.conversation import Conversation
 from app.models.message import Message
 
+# Ancien compte anonyme partagé : toutes les sessions non connectées y
+# écrivaient leurs discussions, lisibles par n'importe quel autre visiteur.
+# Plus rien n'y est écrit ; l'existant se purge avec
+# `python -m app.scripts.purge_anonymous_history`.
+LEGACY_ANONYMOUS_USER_ID = uuid.UUID("00000000-0000-0000-0000-000000000001")
+
 
 class ChatHistoryService:
     """Service pour gérer l'historique des chats de l'artisan."""

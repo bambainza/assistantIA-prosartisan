@@ -178,7 +178,8 @@ class ChatViewModel extends ChangeNotifier {
         _activeConversationId = entry['conversationId'] as String?;
         _activeMetierId = entry['metierId'] as int?;
         await sendMessage(entry['question'] as String, isRetry: true);
-        if (_isOffline) break;
+        // Réseau toujours coupé ou quota épuisé : la question reste en file.
+        if (_isOffline || _showPaywall) break;
         await offlineQueue.removeById(entry['id'] as String);
       }
     } finally {
@@ -282,12 +283,23 @@ class ChatViewModel extends ChangeNotifier {
     notifyListeners();
   }
 
-  void triggerFakePaymentSuccess() {
-    _showPaywall = false;
-    _quotaRestant = 100; // Activation pass pro
-    notifyListeners();
-    refreshConversations();
-    refreshQuota();
+  // --- Paiement Mobile Money ---
+
+  /// Crée le paiement chez l'opérateur (WAVE / ORANGE). Renvoie `payment_url`
+  /// et `transaction_id`, ou `error`.
+  Future<Map<String, dynamic>> startPayment(String typePass, String operateur) {
+    return client.initPayment(typePass, operateur);
+  }
+
+  /// Interroge le statut d'un paiement ; rafraîchit le quota dès confirmation.
+  Future<String?> checkPayment(String transactionId) async {
+    final statut = await client.getTransactionStatus(transactionId);
+    if (statut == 'ACCEPTED') {
+      _showPaywall = false;
+      await refreshQuota();
+      notifyListeners();
+    }
+    return statut;
   }
 
   void createConversation() {
@@ -588,7 +600,8 @@ class ChatViewModel extends ChangeNotifier {
     } catch (e) {
       _isStreaming = false;
       _currentStreamText = '';
-      if (e.toString().contains('403') || e.toString().contains('quota')) {
+      if (e is QuotaEpuiseException) {
+        // Quota épuisé : proposer un Pass, jamais de mise en file hors-ligne.
         _showPaywall = true;
       } else {
         _isOffline = true;
