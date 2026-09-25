@@ -1,6 +1,7 @@
 """Tests pour l'enregistrement des feedbacks utilisateurs (pouce haut / bas)."""
 
 import uuid
+from unittest.mock import MagicMock
 
 import pytest
 from httpx import ASGITransport, AsyncClient
@@ -29,8 +30,18 @@ async def test_feedback_pouce_haut_success():
 
 
 @pytest.mark.asyncio
-async def test_feedback_pouce_bas_avec_conversation():
-    """Vérifie l'enregistrement d'un pouce bas (-1) avec conversation_id."""
+async def test_feedback_pouce_bas_avec_conversation(monkeypatch):
+    """Vérifie l'enregistrement d'un pouce bas (-1) sur une discussion de l'appelant."""
+    from app.services.chat_history_service import chat_history_service
+
+    async def _conversation_de_l_appelant(**kwargs):
+        return MagicMock()
+
+    monkeypatch.setattr(
+        chat_history_service,
+        "get_conversation_with_messages",
+        _conversation_de_l_appelant,
+    )
     conv_id = str(uuid.uuid4())
     payload = {
         "rating": -1,
@@ -61,3 +72,22 @@ async def test_feedback_rating_invalide_rejete():
         response = await client.post("/api/chat/feedback", json=payload)
 
     assert response.status_code == 422
+
+
+@pytest.mark.asyncio
+async def test_feedback_sur_discussion_d_un_tiers_refuse(monkeypatch):
+    """Anti-IDOR : noter la discussion d'un autre utilisateur renvoie 404."""
+    from app.services.chat_history_service import chat_history_service
+
+    async def _introuvable(**kwargs):
+        return None
+
+    monkeypatch.setattr(
+        chat_history_service, "get_conversation_with_messages", _introuvable
+    )
+    payload = {"rating": 1, "conversation_id": str(uuid.uuid4())}
+    transport = ASGITransport(app=app)
+    async with AsyncClient(transport=transport, base_url="http://test") as client:
+        response = await client.post("/api/chat/feedback", json=payload)
+
+    assert response.status_code == 404

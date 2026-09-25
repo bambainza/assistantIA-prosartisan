@@ -148,6 +148,11 @@ async def test_run_ingestion_multi_format_et_deduplication(tmp_path, monkeypatch
 
     monkeypatch.setattr(rag_service.qdrant_client, "upsert", fake_upsert)
 
+    async def fake_delete(*, collection_name, points_selector):
+        return None
+
+    monkeypatch.setattr(rag_service.qdrant_client, "delete", fake_delete)
+
     # 1ère passe : Ingestion réussie
     res1 = await run_ingestion(docs_dir=str(tmp_path), metier_id=1, secteur_id=1)
     assert res1["status"] == "success"
@@ -199,3 +204,55 @@ async def test_run_ingestion_collecte_les_erreurs_sans_planter(tmp_path, monkeyp
 
 async def _async_none():
     return None
+
+
+@pytest.mark.asyncio
+async def test_run_ingestion_purge_les_chunks_obsoletes(tmp_path, monkeypatch):
+    """Après réindexation, les chunks d'index >= nouveau total sont purgés de Qdrant."""
+    (tmp_path / "guide_plomberie.md").write_text(
+        "# Plomberie\nPente minimale de 1 cm par mètre.", encoding="utf-8"
+    )
+    monkeypatch.setattr(rag_service, "ensure_collection", lambda: _async_none())
+
+    upserted_points = []
+    purges = []
+
+    async def fake_upsert(*, collection_name, points):
+        upserted_points.extend(points)
+
+    async def fake_delete(*, collection_name, points_selector):
+        purges.append(points_selector)
+
+    monkeypatch.setattr(rag_service.qdrant_client, "upsert", fake_upsert)
+    monkeypatch.setattr(rag_service.qdrant_client, "delete", fake_delete)
+
+    res = await run_ingestion(docs_dir=str(tmp_path), metier_id=1, secteur_id=1)
+
+    assert res["status"] == "success"
+    assert len(purges) == 1
+    conditions = {c.key: c for c in purges[0].filter.must}
+    assert conditions["document_name"].match.value == "guide_plomberie.md"
+    assert conditions["chunk_index"].range.gte == len(upserted_points)
+
+
+@pytest.mark.asyncio
+async def test_run_ingestion_signale_un_echec_de_purge(tmp_path, monkeypatch):
+    """Un échec de purge est remonté dans les erreurs (jamais silencieux)."""
+    (tmp_path / "guide_peinture.md").write_text(
+        "# Peinture\nDeux couches minimum.", encoding="utf-8"
+    )
+    monkeypatch.setattr(rag_service, "ensure_collection", lambda: _async_none())
+
+    async def fake_upsert(*, collection_name, points):
+        return None
+
+    async def failing_delete(*, collection_name, points_selector):
+        raise RuntimeError("Qdrant hors ligne")
+
+    monkeypatch.setattr(rag_service.qdrant_client, "upsert", fake_upsert)
+    monkeypatch.setattr(rag_service.qdrant_client, "delete", failing_delete)
+
+    res = await run_ingestion(docs_dir=str(tmp_path), metier_id=1, secteur_id=1)
+
+    assert res["processed_files"] == 0
+    assert any("purge des anciens chunks" in e for e in res["erreurs"])

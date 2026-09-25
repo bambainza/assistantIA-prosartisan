@@ -116,9 +116,7 @@ def mock_db_with_packages(
                     )
                 ]
             elif "quotas_utilisateurs" in stmt_str:
-                quota = QuotaUtilisateur(
-                    user_id=artisan_user.id, requetes_restantes_gratuites=5
-                )
+                quota = QuotaUtilisateur(user_id=artisan_user.id, credits_requetes=5)
                 mock_res.scalar_one_or_none.return_value = quota
             else:
                 mock_res.scalar_one_or_none.return_value = sample_package

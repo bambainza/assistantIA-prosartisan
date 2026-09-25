@@ -122,15 +122,33 @@ def decode_token(token: str) -> dict[str, Any]:
 
 
 def get_user_id_from_token(token: str) -> uuid.UUID:
-    """Extrait le user_id d'un token JWT décodé."""
+    """Extrait le user_id d'un token JWT **d'accès** décodé.
+
+    Seuls les tokens `type == "access"` ouvrent les routes protégées : un
+    refresh token (30 jours, révocable uniquement via `/auth/refresh` et
+    `/auth/logout`) ne doit jamais servir d'identifiant d'accès, sinon un
+    token volé resterait utilisable après la déconnexion.
+    """
     payload = decode_token(token)
+    if payload.get("type") != "access":
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Token d'accès requis.",
+            headers={"WWW-Authenticate": "Bearer"},
+        )
     user_id_str = payload.get("sub")
     if not user_id_str:
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail="Token invalide : identifiant utilisateur manquant.",
         )
-    return uuid.UUID(user_id_str)
+    try:
+        return uuid.UUID(user_id_str)
+    except (ValueError, TypeError) as exc:
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Token invalide : identifiant utilisateur malformé.",
+        ) from exc
 
 
 async def get_current_user_id(

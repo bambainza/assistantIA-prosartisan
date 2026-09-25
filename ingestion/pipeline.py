@@ -18,7 +18,14 @@ from datetime import UTC, datetime
 from typing import Any
 
 from pypdf import PdfReader
-from qdrant_client.http.models import PointStruct
+from qdrant_client.http.models import (
+    FieldCondition,
+    Filter,
+    FilterSelector,
+    MatchValue,
+    PointStruct,
+    Range,
+)
 
 from app.config import settings
 from app.services.rag_service import rag_service
@@ -366,6 +373,32 @@ async def run_ingestion(
                 break
 
         if index_error:
+            continue
+
+        # Un document modifié peut produire moins de chunks qu'avant : les
+        # anciens points d'index >= len(points) ne sont pas écrasés par
+        # l'upsert et resteraient cités par le RAG (contenu obsolète). Purge
+        # faite après l'upsert, pour que le document reste interrogeable même
+        # si la nouvelle indexation échoue en cours de route.
+        try:
+            await rag_service.qdrant_client.delete(
+                collection_name=settings.qdrant_collection,
+                points_selector=FilterSelector(
+                    filter=Filter(
+                        must=[
+                            FieldCondition(
+                                key="document_name",
+                                match=MatchValue(value=filename),
+                            ),
+                            FieldCondition(
+                                key="chunk_index", range=Range(gte=len(points))
+                            ),
+                        ]
+                    )
+                ),
+            )
+        except Exception as exc:
+            erreurs.append(f"{filename} : purge des anciens chunks impossible ({exc}).")
             continue
 
         # Mise à jour du manifeste

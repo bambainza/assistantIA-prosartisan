@@ -48,7 +48,7 @@ def test_websocket_ignore_un_jeton_dans_url():
 def test_websocket_quota_epuise_renvoie_payment_required(monkeypatch):
     """Quota épuisé : le WebSocket répond `payment_required` au lieu d'appeler le LLM."""
 
-    async def _refuse(db, user_id):
+    async def _refuse(db, user_id, client_ip=None):
         return False
 
     monkeypatch.setattr(quota_service, "consume_quota", _refuse)

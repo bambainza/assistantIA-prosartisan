@@ -69,7 +69,7 @@ app/                    # Code source FastAPI
 ├── schemas/            # Schémas Pydantic (validation)
 ├── routers/            # Routes API (REST + WebSocket)
 ├── services/           # Logique métier (quotas, paiement, IA)
-├── middleware/          # Auth JWT
+├── middleware/          # Auth JWT, rate limiting, IP client (proxies), en-têtes sécurité
 ├── db/                 # Session & init DB
 └── main.py             # Point d'entrée
 ingestion/              # Pipeline RAG (PDF → Qdrant)
@@ -81,7 +81,9 @@ docs/                   # Cahier des charges
 
 ## 🔑 Variables d'Environnement
 
-Consultez [`.env.example`](.env.example) pour la liste complète.
+Consultez [`.env.example`](.env.example) pour la liste complète. Derrière un reverse proxy (Caddy, Render, Cloud Run), renseignez `TRUSTED_PROXY_HOPS=1` : sans cela, tous les utilisateurs partagent la même limite de débit et le même quota anonyme.
+
+Après mise à jour du code, appliquez les migrations (`alembic upgrade head`) — la migration `f1a2b3c4d5e6` renomme `requetes_restantes_gratuites` en `credits_requetes` (quota gratuit journalier désormais compté dans Redis).
 
 ## 📝 Documentation de référence
 

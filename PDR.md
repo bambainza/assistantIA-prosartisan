@@ -21,7 +21,8 @@ ProsArtisan IA est un copilot technique conversationnel accessible via Web & Mob
 graph TD
     Client[📱 App Mobile Flutter / Web] -->|HTTP / WebSocket| FastAPI[🚀 Backend Core FastAPI]
     FastAPI -->|Check Quota| QuotaService[⚡ Quota & Freemium Service]
-    QuotaService -->|Stockage DB| Postgres[(🐘 PostgreSQL / asyncpg)]
+    QuotaService -->|Quota du jour INCR atomique| Redis[(🧮 Redis)]
+    QuotaService -->|Pass & crédits achetés| Postgres[(🐘 PostgreSQL / asyncpg)]
     FastAPI -->|Recherche Vectorielle| RAGService[🔍 RAG & Vector Engine]
     RAGService -->|Recherche Embeddings| Qdrant[(🎯 Vector DB Qdrant)]
     RAGService -->|Synthèse & Vision| Mistral[🤖 Mistral Small / Medium]
@@ -32,16 +33,17 @@ graph TD
 ### Stack Technique
 - **Langage & Framework** : Python 3.12, FastAPI, Pydantic v2.
 - **Base de Données Relationnelle** : PostgreSQL, SQLAlchemy 2.0 (AsyncIO), Asyncpg, Alembic. Pool de connexions dimensionné (`DB_POOL_SIZE`/`DB_MAX_OVERFLOW`/`DB_POOL_RECYCLE`), `pool_pre_ping` actif.
-- **Cache & Rate Limiting** : Redis (compteurs de quota/rate-limit partagés entre workers), avec repli en mémoire locale si Redis est indisponible (dev/tests uniquement).
+- **Cache & Rate Limiting** : Redis (compteurs de quota/rate-limit partagés entre workers), avec repli en mémoire locale si Redis est indisponible (dev/tests uniquement) ; une connexion Redis perdue est retentée toutes les 30 s. En production, les préfixes `prosartisan:security:`, `prosartisan:revoked_jti:`, `prosartisan:rate_limit:` et `prosartisan:quota:` refusent le repli mémoire. Le rate limiting (60 req/min par IP) couvre `/api/chat*`, `/api/auth*` et chaque message du WebSocket `/api/chat/ws`. L'IP cliente est lue dans `X-Forwarded-For` en partant de la droite selon `TRUSTED_PROXY_HOPS` (nombre de reverse proxies de confiance : 1 derrière Caddy/Render/Cloud Run, 0 en accès direct).
+- **Quotas freemium** (`app/services/quota_service.py`) : ordre de consommation Pass premium actif → quota gratuit du jour (`MAX_QUESTIONS_GRATUITES_PAR_JOUR`, compteur Redis `INCR` atomique par jour UTC = heure d'Abidjan, expirant seul — aucune tâche de remise à zéro) → crédits achetés (`quotas_utilisateurs.credits_requetes`, décrémentés par `UPDATE ... WHERE credits_requetes > 0`). Un visiteur non connecté est compté par IP cliente (hachée), jamais sur un compteur commun à tous les anonymes. Redis injoignable en production → `503` (jamais un quota accordé ou refusé à l'aveugle).
 - **Base Vectorielle & RAG** : Qdrant (`qdrant-client`), Embeddings Mistral (`mistral-embed`). La collection est créée automatiquement au démarrage de l'application si elle est absente. Sans extrait pertinent retrouvé (et sans photo à analyser), le service RAG renvoie le message de repli standard sans appeler le LLM (garde-fou zéro hallucination, voir AGENTS.md §3) ; en l'absence de clé Mistral valide, un mode mock déterministe est utilisé pour le développement/les tests.
 - **Intelligence Artificielle** : Mistral Small/Medium (texte & vision intégrées), Voxtral (STT/TTS vocal).
 - **Paiements & Webhooks** : Wave Business API, Orange Money API, Signatures HMAC SHA-256 (obligatoire, aucun contournement).
-- **Découpage & Ingestion PDF** : PyPDF, découpage par phrases entières (jamais coupées en deux) avec chevauchement en proportion du chunk (overlap 10-15%). Métadonnées obligatoires (`metier_id`, `secteur_id`, `type_document`, `niveau_expertise`) validées par document, avec surcharge possible par fichier via `ingestion/documents/metadata.json` (à placer dans le même dossier que les documents passés à `--docs-dir`). IDs de points Qdrant déterministes : ré-ingérer un document met à jour ses points au lieu d'en créer des doublons.
+- **Découpage & Ingestion PDF** : PyPDF, découpage par phrases entières (jamais coupées en deux) avec chevauchement en proportion du chunk (overlap 10-15%). Métadonnées obligatoires (`metier_id`, `secteur_id`, `type_document`, `niveau_expertise`) validées par document, avec surcharge possible par fichier via `ingestion/documents/metadata.json` (à placer dans le même dossier que les documents passés à `--docs-dir`). IDs de points Qdrant déterministes : ré-ingérer un document met à jour ses points au lieu d'en créer des doublons ; après l'upsert, les points d'index supérieur ou égal au nouveau nombre de chunks (document raccourci) sont purgés, et un échec de purge est remonté dans les erreurs d'ingestion.
 - **Console d'Administration** : Interface statique HTML/JS/CSS (Template Dastone v2.1.0) montée sur `/admin` dans FastAPI. La session du back-office repose sur un cookie JWT `HttpOnly`, `SameSite=Strict` (`Secure` en production), jamais sur `localStorage`.
 - **Résilience** : Mécanisme de démarrage dégradé (repli SQLite autonome, hors production uniquement) si PostgreSQL est injoignable. En production (`APP_ENV=production`) ou avec `DB_REQUIRE_POSTGRES=true`, une base injoignable fait échouer le démarrage plutôt que de basculer silencieusement.
 - **RBAC & Audit** : les comptes admin peuvent recevoir un rôle granulaire (`app/models/role.py`, permissions type `packages.write`, `audit.read`...) via `require_permission(...)`. Un admin historique sans rôle garde l'accès complet (compatibilité descendante). Toute mutation admin sensible (packages, abonnements, documents, rôles, Pass) est tracée dans `audit_logs` (`app/services/audit_service.py`) : acteur, action, ressource, état avant/après, IP.
 - **En-têtes de sécurité HTTP** : `SecurityHeadersMiddleware` pose CSP, `X-Content-Type-Options`, `X-Frame-Options`, `Referrer-Policy`, `Permissions-Policy` sur toutes les réponses, et HSTS en production. Les blocs `<script>` inline sont interdits ; les données dynamiques injectées dans le DOM sont encodées. `/docs`, `/redoc` et `/openapi.json` sont désactivés quand `APP_ENV=production` (`app.main.docs_urls`).
-- **Authentification & dépendances** : les JWT sont signés avec PyJWT ; les refresh tokens sont rotatifs et révocables par `jti`. Google OAuth valide obligatoirement l'audience (`GOOGLE_CLIENT_ID`), l'émetteur et l'état `email_verified`. L'audit `pip-audit` est bloquant en CI.
+- **Authentification & dépendances** : les JWT sont signés avec PyJWT ; les refresh tokens sont rotatifs et révocables par `jti`, et seuls les tokens `type=access` ouvrent les routes protégées (un refresh token présenté en `Bearer` est refusé en `401`). Google OAuth valide obligatoirement l'audience (`GOOGLE_CLIENT_ID`), l'émetteur et l'état `email_verified`. L'audit `pip-audit` est bloquant en CI.
 - **Actualités & Notifications** : `app/models/actualite.py` et `app/services/notification_service.py` alimentent un centre de notifications in-app (source de vérité) avec providers push FCM (mobile, API HTTP v1 authentifiée par compte de service — `FCM_SERVICE_ACCOUNT_PATH`, volontairement pas le SDK `firebase-admin`, non réévalué depuis la bascule vers `mistralai`) et Web Push/VAPID (`chat_web`), et un module Actualités ciblable par métier, diffusable en tâche de fond.
 - **PWA (`chat_web`)** : `manifest.json` + `sw.js` — shell installable, disponible hors-ligne (jamais les réponses API), écoute des notifications Web Push. Clé VAPID de développement fonctionnelle par défaut, à régénérer en production.
 - **Mobile (`mobile_app_flutter`)** : `flutter_secure_storage` (JWT), `hive`/`connectivity_plus` (file d'attente hors-ligne), `local_auth` (verrouillage biométrique optionnel), `firebase_messaging`/`sentry_flutter` (inactifs sans credentials Firebase/Sentry fournis par l'opérateur).
@@ -89,7 +91,7 @@ AssistantIA-prosartisan/
 
 ## 🛡️ 5. Endpoints API Principaux
 
-Sur toutes les routes ci-dessous, l'identité de l'artisan est déduite du JWT (`Authorization: Bearer ...`) quand il est fourni ; en son absence, un compte anonyme partagé est utilisé pour le mode non connecté. Aucune route n'accepte plus un `user_id` fourni par le client (corps, query ou chemin) — voir AGENTS.md §2.
+Sur toutes les routes ci-dessous, l'identité de l'artisan est déduite du JWT (`Authorization: Bearer ...`) quand il est fourni ; en son absence, un compte anonyme partagé est utilisé pour stocker l'historique du mode non connecté (le quota anonyme, lui, est compté par IP). Aucune route n'accepte plus un `user_id` fourni par le client (corps, query ou chemin) — voir AGENTS.md §2.
 
 **Authentification** (`/api/auth`)
 
@@ -104,21 +106,23 @@ Sur toutes les routes ci-dessous, l'identité de l'artisan est déduite du JWT (
 
 **Chat & Historique**
 
-- `POST /api/chat` : Pose une question technique (texte + photo `image_url` optionnelle + filtre `metier_id`). Intercepte les quotas épuisés avec `HTTP 402 Payment Required`.
+- `POST /api/chat` : Pose une question technique (texte + photo `image_url` optionnelle + filtre `metier_id`). Intercepte les quotas épuisés avec `HTTP 402 Payment Required` (`503` si le compteur de quota est indisponible). Entrées bornées : question ≤ 4000 caractères, `image_url` ≤ 10 M caractères (`422` au-delà).
 - `POST /api/chat/stream` : équivalent en streaming SSE.
-- `POST /api/chat/transcribe` : transcription vocale (Mistral Voxtral) d'une note audio de chantier.
-- `WS /api/chat/ws` : Stream WebSocket en temps réel. Le JWT optionnel est envoyé dans un premier message d'authentification (`{"action": "auth", "token": "..."}`), jamais dans l'URL ; sans jeton, le compte anonyme partagé est utilisé. Le quota est décrémenté à chaque message métier comme sur les routes HTTP.
+- `POST /api/chat/transcribe` : transcription vocale (Mistral Voxtral) d'une note audio de chantier (10 Mo maximum, `413` au-delà).
+- `POST /api/chat/synthesize` : synthèse vocale (Voxtral TTS) d'un texte de 2000 caractères maximum.
+- `POST /api/chat/feedback` : pouce haut/bas ; un `conversation_id` fourni doit appartenir à l'appelant (`404` sinon).
+- `WS /api/chat/ws` : Stream WebSocket en temps réel. Le JWT optionnel est envoyé dans un premier message d'authentification (`{"action": "auth", "token": "..."}`), jamais dans l'URL ; sans jeton, le visiteur est anonyme (quota compté par IP). Le quota est décrémenté et le rate limiting appliqué à chaque message métier comme sur les routes HTTP ; les notes vocales sont limitées à 10 Mo.
 - `GET/POST /api/conversations`, `GET/PATCH/DELETE /api/conversations/{id}` : historique des discussions, strictement cloisonné par propriétaire.
 
 **Paiement Mobile Money** (`/api/payment`)
 
 - `GET /tarifs` : grille tarifaire des Pass et Packs.
-- `POST /init` : initialise un paiement Wave ou Orange Money (JWT requis — l'utilisateur ne peut initier un paiement que pour son propre compte).
-- `POST /webhook` : webhook sécurisé par signature HMAC SHA-256 (`X-Signature` obligatoire, aucune exception) et idempotent (un webhook rejoué sur une transaction déjà aboutie ne re-crédite pas le Pass).
+- `POST /init` : initialise un paiement (`operateur` : `WAVE` par défaut ou `ORANGE`) (JWT requis — l'utilisateur ne peut initier un paiement que pour son propre compte). Aucune URL de paiement n'est renvoyée si la transaction n'a pas pu être enregistrée en base. ⚠️ L'URL de paiement est encore construite localement : l'appel aux API opérateur (Wave Checkout, Orange Money Web Payment) reste à brancher.
+- `POST /webhook` : webhook sécurisé par signature HMAC SHA-256 (`X-Signature` obligatoire, aucune exception) et idempotent (un webhook rejoué sur une transaction déjà aboutie ne re-crédite pas le Pass). Un statut abouti n'est crédité que si le champ `montant` (FCFA) égale exactement le montant de la transaction ; sinon `400` et la transaction reste `PENDING`. Le Pack 50 ajoute 50 à `credits_requetes`.
 
 **Quota**
 
-- `GET /api/quota` : solde de questions et statut d'abonnement de l'artisan courant.
+- `GET /api/quota` : solde de questions et statut d'abonnement de l'artisan courant (ou du visiteur anonyme, par IP) : `statut`, `restantes` (gratuites du jour + crédits, `999999` si Pass actif), `gratuites_restantes_jour`, `credits`, `date_fin_premium`, `is_allowed`.
 
 **Notifications** (`/api/notifications`)
 

@@ -27,6 +27,7 @@ async def test_cache_service_increment_fallback_memoire():
     """Le compteur en mémoire s'incrémente puis se réinitialise après expiration."""
     cache = CacheService()
     cache._redis_available = False
+    cache._redis_retry_at = float("inf")
 
     assert await cache.increment("test:compteur", ttl_seconds=10) == 1
     assert await cache.increment("test:compteur", ttl_seconds=10) == 2
@@ -41,6 +42,7 @@ async def test_cache_securite_refuse_repli_memoire_en_production(monkeypatch):
     """Un état de sécurité ne doit jamais devenir local à un worker en prod."""
     cache = CacheService()
     cache._redis_available = False
+    cache._redis_retry_at = float("inf")
     monkeypatch.setattr(settings, "app_env", "production")
 
     with pytest.raises(RuntimeError, match="stockage de sécurité partagé"):
@@ -53,6 +55,7 @@ async def test_cache_service_ttl_expiration():
     """Vérifie qu'une clé expirée n'est plus retournée."""
     cache = CacheService()
     cache._redis_available = False
+    cache._redis_retry_at = float("inf")
 
     # TTL négatif pour forcer l'expiration immédiate
     await cache.set("test:expired", "expire_vite", ttl_seconds=-1)
@@ -65,6 +68,7 @@ async def test_cache_service_embeddings():
     """Vérifie la sérialisation / désérialisation des embeddings vectoriels."""
     cache = CacheService()
     cache._redis_available = False
+    cache._redis_retry_at = float("inf")
 
     text = "Dosage mortier pour chape"
     vector = [0.123, 0.456, -0.789]
@@ -83,6 +87,7 @@ async def test_cache_service_rag_response():
     """Vérifie la mise en cache et restitution d'une réponse RAG."""
     cache = CacheService()
     cache._redis_available = False
+    cache._redis_retry_at = float("inf")
 
     question = "Quelle épaisseur minimale pour un carrelage extérieur ?"
     dummy_res = {
