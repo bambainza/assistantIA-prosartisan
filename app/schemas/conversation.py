@@ -5,7 +5,9 @@ from __future__ import annotations
 import uuid
 from datetime import datetime
 
-from pydantic import BaseModel
+from pydantic import BaseModel, field_serializer
+
+from app.services.media_service import media_service
 
 
 class MessageResponse(BaseModel):
@@ -19,6 +21,11 @@ class MessageResponse(BaseModel):
     created_at: datetime
 
     model_config = {"from_attributes": True}
+
+    @field_serializer("image_url")
+    def _url_signee(self, image_url: str | None) -> str | None:
+        """Référence `media:<nom>` → URL signée temporaire (voir media_service)."""
+        return media_service.public_url(image_url)
 
 
 class ConversationResponse(BaseModel):

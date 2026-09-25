@@ -28,12 +28,14 @@ from app.routers import (
     conversation,
     finance,
     health,
+    media,
     notification,
     parametres,
     payment,
     quota,
     quote,
 )
+from app.services.media_service import ImageInvalideError
 from app.services.quota_service import QuotaIndisponibleError
 from app.services.rag_service import rag_service
 
@@ -71,7 +73,7 @@ app = FastAPI(
     description=(
         "API de l'assistant IA dédié aux artisans professionnels. "
         "Fournit des réponses techniques via RAG, gère les quotas freemium "
-        "et les paiements Mobile Money (Wave, Orange, MTN, Moov)."
+        "et les paiements Mobile Money (Wave, Orange Money)."
     ),
     version="0.1.0",
     lifespan=lifespan,
@@ -126,6 +128,14 @@ async def quota_indisponible_handler(
     )
 
 
+@app.exception_handler(ImageInvalideError)
+async def image_invalide_handler(
+    request: Request, exc: ImageInvalideError
+) -> JSONResponse:
+    """Photo de chantier refusée avant tout décompte de quota."""
+    return JSONResponse(status_code=422, content={"detail": str(exc)})
+
+
 # ── Routers ──
 app.include_router(health.router)
 app.include_router(auth.router)
@@ -138,6 +148,7 @@ app.include_router(actualite.router)
 app.include_router(finance.router)
 app.include_router(quote.router)
 app.include_router(parametres.router)
+app.include_router(media.router)
 app.include_router(admin.router)
 
 # ── Back-Office Admin Frontend ──

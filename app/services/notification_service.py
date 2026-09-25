@@ -44,7 +44,7 @@ class FcmPushProvider:
     l'ancienne API FCM legacy est dépréciée par Google et n'est plus proposée
     pour les nouveaux projets Firebase. On utilise `google-auth` seul (pas le
     SDK complet `firebase-admin`, dont les dépendances entrent en conflit
-    direct avec `httpx`/`openai` déjà pinnés dans ce projet).
+    direct avec le pin `httpx` requis par `mistralai`).
 
     No-op journalisé si `FCM_SERVICE_ACCOUNT_PATH` n'est pas configuré, si le
     fichier est introuvable, ou si l'utilisateur n'a pas de device token —

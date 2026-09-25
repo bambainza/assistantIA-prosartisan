@@ -148,11 +148,15 @@ async function updateQuotaUI() {
                 const planBadge = document.getElementById('user-plan-badge');
                 if (planBadge) planBadge.textContent = "Artisan Pro";
             } else {
-                const rest = data.restantes;
-                const total = 5; // Default questions count
-                quotaText.textContent = `${rest} / ${total}`;
+                // Quota gratuit du jour (jauge sur 5) + crédits achetés (Pack 50) affichés à part.
+                const total = 5;
+                const rest = data.gratuites_restantes_jour ?? Math.min(data.restantes, total);
+                const credits = data.credits || 0;
+                quotaText.textContent = credits > 0
+                    ? `${rest} / ${total} + ${credits} crédits`
+                    : `${rest} / ${total}`;
                 
-                const percent = (rest / total) * 100;
+                const percent = Math.min(100, (rest / total) * 100);
                 progressBar.style.width = `${percent}%`;
                 
                 if (rest <= 1) {
@@ -670,9 +674,18 @@ async function sendMessage() {
         });
 
         if (!response.ok) {
-            const errorText = "Désolé chef, une erreur s'est produite lors de la connexion à l'assistant. Veuillez réessayer.";
-            bubble.querySelector('.streaming-text').innerHTML = `⚠️ ${errorText}`;
+            const messagesParStatut = {
+                402: "Vos questions gratuites du jour sont épuisées. Passez au Pass 24H ou au Pass Mensuel pour continuer.",
+                413: "Photo ou note vocale trop volumineuse.",
+                422: "Question trop longue ou photo trop volumineuse.",
+                429: "Trop de requêtes. Patientez une minute avant de réessayer.",
+                503: "Service momentanément indisponible. Réessayez dans un instant.",
+            };
+            const errorText = messagesParStatut[response.status]
+                || "Désolé chef, une erreur s'est produite lors de la connexion à l'assistant. Veuillez réessayer.";
+            bubble.querySelector('.streaming-text').textContent = `⚠️ ${errorText}`;
             announceToScreenReader(errorText);
+            if (response.status === 402) updateQuotaUI();
             return;
         }
 
@@ -787,6 +800,16 @@ async function sendMessage() {
 }
 
 // Append Message Bubble into main container
+// Encode une valeur avant insertion dans du HTML (texte ou attribut entre guillemets).
+function escapeHtml(value) {
+    return String(value)
+        .replace(/&/g, '&amp;')
+        .replace(/</g, '&lt;')
+        .replace(/>/g, '&gt;')
+        .replace(/"/g, '&quot;')
+        .replace(/'/g, '&#39;');
+}
+
 function appendMessageBubble(role, content, imageSrc = null, sources = null) {
     const bubble = document.createElement('div');
     bubble.className = `message-bubble ${role}`;
@@ -795,7 +818,7 @@ function appendMessageBubble(role, content, imageSrc = null, sources = null) {
     
     let imageHtml = '';
     if (imageSrc) {
-        imageHtml = `<img src="${imageSrc}" class="msg-image" alt="Photo de chantier envoyée par l'utilisateur">`;
+        imageHtml = `<img src="${escapeHtml(imageSrc)}" class="msg-image" alt="Photo de chantier envoyée par l'utilisateur">`;
     }
 
     let actionsHtml = '';
@@ -1993,6 +2016,9 @@ function handleVoiceWebSocketMessage(msg) {
             currentVoiceAssistantBubble.finalize();
             currentVoiceAssistantBubble = null;
         }
+        updateQuotaUI();
+    } else if (msg.type === 'payment_required') {
+        showToast(msg.message || "Quota gratuit épuisé. Passez à la version Pro.");
         updateQuotaUI();
     } else if (msg.type === 'error') {
         showToast(msg.message || "Erreur lors du traitement vocal.");

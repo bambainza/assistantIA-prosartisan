@@ -67,12 +67,15 @@ pytest tests/ -v
 app/                    # Code source FastAPI
 ├── models/             # Modèles SQLAlchemy (ORM)
 ├── schemas/            # Schémas Pydantic (validation)
-├── routers/            # Routes API (REST + WebSocket)
+├── routers/            # Routes API (REST + WebSocket) ; admin/ découpé par domaine
 ├── services/           # Logique métier (quotas, paiement, IA)
 ├── middleware/          # Auth JWT, rate limiting, IP client (proxies), en-têtes sécurité
 ├── db/                 # Session & init DB
+├── scripts/            # Scripts d'exploitation (reprise des photos Base64)
 └── main.py             # Point d'entrée
 ingestion/              # Pipeline RAG (PDF → Qdrant)
+admin_web/              # Back-office statique (js/ : un script par domaine)
+chat_web/               # Front chat (PWA)
 prompts/                # Prompt système IA
 migrations/             # Alembic (migrations BDD)
 tests/                  # Tests pytest
@@ -84,6 +87,8 @@ docs/                   # Cahier des charges
 Consultez [`.env.example`](.env.example) pour la liste complète. Derrière un reverse proxy (Caddy, Render, Cloud Run), renseignez `TRUSTED_PROXY_HOPS=1` : sans cela, tous les utilisateurs partagent la même limite de débit et le même quota anonyme.
 
 Après mise à jour du code, appliquez les migrations (`alembic upgrade head`) — la migration `f1a2b3c4d5e6` renomme `requetes_restantes_gratuites` en `credits_requetes` (quota gratuit journalier désormais compté dans Redis).
+
+Les photos de chantier sont stockées dans `UPLOAD_DIR/chat_images/` (volume persistant obligatoire en production). Pour sortir de la base les photos déjà enregistrées en Base64 : `python -m app.scripts.migrate_chat_images --dry-run` puis sans `--dry-run` (à lancer dans le conteneur qui monte `UPLOAD_DIR`).
 
 ## 📝 Documentation de référence
 

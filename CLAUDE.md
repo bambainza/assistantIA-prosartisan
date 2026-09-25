@@ -57,7 +57,7 @@ cd mobile_app_flutter && flutter pub get && flutter test && flutter analyze
 
 ```
 routes/api.py (implicite via routers FastAPI)
-  → app/routers/          (chat, auth, payment, quota, conversation, admin, health)
+  → app/routers/          (chat, auth, payment, quota, conversation, media, health, admin/ découpé par domaine)
       → app/schemas/       (validation Pydantic)
       → app/services/      (logique métier : rag_service, payment_service, quota_service, cache_service, audio_service, chat_history_service, audit_service)
           → app/models/    (SQLAlchemy ORM async, dont role.py pour le RBAC et audit_log.py pour le journal d'audit)
@@ -75,6 +75,7 @@ Séparation stricte imposée : logique métier dans `app/services/`, jamais dans
 5. **Garde-fous de démarrage en production** (`APP_ENV=production`) : refus de démarrer si `APP_SECRET_KEY`, `JWT_SECRET_KEY`, `MOBILE_MONEY_SECRET_KEY`, `DB_PASSWORD`, `VAPID_PRIVATE_KEY` sont à leur valeur par défaut, si `CORS_ALLOWED_ORIGINS=*`, ou si `APP_DEBUG=true`.
 6. **Jamais de secrets en dur** — tout passe par `app.config.settings` / `.env`. Le compte admin seed exige `ADMIN_PASSWORD` en prod (pas de valeur par défaut).
 7. **État partagé entre workers** (quotas, rate-limit) → Redis obligatoire, jamais un attribut de classe Python. Quota = Pass premium → compteur Redis journalier (`INCR` atomique) → crédits achetés (`credits_requetes`, décrément SQL atomique) ; Redis injoignable en prod → `503`. IP cliente via `get_client_ip` (`TRUSTED_PROXY_HOPS`), jamais `request.client.host`.
+7 bis. **Photos hors base & coûts IA** : photo validée (`media_service.prepare_chat_image`) avant quota, stockée sur disque, référence `media:<nom>` en base, URL signée côté client. Contrôles gratuits (taille, propriété, débit, quota) avant tout appel facturé (STT, vision), WebSocket compris. `generate_response` et `generate_response_stream` partagent `RAGService._prepare` ; (dés)activer un métier/document → `rag_service.invalidate_activation_cache()`.
 8. **Travaux longs hors requête HTTP** (ingestion, appel externe lourd) → `BackgroundTasks` + réponse `202 Accepted` immédiate.
 9. **Migrations Alembic obligatoires** pour toute évolution de modèle ORM déjà déployé — `Base.metadata.create_all` ne sert qu'au dev/tests.
 10. **Métadonnées d'ingestion obligatoires** : `metier_id`, `secteur_id`, `type_document`, `niveau_expertise` validées à l'ingestion, sinon document rejeté (jamais indexé silencieusement).
