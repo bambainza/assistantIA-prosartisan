@@ -14,3 +14,12 @@ dastone-v2.1.0
 prosartisan.db
 temp_migration.db
 uploads
+# Caches et fichiers locaux à tous les niveaux (jamais dans l'image)
+**/__pycache__
+**/.pytest_cache
+**/.ruff_cache
+scratch
+backups
+.env
+# Application mobile : inutile à l'image de l'API (et volumineuse)
+mobile_app_flutter
