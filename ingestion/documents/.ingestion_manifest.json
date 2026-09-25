@@ -218,5 +218,192 @@
       "type_document": "guide_technique",
       "niveau_expertise": "intermédiaire"
     }
+  },
+  "guide_bijouterie_orfevrerie_atelier.md": {
+    "sha256": "4f068fd0a33295c23016cb2fcff3df3022dbf38b779415ac2b7e653ee7c72f43",
+    "chunks_count": 10,
+    "last_ingested_at": "2026-09-25T22:52:14.198512+00:00",
+    "metadata": {
+      "metier_id": 6,
+      "secteur_id": 2,
+      "type_document": "guide_technique",
+      "niveau_expertise": "avance"
+    }
+  },
+  "guide_boulangerie_patisserie_artisanale.md": {
+    "sha256": "b06ba075f5151e4af0c81274f31be455bd2fb623a3bfd2163977eb38dbb51b5c",
+    "chunks_count": 7,
+    "last_ingested_at": "2026-09-25T22:52:14.740234+00:00",
+    "metadata": {
+      "metier_id": 5,
+      "secteur_id": 2,
+      "type_document": "guide_technique",
+      "niveau_expertise": "intermédiaire"
+    }
+  },
+  "guide_broderie_finitions_atelier.md": {
+    "sha256": "ff82d1cc499df48b970d71514f2d77a738821c2f14cff8e1fb050817376ca3ab",
+    "chunks_count": 10,
+    "last_ingested_at": "2026-09-25T22:52:15.618292+00:00",
+    "metadata": {
+      "metier_id": 7,
+      "secteur_id": 2,
+      "type_document": "guide_technique",
+      "niveau_expertise": "avance"
+    }
+  },
+  "guide_compostage_fertilisation_organique.md": {
+    "sha256": "a99039669ecdf8fb694e0c7182fc756767fdf8647f623e7a4fb13ca55d805f94",
+    "chunks_count": 9,
+    "last_ingested_at": "2026-09-25T22:52:16.189857+00:00",
+    "metadata": {
+      "metier_id": 10,
+      "secteur_id": 2,
+      "type_document": "guide_technique",
+      "niveau_expertise": "debutant"
+    }
+  },
+  "guide_conservation_aliments_chaine_froid.md": {
+    "sha256": "9534691605b26b8aed8442b5b8607325cde7bd9c4538f04768f1807a065fca14",
+    "chunks_count": 8,
+    "last_ingested_at": "2026-09-25T22:52:16.862645+00:00",
+    "metadata": {
+      "metier_id": 5,
+      "secteur_id": 2,
+      "type_document": "guide_technique",
+      "niveau_expertise": "intermédiaire"
+    }
+  },
+  "guide_couture_patronage_retouches.md": {
+    "sha256": "a6b7f62c63fa81a989c34732da02120361a7c114f90b2f7dd0665f1c566d2b84",
+    "chunks_count": 10,
+    "last_ingested_at": "2026-09-25T22:52:17.907041+00:00",
+    "metadata": {
+      "metier_id": 7,
+      "secteur_id": 2,
+      "type_document": "guide_technique",
+      "niveau_expertise": "debutant"
+    }
+  },
+  "guide_dechets_electroniques_deee.md": {
+    "sha256": "b3c6df8419982a1e6a58a273cb4e29f6ed4020b4dfc6a5442be6fef48e2cb854",
+    "chunks_count": 8,
+    "last_ingested_at": "2026-09-25T22:52:18.698939+00:00",
+    "metadata": {
+      "metier_id": 9,
+      "secteur_id": 1,
+      "type_document": "guide_technique",
+      "niveau_expertise": "intermédiaire"
+    }
+  },
+  "guide_depannage_tv_electromenager_onduleurs.md": {
+    "sha256": "6916b3baa1991461002ee6f273adbd890fd12dd25b47f11f47c6d8f3d69e42cc",
+    "chunks_count": 8,
+    "last_ingested_at": "2026-09-25T22:52:19.766964+00:00",
+    "metadata": {
+      "metier_id": 9,
+      "secteur_id": 1,
+      "type_document": "guide_technique",
+      "niveau_expertise": "avance"
+    }
+  },
+  "guide_hygiene_desinfection_salon.md": {
+    "sha256": "d1dc4c0a911444ca65020c90de4b2cf74321c69df23851bbea12c5a652b18b0f",
+    "chunks_count": 10,
+    "last_ingested_at": "2026-09-25T22:52:20.339578+00:00",
+    "metadata": {
+      "metier_id": 8,
+      "secteur_id": 2,
+      "type_document": "guide_technique",
+      "niveau_expertise": "debutant"
+    }
+  },
+  "guide_machines_coudre_reglage_entretien.md": {
+    "sha256": "e473e02cad945fe6ed7184cb576003d24a6e1ff599d12b7183e8d32cb18186dd",
+    "chunks_count": 13,
+    "last_ingested_at": "2026-09-25T22:52:20.863296+00:00",
+    "metadata": {
+      "metier_id": 7,
+      "secteur_id": 2,
+      "type_document": "guide_technique",
+      "niveau_expertise": "intermédiaire"
+    }
+  },
+  "guide_maraichage_irrigation_goutte_a_goutte.md": {
+    "sha256": "544f80bcc35a7231c10150b12b805ba41c672fe6e54eeab4de3888b8365418de",
+    "chunks_count": 9,
+    "last_ingested_at": "2026-09-25T22:52:21.821948+00:00",
+    "metadata": {
+      "metier_id": 10,
+      "secteur_id": 2,
+      "type_document": "guide_technique",
+      "niveau_expertise": "intermédiaire"
+    }
+  },
+  "guide_recyclage_plastique_pave.md": {
+    "sha256": "ee176d461af005d468ccd17e6c2a8ccbc08220076133cd51a2b2527c7b9500d7",
+    "chunks_count": 8,
+    "last_ingested_at": "2026-09-25T22:52:22.290700+00:00",
+    "metadata": {
+      "metier_id": 10,
+      "secteur_id": 2,
+      "type_document": "guide_technique",
+      "niveau_expertise": "intermédiaire"
+    }
+  },
+  "guide_reparation_smartphones_ecrans_batteries.md": {
+    "sha256": "510ad558a97a8c436856d109f78143f5e32ce476109cd6c7e12e7bf3ae3046a6",
+    "chunks_count": 9,
+    "last_ingested_at": "2026-09-25T22:52:22.685556+00:00",
+    "metadata": {
+      "metier_id": 9,
+      "secteur_id": 1,
+      "type_document": "guide_technique",
+      "niveau_expertise": "intermédiaire"
+    }
+  },
+  "guide_sculpture_bois_finitions.md": {
+    "sha256": "643ab8eef05965bf693101add06553907cedcfa75324ed907d8baf66e8cb01d2",
+    "chunks_count": 8,
+    "last_ingested_at": "2026-09-25T22:52:23.876824+00:00",
+    "metadata": {
+      "metier_id": 6,
+      "secteur_id": 2,
+      "type_document": "guide_technique",
+      "niveau_expertise": "intermédiaire"
+    }
+  },
+  "guide_soudure_electronique_esd.md": {
+    "sha256": "67d0f57f6351c5b688f510bc5d69512ded160b06e5efbc92322ba626535e7a7c",
+    "chunks_count": 8,
+    "last_ingested_at": "2026-09-25T22:52:24.321027+00:00",
+    "metadata": {
+      "metier_id": 9,
+      "secteur_id": 1,
+      "type_document": "guide_technique",
+      "niveau_expertise": "debutant"
+    }
+  },
+  "guide_tissus_pagne_wax_teinture.md": {
+    "sha256": "a6a414c8288ab94518a7ed1826dfddc5995d45f2ccbb5a343609faa87edc2e91",
+    "chunks_count": 12,
+    "last_ingested_at": "2026-09-25T22:52:24.781556+00:00",
+    "metadata": {
+      "metier_id": 7,
+      "secteur_id": 2,
+      "type_document": "guide_technique",
+      "niveau_expertise": "intermédiaire"
+    }
+  },
+  "guide_tresses_extensions_protection.md": {
+    "sha256": "bc9f325aa215468e7c8915c095758f8d0a22bc32b8de979be1f3996a07744e1f",
+    "chunks_count": 10,
+    "last_ingested_at": "2026-09-25T22:52:25.193843+00:00",
+    "metadata": {
+      "metier_id": 8,
+      "secteur_id": 2,
+      "type_document": "guide_technique",
+      "niveau_expertise": "intermédiaire"
+    }
   }
 }

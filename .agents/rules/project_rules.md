@@ -7,7 +7,7 @@ Ce fichier est chargé automatiquement par Antigravity IDE pour régir le compor
 ## Directives Générales
 - **Type Hints PEP 484** : Obligatoires sur l'ensemble des fonctions Python.
 - **Sécurité Secrets** : Utiliser exclusivement `app.config.settings` alimenté par `.env`.
-- **RAG & Multimodal** : Filtrer impérativement par `metier_id` dans Qdrant et utiliser le prompt système multilingue Nouchi.
+- **RAG & Multimodal** : Filtrer impérativement par `metier_id` dans Qdrant et utiliser le prompt système multilingue Nouchi. Fiches à enjeu santé/sécurité : `ingestion/documents_a_valider/` (non indexé) jusqu'à relecture professionnelle.
 - **Paiements** : parcours officiels Wave Checkout / Orange Money WebPay via `app/services/payment_providers/` (simulateur `PAYMENT_MODE=demo` fidèle, désactivé en production par défaut) ; notifications authentifiées (`Wave-Signature` anti-rejeu, `notif_token` + confirmation `transactionstatus`, `X-Signature` pour le webhook générique), crédit unique et seulement si le montant confirmé est exact.
 - **Historique** : aucune discussion anonyme côté serveur ; `/api/conversations` exige le JWT ; toute `conversation_id` est vérifiée avant quota et avant écriture.
 - **Tokens** : seuls les JWT `type=access` ouvrent les routes protégées ; un refresh token ne sert qu'à `/api/auth/refresh` et `/api/auth/logout`.

@@ -73,7 +73,8 @@ app/                    # Code source FastAPI
 ├── db/                 # Session & init DB
 ├── scripts/            # Scripts d'exploitation (reprise des photos Base64)
 └── main.py             # Point d'entrée
-ingestion/              # Pipeline RAG (PDF → Qdrant)
+ingestion/              # Pipeline RAG (PDF/Markdown → Qdrant) ; documents/ = corpus indexé,
+                        # documents_a_valider/ = fiches santé/sécurité en attente de relecture
 admin_web/              # Back-office statique (js/ : un script par domaine)
 chat_web/               # Front chat (PWA)
 prompts/                # Prompt système IA
