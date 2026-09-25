@@ -14,9 +14,25 @@ class PaymentInitRequest(BaseModel):
 class PaymentInitResponse(BaseModel):
     status: str
     payment_url: str
+    transaction_id: str | None = None
+    reference_externe: str | None = None
+    montant: int | None = None
+    operateur: str | None = None
+    mode: str | None = None  # "demo" | "live"
+
+
+class TransactionStatusResponse(BaseModel):
+    transaction_id: str
+    # "PENDING" | "ACCEPTED" | "FAILED" | "EXPIRED" | "REFUNDED"
+    statut: str
+    operateur: str
+    montant: int
+    type_achat: str
 
 
 class WebhookPayload(BaseModel):
+    """Webhook générique (agrégateur), signé `X-Signature`."""
+
     transaction_id: str
     status: str  # "ACCEPTED" | "REFUSED"
     # Montant effectivement encaissé (FCFA, entier). Obligatoire pour qu'un

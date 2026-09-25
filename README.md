@@ -88,6 +88,10 @@ Consultez [`.env.example`](.env.example) pour la liste complète. Derrière un r
 
 Après mise à jour du code, appliquez les migrations (`alembic upgrade head`) — la migration `f1a2b3c4d5e6` renomme `requetes_restantes_gratuites` en `credits_requetes` (quota gratuit journalier désormais compté dans Redis).
 
+**Paiements Mobile Money** : `PAYMENT_MODE=demo` (défaut) active un simulateur qui reproduit les parcours officiels Wave Checkout et Orange Money WebPay (page de paiement sans débit réel, notifications signées au format officiel). Le passage en réel ne demande que les identifiants opérateurs (`WAVE_API_KEY`, `WAVE_WEBHOOK_SECRET`, `ORANGE_CLIENT_ID`, `ORANGE_CLIENT_SECRET`, `ORANGE_MERCHANT_KEY`), `PUBLIC_BASE_URL` en HTTPS et `PAYMENT_MODE=live`. En production, le mode démo refuse les paiements sauf `PAYMENT_DEMO_IN_PRODUCTION=true`. Planifiez `python -m app.scripts.reconcile_payments` toutes les 10-15 minutes.
+
+**Historique anonyme** : le serveur ne conserve plus de discussions pour les visiteurs non connectés (historique local dans le navigateur). Pour supprimer celles de l'ancien compte anonyme partagé : `python -m app.scripts.purge_anonymous_history --dry-run`, puis sans `--dry-run`.
+
 Les photos de chantier sont stockées dans `UPLOAD_DIR/chat_images/` (volume persistant obligatoire en production). Pour sortir de la base les photos déjà enregistrées en Base64 : `python -m app.scripts.migrate_chat_images --dry-run` puis sans `--dry-run` (à lancer dans le conteneur qui monte `UPLOAD_DIR`).
 
 ## 📝 Documentation de référence

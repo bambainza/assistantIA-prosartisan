@@ -11,6 +11,7 @@ from httpx import ASGITransport, AsyncClient
 
 from app.config import settings
 from app.main import app
+from app.middleware.auth import create_access_token
 from app.schemas.conversation import MessageResponse
 from app.services.chat_history_service import chat_history_service
 from app.services.media_service import (
@@ -152,6 +153,9 @@ async def test_chat_enregistre_une_reference_et_non_le_base64(monkeypatch):
         response = await client.post(
             "/api/chat",
             json={"question": "Cette fissure est grave ?", "image_url": _data_url(PNG)},
+            headers={
+                "Authorization": f"Bearer {create_access_token({'sub': str(uuid.uuid4())})}"
+            },
         )
 
     assert response.status_code == 200

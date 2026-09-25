@@ -38,6 +38,24 @@ class TransactionMobileMoney(Base):
     reference_externe: Mapped[str | None] = mapped_column(String(255), default=None)
     created_at: Mapped[datetime] = mapped_column(server_default=func.now())
 
+    # Données renvoyées par l'opérateur à la création du paiement :
+    # - Wave : `provider_session_id` = id de la session Checkout (`cos-...`) ;
+    # - Orange Money : `provider_session_id` = `pay_token`, et
+    #   `provider_notif_token` = `notif_token`, seul moyen d'authentifier la
+    #   notification (non signée) envoyée par Orange.
+    provider_session_id: Mapped[str | None] = mapped_column(
+        String(255), default=None, index=True
+    )
+    provider_notif_token: Mapped[str | None] = mapped_column(
+        String(255), default=None, index=True
+    )
+    # Identifiant de la transaction côté opérateur (Wave `transaction_id`,
+    # Orange Money `txnid`), renseigné au paiement abouti.
+    provider_transaction_id: Mapped[str | None] = mapped_column(
+        String(255), default=None
+    )
+    payment_url: Mapped[str | None] = mapped_column(String(1024), default=None)
+
     # Remboursement (module Finance back-office) : renseignés uniquement quand
     # `statut_paiement == "REFUNDED"`.
     refunded_at: Mapped[datetime | None] = mapped_column(default=None)

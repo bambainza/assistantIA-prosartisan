@@ -121,6 +121,19 @@ class MediaService:
         os.replace(tmp_path, directory / name)  # écriture atomique
         return f"{MEDIA_REF_PREFIX}{name}"
 
+    def delete(self, stored: str | None) -> bool:
+        """Supprime le fichier d'une référence `media:<nom>` (nom validé, jamais de chemin)."""
+        if not stored or not stored.startswith(MEDIA_REF_PREFIX):
+            return False
+        name = stored[len(MEDIA_REF_PREFIX) :]
+        if not _NAME_RE.match(name):
+            return False
+        path = _chat_images_dir() / name
+        if not path.is_file():
+            return False
+        path.unlink()
+        return True
+
     def public_url(self, stored: str | None, now: float | None = None) -> str | None:
         """Convertit la valeur persistée en URL exploitable par les clients."""
         if not stored or not stored.startswith(MEDIA_REF_PREFIX):

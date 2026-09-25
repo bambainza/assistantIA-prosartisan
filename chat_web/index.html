@@ -84,6 +84,7 @@
                     <div class="quota-progress-container">
                         <div id="quota-progress-bar" class="quota-progress-fill"></div>
                     </div>
+                    <button class="btn btn-primary btn-block" id="paywall-open-btn" onclick="openPaywallModal()">⚡ Activer un Pass</button>
                 </div>
 
                 <!-- Call to action block for unlogged users -->
@@ -263,6 +264,30 @@
                         Déjà inscrit ? <a href="javascript:void(0);" onclick="switchAuthView('login')" class="auth-switch-link">Se connecter</a>
                     </p>
                 </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Modal Paiement Mobile Money (Wave / Orange Money) -->
+    <div class="modal-overlay hidden" id="paywall-modal" role="dialog" aria-modal="true" aria-labelledby="paywall-modal-title">
+        <div class="modal-card">
+            <button class="modal-close-btn" onclick="closePaywallModal()" title="Fermer" aria-label="Fermer la fenêtre de paiement">×</button>
+            <div class="modal-header">
+                <h2 id="paywall-modal-title">⚡ Activer un Pass</h2>
+                <p>Continuez à poser vos questions techniques sur le chantier. Paiement par Mobile Money.</p>
+            </div>
+            <div class="modal-body">
+                <fieldset class="paywall-offres">
+                    <legend>Choisissez votre offre</legend>
+                    <label class="paywall-offre"><input type="radio" name="paywall-offre" value="pass_24h" checked> <strong>Pass 24H Urgence</strong> — 500 F</label>
+                    <label class="paywall-offre"><input type="radio" name="paywall-offre" value="pass_mois"> <strong>Pass Mensuel Pro</strong> — 3000 F</label>
+                    <label class="paywall-offre"><input type="radio" name="paywall-offre" value="pack_50_requetes"> <strong>Pack 50 questions</strong> — 1500 F</label>
+                </fieldset>
+                <div class="modal-form-group">
+                    <button class="btn btn-primary btn-block btn-lg paywall-pay-btn" onclick="startPayment('WAVE')">Payer avec Wave</button>
+                    <button class="btn btn-primary btn-block btn-lg paywall-pay-btn" onclick="startPayment('ORANGE')">Payer avec Orange Money</button>
+                </div>
+                <p class="auth-switch-text" id="paywall-mode-hint"></p>
             </div>
         </div>
     </div>

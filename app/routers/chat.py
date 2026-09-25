@@ -49,7 +49,7 @@ from app.services.audio_service import audio_service
 from app.services.cache_service import cache_service
 from app.services.calculator_service import calculator_service
 from app.services.chat_history_service import chat_history_service
-from app.services.media_service import media_service
+from app.services.media_service import PreparedImage, media_service
 from app.services.quota_service import QuotaIndisponibleError, quota_service
 from app.services.rag_service import rag_service
 
@@ -57,9 +57,11 @@ logger = logging.getLogger(__name__)
 
 router = APIRouter(prefix="/api", tags=["Chat IA Multimodal"])
 
-# Identité de stockage (historique) quand aucune authentification n'est
-# fournie. Le quota des visiteurs anonymes, lui, est compté par IP cliente.
-ANONYMOUS_USER_ID = uuid.UUID("00000000-0000-0000-0000-000000000001")
+# Aucun historique n'est conservé côté serveur pour un visiteur non connecté
+# (il le garde dans son navigateur) ; son quota est compté par IP cliente.
+CONNEXION_REQUISE_DISCUSSION = (
+    "Connectez-vous pour enregistrer ou reprendre une discussion."
+)
 
 # Limites d'entrée : chaque appel Mistral (LLM, vision, STT, TTS) est facturé,
 # une entrée non bornée permettrait de faire exploser les coûts en une requête.
@@ -124,6 +126,87 @@ class ExtendedChatRequest(BaseModel):
     image_url: str | None = Field(default=None, max_length=MAX_IMAGE_URL_CHARS)
 
 
+async def _historique_de_la_discussion(
+    db: AsyncSession,
+    current_user_id: uuid.UUID | None,
+    conversation_id: uuid.UUID | None,
+) -> list[dict[str, str]]:
+    """Charge les 10 derniers messages d'une discussion de l'appelant.
+
+    - visiteur non connecté + `conversation_id` → 401 : aucune discussion
+      n'est conservée côté serveur pour les anonymes ;
+    - discussion d'un autre utilisateur ou inexistante → 404 (anti-IDOR, en
+      lecture comme en écriture).
+    """
+    if conversation_id is None:
+        return []
+    if current_user_id is None:
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail=CONNEXION_REQUISE_DISCUSSION,
+        )
+    conv = await chat_history_service.get_conversation_with_messages(
+        db=db, conversation_id=conversation_id, user_id=current_user_id
+    )
+    if conv is None:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND, detail="Discussion non trouvée."
+        )
+    sorted_msgs = sorted(conv.messages or [], key=lambda m: m.created_at)
+    return [{"role": m.role, "content": m.content} for m in sorted_msgs[-10:]]
+
+
+async def _ouvrir_discussion(
+    db: AsyncSession,
+    current_user_id: uuid.UUID | None,
+    conversation_id: uuid.UUID | None,
+    question: str,
+) -> uuid.UUID | None:
+    """Discussion où enregistrer l'échange : None pour un visiteur anonyme."""
+    if current_user_id is None:
+        return None
+    if conversation_id is not None:
+        return conversation_id  # propriété déjà vérifiée
+    titre = question[:30] + "..." if len(question) > 30 else question
+    conv = await chat_history_service.create_conversation(
+        db=db, user_id=current_user_id, title=titre
+    )
+    return conv.id
+
+
+async def _enregistrer_echange(
+    db: AsyncSession,
+    conversation_id: uuid.UUID | None,
+    question: str,
+    image: PreparedImage | None,
+    reponse: str,
+) -> None:
+    """Enregistre la question (photo en référence `media:`) puis la réponse.
+
+    Une erreur n'interrompt pas la réponse déjà servie, mais reste visible
+    dans les logs.
+    """
+    if conversation_id is None:
+        return
+    try:
+        await chat_history_service.add_message_to_conversation(
+            db=db,
+            conversation_id=conversation_id,
+            role="user",
+            content=question,
+            # Référence courte `media:<nom>` : jamais le Base64 en base.
+            image_url=media_service.store(image),
+        )
+        await chat_history_service.add_message_to_conversation(
+            db=db, conversation_id=conversation_id, role="assistant", content=reponse
+        )
+    except Exception:
+        logger.exception(
+            "Échec d'enregistrement de l'historique (conversation %s).",
+            conversation_id,
+        )
+
+
 @router.post("/chat", response_model=ChatResponse)
 async def chat_endpoint(
     payload: ExtendedChatRequest,
@@ -131,36 +214,31 @@ async def chat_endpoint(
     current_user_id: uuid.UUID | None = Depends(get_optional_user_id),
     db: AsyncSession = Depends(get_db),
 ) -> ChatResponse:
-    """Pose une question technique à l'assistant RAG (avec photo optionnelle)."""
-    user_id = current_user_id or ANONYMOUS_USER_ID
+    """Pose une question technique à l'assistant RAG (avec photo optionnelle).
+
+    Connecté : la discussion est créée ou enrichie côté serveur. Non connecté :
+    rien n'est enregistré (`conversation_id` à null), l'historique reste chez
+    le client.
+    """
     client_ip = get_client_ip(request)
 
-    # 0. Photo validée avant tout décompte (ImageInvalideError → 422)
+    # 0. Contrôles gratuits avant tout décompte : photo (422), discussion (401/404)
     image = media_service.prepare_chat_image(payload.image_url)
+    history_messages = await _historique_de_la_discussion(
+        db, current_user_id, payload.conversation_id
+    )
 
     # 1. Vérification et décrémentation des quotas
     allowed = await quota_service.consume_quota(
         db=db, user_id=current_user_id, client_ip=client_ip
     )
     if not allowed:
-        epuise_detail = QuotaEpuiseResponse().model_dump()
         raise HTTPException(
             status_code=status.HTTP_402_PAYMENT_REQUIRED,
-            detail=epuise_detail,
+            detail=QuotaEpuiseResponse().model_dump(),
         )
 
-    # 2. Récupérer l'historique si la discussion existe (et appartient à l'artisan)
-    history_messages = []
-    if payload.conversation_id:
-        conv = await chat_history_service.get_conversation_with_messages(
-            db=db, conversation_id=payload.conversation_id, user_id=user_id
-        )
-        if conv and conv.messages:
-            sorted_msgs = sorted(conv.messages, key=lambda m: m.created_at)
-            for m in sorted_msgs[-10:]:
-                history_messages.append({"role": m.role, "content": m.content})
-
-    # 3. Génération RAG / Vision via Mistral avec historique
+    # 2. Génération RAG / Vision via Mistral avec historique
     rag_result = await rag_service.generate_response(
         question=payload.question,
         metier_id=payload.metier_id,
@@ -168,64 +246,25 @@ async def chat_endpoint(
         history=history_messages,
     )
 
-    # 4. Enregistrement de l'historique (avec fallback gracieux en cas d'erreur DB/autonome)
-    active_conv_id = payload.conversation_id
+    # 3. Enregistrement (utilisateurs connectés uniquement)
     try:
-        if not active_conv_id:
-            title_preview = (
-                payload.question[:30] + "..."
-                if len(payload.question) > 30
-                else payload.question
-            )
-            new_conv = await chat_history_service.create_conversation(
-                db=db, user_id=user_id, title=title_preview
-            )
-            active_conv_id = new_conv.id
-        else:
-            conv = await chat_history_service.get_conversation_with_messages(
-                db=db, conversation_id=active_conv_id, user_id=user_id
-            )
-            if not conv:
-                raise HTTPException(
-                    status_code=status.HTTP_404_NOT_FOUND,
-                    detail="Discussion non trouvée.",
-                )
-
-        # Enregistrer le message de l'artisan
-        await chat_history_service.add_message_to_conversation(
-            db=db,
-            conversation_id=active_conv_id,
-            role="user",
-            content=payload.question,
-            # Référence courte `media:<nom>` : jamais le Base64 en base.
-            image_url=media_service.store(image),
+        conversation_id = await _ouvrir_discussion(
+            db, current_user_id, payload.conversation_id, payload.question
         )
-
-        # Enregistrer la réponse de l'assistant
-        await chat_history_service.add_message_to_conversation(
-            db=db,
-            conversation_id=active_conv_id,
-            role="assistant",
-            content=rag_result["reponse"],
-        )
-    except HTTPException:
-        raise
     except Exception:
-        # La réponse reste servie (question déjà décomptée), mais la perte
-        # d'historique doit être visible dans les logs.
-        logger.exception(
-            "Échec d'enregistrement de l'historique (conversation %s).",
-            active_conv_id,
-        )
+        logger.exception("Création de la discussion impossible.")
+        conversation_id = None
+    await _enregistrer_echange(
+        db, conversation_id, payload.question, image, rag_result["reponse"]
+    )
 
     quota_info = await quota_service.get_user_quota_info(
         db=db, user_id=current_user_id, client_ip=client_ip
     )
-
     return ChatResponse(
         reponse=rag_result["reponse"],
         quota_info=quota_info,
-        conversation_id=active_conv_id,
+        conversation_id=conversation_id,
         sources=rag_result["sources"],
     )
 
@@ -237,11 +276,16 @@ async def chat_stream_endpoint(
     current_user_id: uuid.UUID | None = Depends(get_optional_user_id),
     db: AsyncSession = Depends(get_db),
 ) -> StreamingResponse:
-    """Pose une question technique et retourne la réponse en streaming SSE."""
-    user_id = current_user_id or ANONYMOUS_USER_ID
+    """Pose une question technique et retourne la réponse en streaming SSE.
 
-    # 0. Photo validée avant tout décompte (ImageInvalideError → 422)
+    Mêmes règles que `/api/chat` : discussion vérifiée (401/404) avant tout
+    décompte, rien n'est enregistré pour un visiteur anonyme.
+    """
+    # 0. Contrôles gratuits avant tout décompte : photo (422), discussion (401/404)
     image = media_service.prepare_chat_image(payload.image_url)
+    history_messages = await _historique_de_la_discussion(
+        db, current_user_id, payload.conversation_id
+    )
 
     # 1. Vérification et décrémentation des quotas
     allowed = await quota_service.consume_quota(
@@ -253,31 +297,12 @@ async def chat_stream_endpoint(
             detail="Quota insuffisant.",
         )
 
-    # 2. Récupérer l'historique si la discussion existe (et appartient à l'artisan)
-    history_messages = []
-    if payload.conversation_id:
-        conv = await chat_history_service.get_conversation_with_messages(
-            db=db, conversation_id=payload.conversation_id, user_id=user_id
-        )
-        if conv and conv.messages:
-            sorted_msgs = sorted(conv.messages, key=lambda m: m.created_at)
-            for m in sorted_msgs[-10:]:
-                history_messages.append({"role": m.role, "content": m.content})
+    # 2. Discussion où enregistrer l'échange (None pour un anonyme)
+    conversation_id = await _ouvrir_discussion(
+        db, current_user_id, payload.conversation_id, payload.question
+    )
 
-    # 3. Résoudre/Créer la conversation
-    active_conv_id = payload.conversation_id
-    if not active_conv_id:
-        title_preview = (
-            payload.question[:30] + "..."
-            if len(payload.question) > 30
-            else payload.question
-        )
-        new_conv = await chat_history_service.create_conversation(
-            db=db, user_id=user_id, title=title_preview
-        )
-        active_conv_id = new_conv.id
-
-    # 4. Récupérer les sources et le générateur du RAG
+    # 3. Sources et générateur du RAG
     sources, stream_generator = await rag_service.generate_response_stream(
         question=payload.question,
         metier_id=payload.metier_id,
@@ -286,15 +311,13 @@ async def chat_stream_endpoint(
     )
 
     async def event_generator():
-        # Yield conversation_id and sources first
         info_data = {
-            "conversation_id": str(active_conv_id),
+            "conversation_id": str(conversation_id) if conversation_id else None,
             "sources": sources,
         }
         yield f"event: info\ndata: {json.dumps(info_data)}\n\n"
 
         full_response = ""
-        # Récupérer le flux RAG
         try:
             async for chunk in stream_generator:
                 full_response += chunk
@@ -308,29 +331,9 @@ async def chat_stream_endpoint(
             yield "event: end\ndata: [DONE]\n\n"
             return
 
-        # Enregistrer dans l'historique une fois terminé
-        try:
-            # Enregistrer le message de l'artisan
-            await chat_history_service.add_message_to_conversation(
-                db=db,
-                conversation_id=active_conv_id,
-                role="user",
-                content=payload.question,
-                image_url=media_service.store(image),
-            )
-            # Enregistrer la réponse de l'assistant
-            await chat_history_service.add_message_to_conversation(
-                db=db,
-                conversation_id=active_conv_id,
-                role="assistant",
-                content=full_response,
-            )
-        except Exception:
-            logger.exception(
-                "Échec d'enregistrement de l'historique (conversation %s).",
-                active_conv_id,
-            )
-
+        await _enregistrer_echange(
+            db, conversation_id, payload.question, image, full_response
+        )
         yield "event: end\ndata: [DONE]\n\n"
 
     return StreamingResponse(event_generator(), media_type="text/event-stream")
@@ -486,22 +489,15 @@ async def chat_websocket_endpoint(
                 )
                 continue
 
-            history: list[dict[str, str]] = []
-            if conversation_id is not None:
-                conv = await chat_history_service.get_conversation_with_messages(
-                    db=db,
-                    conversation_id=conversation_id,
-                    user_id=user_id or ANONYMOUS_USER_ID,
+            # Discussion : réservée aux utilisateurs connectés, et à son
+            # propriétaire (mêmes règles que les routes HTTP).
+            try:
+                history = await _historique_de_la_discussion(
+                    db, user_id, conversation_id
                 )
-                if conv is None:
-                    await _ws_send(
-                        websocket, type="error", message="Discussion non trouvée."
-                    )
-                    continue
-                sorted_msgs = sorted(conv.messages or [], key=lambda m: m.created_at)
-                history = [
-                    {"role": m.role, "content": m.content} for m in sorted_msgs[-10:]
-                ]
+            except HTTPException as exc:
+                await _ws_send(websocket, type="error", message=str(exc.detail))
+                continue
 
             # 2. Débit puis quota (le middleware HTTP ne voit pas les WebSockets).
             if await is_rate_limited(client_ip):
@@ -630,12 +626,15 @@ async def submit_feedback(
             detail="Le rating doit être égal à 1 (positif) ou -1 (négatif).",
         )
 
-    # Anti-IDOR : on ne note qu'une discussion qui appartient à l'appelant.
+    # Anti-IDOR : on ne note qu'une discussion qui appartient à l'appelant ;
+    # un visiteur anonyme n'a aucune discussion enregistrée côté serveur.
     if payload.conversation_id is not None:
-        conv = await chat_history_service.get_conversation_with_messages(
-            db=db,
-            conversation_id=payload.conversation_id,
-            user_id=user_id or ANONYMOUS_USER_ID,
+        conv = (
+            await chat_history_service.get_conversation_with_messages(
+                db=db, conversation_id=payload.conversation_id, user_id=user_id
+            )
+            if user_id is not None
+            else None
         )
         if conv is None:
             raise HTTPException(

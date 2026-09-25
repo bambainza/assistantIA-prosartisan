@@ -32,6 +32,18 @@ services:
       - CORS_ALLOWED_ORIGINS=${CORS_ALLOWED_ORIGINS:-https://${DOMAIN_NAME:-prosartisan.ci}}
       # Caddy est l'unique proxy devant l'API (IP client dans X-Forwarded-For)
       - TRUSTED_PROXY_HOPS=1
+      # Paiements : simulateur tant que les accès officiels ne sont pas reçus
+      # (paiements en 503 en production sauf PAYMENT_DEMO_IN_PRODUCTION=true).
+      - PAYMENT_MODE=${PAYMENT_MODE:-demo}
+      - PAYMENT_DEMO_IN_PRODUCTION=${PAYMENT_DEMO_IN_PRODUCTION:-false}
+      - PUBLIC_BASE_URL=${PUBLIC_BASE_URL:-https://${DOMAIN_NAME:-prosartisan.ci}}
+      - WAVE_API_KEY=${WAVE_API_KEY:-}
+      - WAVE_WEBHOOK_SECRET=${WAVE_WEBHOOK_SECRET:-}
+      - ORANGE_CLIENT_ID=${ORANGE_CLIENT_ID:-}
+      - ORANGE_CLIENT_SECRET=${ORANGE_CLIENT_SECRET:-}
+      - ORANGE_MERCHANT_KEY=${ORANGE_MERCHANT_KEY:-}
+      - ORANGE_WEBPAY_PATH=${ORANGE_WEBPAY_PATH:-/orange-money-webpay/ci/v1}
+      - ORANGE_CURRENCY=${ORANGE_CURRENCY:-XOF}
       - DB_REQUIRE_POSTGRES=true
       - DB_HOST=db
       - DB_PORT=5432
