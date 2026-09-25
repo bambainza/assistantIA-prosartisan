@@ -179,13 +179,15 @@ async def test_rag_search_context_excludes_inactive_document(monkeypatch):
         ),
     ]
 
-    async def mock_qdrant_search(*args, **kwargs):
-        return mock_hits
+    async def mock_qdrant_query_points(*args, **kwargs):
+        return MagicMock(points=mock_hits)
 
     async def mock_inactive_docs(*args, **kwargs):
         return {"guide_desactive.md"}
 
-    monkeypatch.setattr(rag_service.qdrant_client, "search", mock_qdrant_search)
+    monkeypatch.setattr(
+        rag_service.qdrant_client, "query_points", mock_qdrant_query_points
+    )
     monkeypatch.setattr(rag_service, "get_inactive_document_names", mock_inactive_docs)
     monkeypatch.setattr(
         rag_service, "get_embedding", AsyncMock(return_value=[0.1] * 1536)

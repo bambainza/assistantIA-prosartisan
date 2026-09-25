@@ -207,11 +207,21 @@ class CacheService:
         key = f"prosartisan:emb:{self._hash_text(text)}"
         await self.set(key, json.dumps(embedding), ttl_seconds=ttl_seconds)
 
+    @classmethod
+    def _rag_key(cls, question: str, metier_id: int | None, version: str) -> str:
+        # `version` change à chaque (dés)activation de métier/document
+        # (voir RAGService.invalidate_activation_cache) : les anciennes
+        # réponses deviennent inaccessibles sans parcourir les clés.
+        return (
+            f"prosartisan:rag:v{version}:{metier_id or 'all'}:"
+            f"{cls._hash_text(question)}"
+        )
+
     async def get_cached_rag_response(
-        self, question: str, metier_id: int | None = None
+        self, question: str, metier_id: int | None = None, version: str = "0"
     ) -> dict[str, Any] | None:
         """Récupère une réponse RAG précédemment générée pour une question identique."""
-        key = f"prosartisan:rag:{metier_id or 'all'}:{self._hash_text(question)}"
+        key = self._rag_key(question, metier_id, version)
         cached = await self.get(key)
         if cached:
             try:
@@ -226,9 +236,10 @@ class CacheService:
         metier_id: int | None,
         response: dict[str, Any],
         ttl_seconds: int = 86400,
+        version: str = "0",
     ) -> None:
         """Met en cache une réponse RAG (TTL par défaut 24h)."""
-        key = f"prosartisan:rag:{metier_id or 'all'}:{self._hash_text(question)}"
+        key = self._rag_key(question, metier_id, version)
         await self.set(key, json.dumps(response), ttl_seconds=ttl_seconds)
 
 

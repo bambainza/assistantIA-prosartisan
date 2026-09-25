@@ -45,6 +45,9 @@ services:
       - QDRANT_PORT=6333
       - MISTRAL_API_KEY=${MISTRAL_API_KEY}
       - GOOGLE_CLIENT_ID=${GOOGLE_CLIENT_ID}
+    volumes:
+      # Photos de chantier et PDF téléversés : sans volume, perdus à chaque redéploiement.
+      - prod_uploads:/app/uploads
     depends_on:
       db:
         condition: service_healthy
@@ -101,3 +104,4 @@ volumes:
   prod_postgres_data:
   prod_redis_data:
   prod_qdrant_data:
+  prod_uploads:

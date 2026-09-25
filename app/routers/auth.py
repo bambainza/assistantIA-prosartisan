@@ -42,7 +42,7 @@ from app.services.cache_service import cache_service
 from app.services.totp_service import totp_service
 
 # Compteur "glissant" (30 jours) des tentatives de connexion échouées, exposé
-# au dashboard sécurité admin (voir app.routers.admin.get_security_stats).
+# au dashboard sécurité admin (voir app.routers.admin.securite.get_security_stats).
 _SECURITY_COUNTER_TTL_SECONDS = 30 * 86400
 _LOGIN_FAILED_COUNTER_KEY = "prosartisan:security:login_failed_total"
 

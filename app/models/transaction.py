@@ -17,7 +17,7 @@ if TYPE_CHECKING:
 
 
 class TransactionMobileMoney(Base):
-    """Enregistrement d'un paiement Mobile Money (Wave, Orange, MTN, Moov)."""
+    """Enregistrement d'un paiement Mobile Money (Wave, Orange Money)."""
 
     __tablename__ = "transactions_mobile_money"
 

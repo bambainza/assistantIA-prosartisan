@@ -33,6 +33,7 @@ from app.schemas.parametres import (
 )
 from app.services.audit_service import audit_service
 from app.services.parametres_service import parametres_service
+from app.services.rag_service import rag_service
 
 router = APIRouter(prefix="/api/admin/parametres", tags=["Paramètres (Back-office)"])
 
@@ -148,6 +149,7 @@ async def toggle_metier(
         request=request,
     )
     await db.commit()
+    await rag_service.invalidate_activation_cache()
     await db.refresh(metier)
     return metier
 

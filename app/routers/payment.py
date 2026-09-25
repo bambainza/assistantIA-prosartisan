@@ -1,7 +1,7 @@
 """
 Router Payment : Initialisation Mobile Money et Webhooks HMAC.
 
-Supporte Wave Business, Orange Money, MTN et Moov.
+Supporte Wave Business et Orange Money (MTN / Moov non intégrés).
 """
 
 from __future__ import annotations
@@ -21,7 +21,7 @@ from app.services.payment_service import TARIFS_PASS, payment_service
 router = APIRouter(prefix="/api/payment", tags=["Paiement Mobile Money"])
 
 # Compteur "glissant" (30 jours) des webhooks rejetés pour signature invalide,
-# exposé au dashboard sécurité admin (voir app.routers.admin.get_security_stats).
+# exposé au dashboard sécurité admin (voir app.routers.admin.securite.get_security_stats).
 _WEBHOOK_REJECTED_COUNTER_KEY = "prosartisan:security:webhook_rejected_total"
 _SECURITY_COUNTER_TTL_SECONDS = 30 * 86400
 

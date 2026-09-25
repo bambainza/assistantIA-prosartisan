@@ -147,7 +147,7 @@ class ActualiteService:
 
         La notification des artisans concernés, potentiellement nombreux, est
         déclenchée séparément en tâche de fond par l'appelant (voir
-        `app.routers.admin.publish_actualite`) — jamais ici, pour ne pas
+        `app.routers.admin.communication.publish_actualite`) — jamais ici, pour ne pas
         bloquer la requête HTTP (AGENTS.md §1).
         """
         actualite = await self.get(db, actualite_id)

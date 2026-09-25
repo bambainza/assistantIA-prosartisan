@@ -34,6 +34,10 @@ ENV PYTHONDONTWRITEBYTECODE=1
 COPY --chown=appuser:appgroup . .
 RUN chmod +x docker-entrypoint.sh
 
+# Dossier des fichiers téléversés (photos de chantier, PDF admin) : doit
+# appartenir à appuser pour qu'un volume monté ici reste inscriptible.
+RUN mkdir -p /app/uploads && chown appuser:appgroup /app/uploads
+
 USER appuser
 
 EXPOSE 8000

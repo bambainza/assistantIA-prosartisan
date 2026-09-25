@@ -87,3 +87,5 @@ ingestion/documents/*.pdf
 *.sw?
 .DS_Store
 Thumbs.db
+# Scripts de travail locaux (jamais versionnés)
+scratch/

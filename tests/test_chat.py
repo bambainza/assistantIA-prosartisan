@@ -57,3 +57,27 @@ async def test_chat_stream_endpoint_success():
     assert "event: info" in body
     assert "event: chunk" in body
     assert "event: end" in body
+
+
+@pytest.mark.asyncio
+async def test_stream_sse_erreur_fournisseur_renvoie_un_message(monkeypatch):
+    """Une erreur du fournisseur IA en cours de flux produit un message lisible et [DONE]."""
+    from app.services.rag_service import rag_service
+
+    async def _gen_en_echec():
+        yield "Début "
+        raise RuntimeError("Status 429 Rate limit exceeded")
+
+    async def _stream(**kwargs):
+        return [], _gen_en_echec()
+
+    monkeypatch.setattr(rag_service, "generate_response_stream", _stream)
+
+    transport = ASGITransport(app=app)
+    async with AsyncClient(transport=transport, base_url="http://test") as client:
+        response = await client.post("/api/chat/stream", json={"question": "Béton ?"})
+
+    assert response.status_code == 200
+    assert "event: error" in response.text
+    assert "indisponible" in response.text
+    assert response.text.rstrip().endswith("[DONE]")

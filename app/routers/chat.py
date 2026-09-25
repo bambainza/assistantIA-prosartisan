@@ -1,5 +1,5 @@
 """
-Router Chat : Assistant IA Multimodal (Texte, Photo GPT-4o Vision, WebSocket).
+Router Chat : Assistant IA Multimodal (Texte, Photo via la vision Mistral, Voix Voxtral, WebSocket).
 
 Intercepte les requêtes avec le Rate Limiter & Gestionnaire de Quota (HTTP 402 si épuisé).
 """
@@ -10,6 +10,7 @@ import base64
 import json
 import logging
 import uuid
+from typing import Any
 
 from fastapi import (
     APIRouter,
@@ -48,6 +49,7 @@ from app.services.audio_service import audio_service
 from app.services.cache_service import cache_service
 from app.services.calculator_service import calculator_service
 from app.services.chat_history_service import chat_history_service
+from app.services.media_service import media_service
 from app.services.quota_service import QuotaIndisponibleError, quota_service
 from app.services.rag_service import rag_service
 
@@ -65,6 +67,12 @@ MAX_QUESTION_CHARS = 4000
 MAX_IMAGE_URL_CHARS = 10_000_000  # ~7 Mo d'image encodée en Base64
 MAX_AUDIO_BYTES = 10 * 1024 * 1024
 MAX_TTS_CHARS = 2000
+
+# Message affiché quand le fournisseur IA échoue en cours de réponse (quota
+# Mistral dépassé, coupure réseau...) : la connexion reste ouverte et exploitable.
+ASSISTANT_INDISPONIBLE_MESSAGE = (
+    "⚠️ L'assistant est momentanément indisponible. Réessayez dans un instant."
+)
 
 
 class TranscribeResponse(BaseModel):
@@ -127,6 +135,9 @@ async def chat_endpoint(
     user_id = current_user_id or ANONYMOUS_USER_ID
     client_ip = get_client_ip(request)
 
+    # 0. Photo validée avant tout décompte (ImageInvalideError → 422)
+    image = media_service.prepare_chat_image(payload.image_url)
+
     # 1. Vérification et décrémentation des quotas
     allowed = await quota_service.consume_quota(
         db=db, user_id=current_user_id, client_ip=client_ip
@@ -186,7 +197,8 @@ async def chat_endpoint(
             conversation_id=active_conv_id,
             role="user",
             content=payload.question,
-            image_url=payload.image_url,
+            # Référence courte `media:<nom>` : jamais le Base64 en base.
+            image_url=media_service.store(image),
         )
 
         # Enregistrer la réponse de l'assistant
@@ -227,6 +239,9 @@ async def chat_stream_endpoint(
 ) -> StreamingResponse:
     """Pose une question technique et retourne la réponse en streaming SSE."""
     user_id = current_user_id or ANONYMOUS_USER_ID
+
+    # 0. Photo validée avant tout décompte (ImageInvalideError → 422)
+    image = media_service.prepare_chat_image(payload.image_url)
 
     # 1. Vérification et décrémentation des quotas
     allowed = await quota_service.consume_quota(
@@ -280,9 +295,18 @@ async def chat_stream_endpoint(
 
         full_response = ""
         # Récupérer le flux RAG
-        async for chunk in stream_generator:
-            full_response += chunk
-            yield f"event: chunk\ndata: {json.dumps(chunk)}\n\n"
+        try:
+            async for chunk in stream_generator:
+                full_response += chunk
+                yield f"event: chunk\ndata: {json.dumps(chunk)}\n\n"
+        except Exception:
+            # Sans ce garde-fou, une erreur du fournisseur IA coupe le flux HTTP
+            # sans explication. Le message est envoyé comme un fragment texte
+            # (compatible chat_web et Flutter) et rien n'est enregistré.
+            logger.exception("Échec de génération en streaming SSE.")
+            yield f"event: error\ndata: {json.dumps(ASSISTANT_INDISPONIBLE_MESSAGE)}\n\n"
+            yield "event: end\ndata: [DONE]\n\n"
+            return
 
         # Enregistrer dans l'historique une fois terminé
         try:
@@ -292,7 +316,7 @@ async def chat_stream_endpoint(
                 conversation_id=active_conv_id,
                 role="user",
                 content=payload.question,
-                image_url=payload.image_url,
+                image_url=media_service.store(image),
             )
             # Enregistrer la réponse de l'assistant
             await chat_history_service.add_message_to_conversation(
@@ -312,6 +336,74 @@ async def chat_stream_endpoint(
     return StreamingResponse(event_generator(), media_type="text/event-stream")
 
 
+# Formats audio transmis à Voxtral (extension du fichier), déduits de `format`
+# ("wav") ou d'un type MIME `audio_format` ("audio/webm;codecs=opus").
+_AUDIO_EXTENSIONS = {"wav", "mp3", "webm", "ogg", "m4a", "aac", "flac"}
+_AUDIO_ALIASES = {
+    "mpeg": "mp3",
+    "x-wav": "wav",
+    "wave": "wav",
+    "mp4": "m4a",
+    "x-m4a": "m4a",
+}
+_MAX_AUDIO_B64_CHARS = MAX_AUDIO_BYTES * 4 // 3 + 4
+_SERVICE_INDISPONIBLE = "Service momentanément indisponible. Réessayez dans un instant."
+
+
+def _audio_extension(raw: str | None) -> str:
+    value = (raw or "wav").lower().split(";")[0].strip().split("/")[-1]
+    ext = _AUDIO_ALIASES.get(value, value)
+    return ext if ext in _AUDIO_EXTENSIONS else "wav"
+
+
+class _WsTurn(BaseModel):
+    """Une question reçue sur le WebSocket (texte ou note vocale), après analyse."""
+
+    question: str = ""
+    audio_b64: str | None = None
+    audio_ext: str = "wav"
+    metier_id: int | None = None
+    conversation_id: uuid.UUID | None = None
+    voice_output: bool = False
+
+
+def _parse_ws_turn(parsed: dict[str, Any]) -> _WsTurn:
+    """Normalise un message JSON métier (texte, `type: voice` ou `action: audio_chunk`)."""
+    raw_conv = parsed.get("conversation_id")
+    try:
+        conversation_id = uuid.UUID(str(raw_conv)) if raw_conv else None
+    except ValueError:
+        conversation_id = None
+    metier_id = parsed.get("metier_id")
+    metier_id = metier_id if isinstance(metier_id, int) else None
+
+    is_voice = parsed.get("type") in ("voice", "audio") or parsed.get("action") in (
+        "audio_chunk",
+        "voice",
+    )
+    if is_voice:
+        return _WsTurn(
+            audio_b64=parsed.get("audio") or parsed.get("data") or "",
+            audio_ext=_audio_extension(
+                parsed.get("format") or parsed.get("audio_format")
+            ),
+            metier_id=metier_id,
+            conversation_id=conversation_id,
+            voice_output=True,
+        )
+    question = parsed.get("content") or parsed.get("text") or parsed.get("question")
+    return _WsTurn(
+        question=str(question or ""),
+        metier_id=metier_id,
+        conversation_id=conversation_id,
+        voice_output=bool(parsed.get("voice_output", False)),
+    )
+
+
+async def _ws_send(websocket: WebSocket, **fields: Any) -> None:
+    await websocket.send_text(WebSocketMessage(**fields).model_dump_json())
+
+
 @router.websocket("/chat/ws")
 async def chat_websocket_endpoint(
     websocket: WebSocket,
@@ -319,178 +411,203 @@ async def chat_websocket_endpoint(
 ) -> None:
     """Connexion WebSocket bidirectionnelle temps réel pour mode texte et vocal mains-libres.
 
-    Supporte :
-    - Messages texte simples ou JSON (`{"type": "text", "content": "...", "metier_id": 1}`)
-    - Notes vocales et flux audio (`{"type": "voice", "audio": "<base64>", "format": "wav"}`)
-    - Streaming de réponse assistant (`type="stream"`, `type="stream_end"`)
-    - Synthèse vocale automatique (`type="audio_response"`) pour usage mains-libres
-    - Ping/Pong (`type="ping"` -> `type="pong"`)
+    Messages acceptés :
+    - `{"action": "auth", "token": "...", "conversation_id": "..."}` (optionnel,
+      en premier) : authentifie la session et rattache les échanges suivants à
+      une discussion existante de l'utilisateur (historique chargé et enrichi).
+    - Texte brut, ou JSON `{"type": "text", "content": "...", "metier_id": 1}`.
+    - Note vocale `{"type": "voice", "audio": "<base64>", "format": "wav"}` ou
+      `{"action": "audio_chunk", "audio": "<base64>", "audio_format": "audio/webm"}`.
+    - `{"type": "ping"}` → `pong`.
+
+    Réponses : `user_transcription`, puis des `stream` (fragments réels du
+    LLM), `stream_end` (réponse complète + sources), et pour la voix
+    `audio_response` + `voice_turn_completed`. Taille, débit et quota sont
+    vérifiés **avant** toute transcription (appel Voxtral facturé).
     """
-    # Utilisateur authentifié via le message `{"action": "auth"}` ; None =
-    # anonyme, dont le quota est compté par IP cliente.
+    # Utilisateur authentifié via `{"action": "auth"}` ; None = anonyme, dont le
+    # quota est compté par IP cliente.
     user_id: uuid.UUID | None = None
+    session_conversation_id: uuid.UUID | None = None
     client_ip = get_client_ip(websocket)
     await websocket.accept()
     try:
         while True:
             raw_data = await websocket.receive_text()
 
-            question_text = ""
-            metier_id = None
-            is_voice_request = False
-
             try:
-                parsed = json.loads(raw_data)
-                if isinstance(parsed, dict):
-                    if parsed.get("action") == "auth":
-                        token = parsed.get("token")
-                        if token:
-                            try:
-                                user_id = get_user_id_from_token(str(token))
-                            except (HTTPException, ValueError):
-                                await websocket.close(
-                                    code=status.WS_1008_POLICY_VIOLATION
-                                )
-                                return
-                        else:
-                            user_id = None
-                        continue
-
-                    msg_type = parsed.get("type", "text")
-
-                    if msg_type == "ping":
-                        await websocket.send_text(
-                            WebSocketMessage(type="pong").model_dump_json()
-                        )
-                        continue
-
-                    if msg_type in ("voice", "audio"):
-                        is_voice_request = True
-                        audio_b64 = parsed.get("audio") or parsed.get("data")
-                        audio_format = parsed.get("format", "wav")
-                        metier_id = parsed.get("metier_id")
-
-                        if not audio_b64:
-                            err_msg = WebSocketMessage(
-                                type="error", message="Données audio manquantes."
-                            )
-                            await websocket.send_text(err_msg.model_dump_json())
-                            continue
-
-                        # Borne vérifiée avant décodage : ~4/3 octets Base64 par octet.
-                        if len(audio_b64) > MAX_AUDIO_BYTES * 4 // 3 + 4:
-                            err_msg = WebSocketMessage(
-                                type="error",
-                                message="Note vocale trop volumineuse (10 Mo maximum).",
-                            )
-                            await websocket.send_text(err_msg.model_dump_json())
-                            continue
-
-                        try:
-                            audio_bytes = base64.b64decode(audio_b64)
-                            transcription = await audio_service.transcribe_audio(
-                                file_bytes=audio_bytes,
-                                filename=f"voice.{audio_format}",
-                            )
-                            question_text = transcription.strip()
-                            await websocket.send_text(
-                                WebSocketMessage(
-                                    type="user_transcription",
-                                    text=question_text,
-                                ).model_dump_json()
-                            )
-                        except Exception as e:
-                            err_msg = WebSocketMessage(
-                                type="error",
-                                message=f"Échec de transcription vocale: {e!s}",
-                            )
-                            await websocket.send_text(err_msg.model_dump_json())
-                            continue
-                    else:
-                        question_text = (
-                            parsed.get("content")
-                            or parsed.get("text")
-                            or parsed.get("question")
-                            or ""
-                        )
-                        metier_id = parsed.get("metier_id")
-                        is_voice_request = bool(parsed.get("voice_output", False))
-                else:
-                    question_text = str(parsed)
+                parsed: Any = json.loads(raw_data)
             except (json.JSONDecodeError, TypeError):
-                question_text = raw_data
+                parsed = raw_data
+            if not isinstance(parsed, dict):
+                parsed = {"content": str(parsed)}
 
-            if not question_text:
+            if parsed.get("action") == "auth":
+                token = parsed.get("token")
+                if token:
+                    try:
+                        user_id = get_user_id_from_token(str(token))
+                    except (HTTPException, ValueError):
+                        await websocket.close(code=status.WS_1008_POLICY_VIOLATION)
+                        return
+                else:
+                    user_id = None
+                session_conversation_id = _parse_ws_turn(parsed).conversation_id
                 continue
 
-            # Le middleware de rate limiting ne voit pas les WebSockets : on
-            # applique la même limite par IP à chaque question.
-            if await is_rate_limited(client_ip):
-                await websocket.send_text(
-                    WebSocketMessage(
-                        type="error", message=RATE_LIMIT_MESSAGE
-                    ).model_dump_json()
+            if parsed.get("type") == "ping":
+                await _ws_send(websocket, type="pong")
+                continue
+
+            turn = _parse_ws_turn(parsed)
+            conversation_id = turn.conversation_id or session_conversation_id
+
+            # 1. Contrôles gratuits d'abord : contenu, taille, propriété.
+            if turn.audio_b64 is not None:
+                if not turn.audio_b64:
+                    await _ws_send(
+                        websocket, type="error", message="Données audio manquantes."
+                    )
+                    continue
+                if len(turn.audio_b64) > _MAX_AUDIO_B64_CHARS:
+                    await _ws_send(
+                        websocket,
+                        type="error",
+                        message="Note vocale trop volumineuse (10 Mo maximum).",
+                    )
+                    continue
+            elif not turn.question.strip():
+                continue
+            elif len(turn.question) > MAX_QUESTION_CHARS:
+                await _ws_send(
+                    websocket,
+                    type="error",
+                    message=f"Question trop longue ({MAX_QUESTION_CHARS} caractères maximum).",
                 )
                 continue
 
+            history: list[dict[str, str]] = []
+            if conversation_id is not None:
+                conv = await chat_history_service.get_conversation_with_messages(
+                    db=db,
+                    conversation_id=conversation_id,
+                    user_id=user_id or ANONYMOUS_USER_ID,
+                )
+                if conv is None:
+                    await _ws_send(
+                        websocket, type="error", message="Discussion non trouvée."
+                    )
+                    continue
+                sorted_msgs = sorted(conv.messages or [], key=lambda m: m.created_at)
+                history = [
+                    {"role": m.role, "content": m.content} for m in sorted_msgs[-10:]
+                ]
+
+            # 2. Débit puis quota (le middleware HTTP ne voit pas les WebSockets).
+            if await is_rate_limited(client_ip):
+                await _ws_send(websocket, type="error", message=RATE_LIMIT_MESSAGE)
+                continue
             try:
                 allowed = await quota_service.consume_quota(
                     db=db, user_id=user_id, client_ip=client_ip
                 )
             except QuotaIndisponibleError:
-                await websocket.send_text(
-                    WebSocketMessage(
-                        type="error",
-                        message="Service momentanément indisponible. Réessayez dans un instant.",
-                    ).model_dump_json()
-                )
+                await _ws_send(websocket, type="error", message=_SERVICE_INDISPONIBLE)
                 continue
             if not allowed:
-                epuise_msg = WebSocketMessage(
+                await _ws_send(
+                    websocket,
                     type="payment_required",
                     message=QuotaEpuiseResponse().message,
                 )
-                await websocket.send_text(epuise_msg.model_dump_json())
                 continue
 
-            rag_res = await rag_service.generate_response(
-                question=question_text, metier_id=metier_id
-            )
-            answer_text = rag_res.get("reponse", "")
+            # 3. Transcription (seulement une fois les droits vérifiés).
+            question_text = turn.question.strip()
+            if turn.audio_b64 is not None:
+                try:
+                    transcription = await audio_service.transcribe_audio(
+                        file_bytes=base64.b64decode(turn.audio_b64),
+                        filename=f"voice.{turn.audio_ext}",
+                    )
+                except Exception as exc:
+                    await _ws_send(
+                        websocket,
+                        type="error",
+                        message=f"Échec de transcription vocale: {exc!s}",
+                    )
+                    continue
+                question_text = transcription.strip()
+                if not question_text:
+                    await _ws_send(
+                        websocket,
+                        type="error",
+                        message="Aucune parole détectée dans la note vocale.",
+                    )
+                    continue
+                await _ws_send(websocket, type="user_transcription", text=question_text)
 
-            res_chunk = WebSocketMessage(
-                type="stream",
-                chunk="Voici les instructions pour votre chantier : ",
+            # 4. Réponse réellement streamée depuis le LLM.
+            parts: list[str] = []
+            try:
+                sources, stream_generator = await rag_service.generate_response_stream(
+                    question=question_text,
+                    metier_id=turn.metier_id,
+                    history=history,
+                )
+                async for chunk in stream_generator:
+                    parts.append(chunk)
+                    await _ws_send(websocket, type="stream", chunk=chunk)
+            except WebSocketDisconnect:
+                raise
+            except Exception:
+                # Une erreur du fournisseur IA ne doit pas fermer la session.
+                logger.exception("Échec de génération en streaming WebSocket.")
+                await _ws_send(
+                    websocket, type="error", message=ASSISTANT_INDISPONIBLE_MESSAGE
+                )
+                continue
+            answer_text = "".join(parts).strip()
+            await _ws_send(
+                websocket, type="stream_end", message=answer_text, sources=sources
             )
-            await websocket.send_text(res_chunk.model_dump_json())
 
-            end_msg = WebSocketMessage(
-                type="stream_end",
-                message=answer_text,
-                sources=rag_res.get("sources"),
-            )
-            await websocket.send_text(end_msg.model_dump_json())
+            if conversation_id is not None:
+                try:
+                    await chat_history_service.add_message_to_conversation(
+                        db=db,
+                        conversation_id=conversation_id,
+                        role="user",
+                        content=question_text,
+                    )
+                    await chat_history_service.add_message_to_conversation(
+                        db=db,
+                        conversation_id=conversation_id,
+                        role="assistant",
+                        content=answer_text,
+                    )
+                except Exception:
+                    logger.exception(
+                        "Échec d'enregistrement de l'historique (conversation %s).",
+                        conversation_id,
+                    )
 
-            if is_voice_request and answer_text:
+            # 5. Lecture vocale pour le mode mains-libres.
+            if turn.voice_output and answer_text:
                 try:
                     tts_bytes = await audio_service.synthesize_speech(
                         text=answer_text[:500]
                     )
-                    audio_b64_res = base64.b64encode(tts_bytes).decode("ascii")
-                    await websocket.send_text(
-                        WebSocketMessage(
-                            type="audio_response",
-                            audio=audio_b64_res,
-                            audio_format="audio/mp3",
-                            is_final=True,
-                        ).model_dump_json()
+                    await _ws_send(
+                        websocket,
+                        type="audio_response",
+                        audio=base64.b64encode(tts_bytes).decode("ascii"),
+                        audio_format="audio/mp3",
+                        is_final=True,
                     )
                 except Exception:
-                    pass
-
-                await websocket.send_text(
-                    WebSocketMessage(type="voice_turn_completed").model_dump_json()
-                )
+                    logger.exception("Échec de la synthèse vocale WebSocket.")
+                await _ws_send(websocket, type="voice_turn_completed")
     except WebSocketDisconnect:
         pass
 

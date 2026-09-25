@@ -336,13 +336,15 @@ async def run_ingestion(
             erreurs.append(f"{filename} : aucun texte exploitable extrait.")
             continue
 
+        # Embeddings calculés par lots (un appel par lot au lieu d'un par chunk).
+        try:
+            vectors = await rag_service.get_embeddings(chunks)
+        except Exception as exc:
+            erreurs.append(f"{filename} : échec de génération d'embedding ({exc}).")
+            continue
+
         points: list[PointStruct] = []
-        for idx, chunk in enumerate(chunks):
-            try:
-                vector = await rag_service.get_embedding(chunk)
-            except Exception as exc:
-                erreurs.append(f"{filename} : échec de génération d'embedding ({exc}).")
-                break
+        for idx, (chunk, vector) in enumerate(zip(chunks, vectors, strict=True)):
             payload = {
                 "text": chunk,
                 "document_name": filename,
@@ -353,10 +355,6 @@ async def run_ingestion(
             points.append(
                 PointStruct(id=_point_id(filename, idx), vector=vector, payload=payload)
             )
-
-        if len(points) != len(chunks):
-            # Erreur survenue pendant la génération d'embeddings
-            continue
 
         # Upsert par lots vers Qdrant
         index_error = False
@@ -413,6 +411,11 @@ async def run_ingestion(
         logger.info("Document ingéré : %s (%d chunks).", filename, len(chunks))
 
     save_manifest(docs_dir, manifest)
+
+    # Un nouveau document peut répondre à une question dont le repli "pas
+    # d'information" est encore en cache : on périme les réponses en cache.
+    if processed_files:
+        await rag_service.invalidate_activation_cache()
 
     status_val = "success"
     if erreurs and processed_files == 0 and skipped_files == 0:
