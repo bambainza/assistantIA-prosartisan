@@ -28,6 +28,14 @@ class Settings(BaseSettings):
     app_secret_key: str = "changeme"
     cors_allowed_origins: str = "*"
     rate_limit_requests_per_minute: int = 60
+    # Nombre de reverse proxies de confiance devant l'API (Caddy, Render,
+    # Cloud Run...). 0 = connexion directe : l'IP TCP est utilisée telle quelle.
+    # N > 0 : l'IP client est la N-ième entrée en partant de la droite de
+    # `X-Forwarded-For` (les entrées plus à gauche sont falsifiables par le
+    # client et ne sont jamais utilisées). Sans ce réglage derrière un proxy,
+    # tous les utilisateurs partagent l'IP du proxy (rate-limit et quota
+    # anonyme communs à tout le service).
+    trusted_proxy_hops: int = 0
 
     # ── JWT ──
     jwt_secret_key: str = "changeme"

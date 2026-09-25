@@ -28,7 +28,12 @@ class QuotaUtilisateur(Base):
         unique=True,
         nullable=False,
     )
-    requetes_restantes_gratuites: Mapped[int] = mapped_column(Integer, default=5)
+    # Crédits de requêtes achetés (Pack 50, forfaits CREDITS), consommés une
+    # fois le quota gratuit du jour épuisé. Le quota gratuit journalier n'est
+    # pas stocké ici : c'est un compteur Redis par jour (voir quota_service).
+    credits_requetes: Mapped[int] = mapped_column(
+        Integer, default=0, server_default="0"
+    )
     date_fin_premium: Mapped[datetime | None] = mapped_column(default=None)
 
     # Relations

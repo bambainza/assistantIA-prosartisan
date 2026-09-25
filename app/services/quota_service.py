@@ -1,113 +1,176 @@
 """
 Service de gestion des Quotas Freemium & Premium.
 
-Supervise le nombre de questions quotidiennes gratuites (Redis / DB)
-et vérifie si un abonnement Pass 24H ou Pass Mensuel est actif.
+Trois sources de droits, vérifiées dans cet ordre :
+
+1. **Pass premium actif** (Pass 24H / Mensuel) : `date_fin_premium` en base.
+2. **Quota gratuit journalier** (`MAX_QUESTIONS_GRATUITES_PAR_JOUR`) : compteur
+   Redis atomique par jour UTC (= heure d'Abidjan, GMT sans heure d'été) et par
+   identité — l'utilisateur du JWT, ou l'IP cliente pour un visiteur non
+   connecté (un quota commun à tous les anonymes serait épuisé en 5 questions
+   pour tout le service). La clé expire seule : aucune tâche de remise à zéro.
+3. **Crédits achetés** (Pack 50, forfaits CREDITS) : `credits_requetes` en
+   base, décrémenté par un `UPDATE ... WHERE credits_requetes > 0` atomique.
+
+Redis étant la source de vérité du quota journalier (AGENTS.md — état partagé
+entre workers), son indisponibilité en production lève `QuotaIndisponibleError`
+(HTTP 503) au lieu d'accorder ou de refuser des questions à l'aveugle.
 """
 
 from __future__ import annotations
 
+import hashlib
 import logging
 import uuid
 from datetime import UTC, datetime
 from typing import Any
 
-from sqlalchemy import select
+from sqlalchemy import select, update
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.config import settings
 from app.models.quota import QuotaUtilisateur
+from app.services.cache_service import cache_service
 
 logger = logging.getLogger(__name__)
+
+# Une clé journalière vit un peu plus d'un jour pour couvrir la fin de journée.
+_DAILY_KEY_TTL_SECONDS = 2 * 86400
+
+# Valeur conventionnelle de `restantes` pour un Pass illimité (contrat API existant).
+ILLIMITE = 999999
+
+
+class QuotaIndisponibleError(RuntimeError):
+    """Le compteur partagé du quota journalier (Redis) est injoignable."""
+
+
+def identite_quota(user_id: uuid.UUID | None, client_ip: str | None) -> str:
+    """Identité de comptage : l'utilisateur connecté, sinon l'IP (hachée) du visiteur."""
+    if user_id is not None:
+        return f"user:{user_id}"
+    ip_hash = hashlib.sha256((client_ip or "unknown").encode("utf-8")).hexdigest()
+    return f"anon:{ip_hash[:32]}"
+
+
+def cle_quota_journalier(identite: str, jour: str | None = None) -> str:
+    jour = jour or datetime.now(UTC).strftime("%Y-%m-%d")
+    return f"prosartisan:quota:jour:{jour}:{identite}"
 
 
 class QuotaService:
     """Service de vérification et décrémentation des quotas artisans."""
 
+    async def _charger_quota(
+        self, db: AsyncSession, user_id: uuid.UUID
+    ) -> QuotaUtilisateur | None:
+        stmt = select(QuotaUtilisateur).where(QuotaUtilisateur.user_id == user_id)
+        res = await db.execute(stmt)
+        return res.scalar_one_or_none()
+
+    @staticmethod
+    def _fin_premium_active(quota_obj: QuotaUtilisateur | None) -> datetime | None:
+        if quota_obj is None or quota_obj.date_fin_premium is None:
+            return None
+        fin = quota_obj.date_fin_premium.replace(tzinfo=UTC)
+        return fin if fin > datetime.now(UTC) else None
+
+    async def questions_gratuites_utilisees(self, identite: str) -> int:
+        """Nombre de questions gratuites déjà consommées aujourd'hui (lecture seule)."""
+        try:
+            valeur = await cache_service.get(cle_quota_journalier(identite))
+        except RuntimeError as exc:
+            raise QuotaIndisponibleError(str(exc)) from exc
+        return int(valeur) if valeur else 0
+
+    async def reinitialiser_quota_journalier(self, user_id: uuid.UUID) -> None:
+        """Rend à l'utilisateur son quota gratuit du jour (action admin)."""
+        try:
+            await cache_service.delete(
+                cle_quota_journalier(identite_quota(user_id, None))
+            )
+        except RuntimeError as exc:
+            raise QuotaIndisponibleError(str(exc)) from exc
+
     async def get_user_quota_info(
         self,
         db: AsyncSession,
-        user_id: uuid.UUID,
+        user_id: uuid.UUID | None,
+        client_ip: str | None = None,
     ) -> dict[str, Any]:
-        """Retourne le statut de quota d'un utilisateur."""
-        try:
-            stmt = select(QuotaUtilisateur).where(QuotaUtilisateur.user_id == user_id)
-            res = await db.execute(stmt)
-            quota_obj = res.scalar_one_or_none()
+        """Retourne le statut de quota d'un utilisateur (ou d'un visiteur anonyme)."""
+        quota_obj = await self._charger_quota(db, user_id) if user_id else None
+        fin_premium = self._fin_premium_active(quota_obj)
 
-            if not quota_obj:
-                # Création automatique du quota par défaut
-                quota_obj = QuotaUtilisateur(
-                    user_id=user_id,
-                    requetes_restantes_gratuites=settings.max_questions_gratuites_par_jour,
-                )
-                db.add(quota_obj)
-                await db.commit()
-
-            now = datetime.now(UTC)
-            is_premium = (
-                quota_obj.date_fin_premium is not None
-                and quota_obj.date_fin_premium.replace(tzinfo=UTC) > now
-            )
-
+        if fin_premium is not None:
             return {
-                "statut": "premium" if is_premium else "freemium",
-                "restantes": 999999
-                if is_premium
-                else quota_obj.requetes_restantes_gratuites,
-                "date_fin_premium": quota_obj.date_fin_premium.isoformat()
-                if quota_obj.date_fin_premium
-                else None,
-                "is_allowed": is_premium or quota_obj.requetes_restantes_gratuites > 0,
-            }
-        except Exception as exc:
-            # Dégradation gracieuse : sur réseau/BDD instable on n'enferme pas
-            # l'artisan, mais l'incident doit rester visible.
-            logger.warning(
-                "Lecture du quota impossible pour %s (%s) — fallback freemium.",
-                user_id,
-                exc,
-            )
-            return {
-                "statut": "freemium",
-                "restantes": settings.max_questions_gratuites_par_jour,
-                "date_fin_premium": None,
+                "statut": "premium",
+                "restantes": ILLIMITE,
+                "gratuites_restantes_jour": settings.max_questions_gratuites_par_jour,
+                "credits": quota_obj.credits_requetes if quota_obj else 0,
+                "date_fin_premium": fin_premium.isoformat(),
                 "is_allowed": True,
             }
+
+        utilisees = await self.questions_gratuites_utilisees(
+            identite_quota(user_id, client_ip)
+        )
+        gratuites = max(0, settings.max_questions_gratuites_par_jour - utilisees)
+        credits = quota_obj.credits_requetes if quota_obj else 0
+        return {
+            "statut": "freemium",
+            "restantes": gratuites + credits,
+            "gratuites_restantes_jour": gratuites,
+            "credits": credits,
+            "date_fin_premium": None,
+            "is_allowed": gratuites + credits > 0,
+        }
+
+    async def _consommer_credit(self, db: AsyncSession, user_id: uuid.UUID) -> bool:
+        """Décrémente atomiquement un crédit acheté ; False si aucun crédit restant."""
+        stmt = (
+            update(QuotaUtilisateur)
+            .where(
+                QuotaUtilisateur.user_id == user_id,
+                QuotaUtilisateur.credits_requetes > 0,
+            )
+            .values(credits_requetes=QuotaUtilisateur.credits_requetes - 1)
+        )
+        res = await db.execute(stmt)
+        await db.commit()
+        return res.rowcount == 1
 
     async def consume_quota(
         self,
         db: AsyncSession,
-        user_id: uuid.UUID,
+        user_id: uuid.UUID | None,
+        client_ip: str | None = None,
     ) -> bool:
-        """Décrémente de 1 le quota gratuit si l'utilisateur n'est pas premium."""
+        """Consomme une question : Pass premium, puis quota du jour, puis crédits achetés.
+
+        Retourne False si aucun droit ne reste (HTTP 402 côté router). Lève
+        `QuotaIndisponibleError` si le compteur partagé est injoignable.
+        """
+        if user_id is not None:
+            quota_obj = await self._charger_quota(db, user_id)
+            if self._fin_premium_active(quota_obj) is not None:
+                return True
+
+        cle = cle_quota_journalier(identite_quota(user_id, client_ip))
         try:
-            quota_info = await self.get_user_quota_info(db, user_id)
-            if not quota_info["is_allowed"]:
-                return False
+            # INCR atomique : deux requêtes simultanées ne peuvent pas obtenir
+            # la même "dernière" question gratuite.
+            utilisees = await cache_service.increment(cle, _DAILY_KEY_TTL_SECONDS)
+        except RuntimeError as exc:
+            logger.error("Compteur de quota indisponible (%s).", exc)
+            raise QuotaIndisponibleError(str(exc)) from exc
 
-            if quota_info["statut"] == "premium":
-                return True
-
-            stmt = select(QuotaUtilisateur).where(QuotaUtilisateur.user_id == user_id)
-            res = await db.execute(stmt)
-            quota_obj = res.scalar_one_or_none()
-
-            if quota_obj and quota_obj.requetes_restantes_gratuites > 0:
-                quota_obj.requetes_restantes_gratuites -= 1
-                await db.commit()
-                return True
-
-            # Quota introuvable juste après création : on laisse passer cette
-            # requête plutôt que de bloquer l'artisan sur un aléa de BDD.
+        if utilisees <= settings.max_questions_gratuites_par_jour:
             return True
-        except Exception as exc:
-            logger.warning(
-                "Décrément du quota impossible pour %s (%s) — requête autorisée.",
-                user_id,
-                exc,
-            )
-            return True
+
+        if user_id is None:
+            return False
+        return await self._consommer_credit(db, user_id)
 
 
 quota_service = QuotaService()

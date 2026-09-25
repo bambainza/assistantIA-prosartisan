@@ -65,6 +65,11 @@ from app.services.actualite_service import actualite_service
 from app.services.audit_service import audit_service
 from app.services.cache_service import cache_service
 from app.services.notification_service import notification_service
+from app.services.quota_service import (
+    QuotaIndisponibleError,
+    identite_quota,
+    quota_service,
+)
 from app.services.subscription_service import subscription_service
 from ingestion.pipeline import run_ingestion
 
@@ -256,7 +261,7 @@ async def get_users_list(
             User.telephone,
             User.type_abonnement,
             User.created_at,
-            QuotaUtilisateur.requetes_restantes_gratuites,
+            QuotaUtilisateur.credits_requetes,
             Metier.nom.label("metier_nom"),
         )
         .outerjoin(QuotaUtilisateur, User.id == QuotaUtilisateur.user_id)
@@ -268,6 +273,18 @@ async def get_users_list(
     res = await db.execute(stmt)
     users_data = []
     for row in res.all():
+        questions_restantes = 999999
+        if row.type_abonnement == "FREE":
+            # Quota gratuit du jour (Redis) + crédits achetés (base).
+            try:
+                utilisees = await quota_service.questions_gratuites_utilisees(
+                    identite_quota(row.id, None)
+                )
+            except QuotaIndisponibleError:
+                utilisees = 0
+            questions_restantes = max(
+                0, settings.max_questions_gratuites_par_jour - utilisees
+            ) + (row.credits_requetes or 0)
         users_data.append(
             {
                 "id": str(row.id),
@@ -275,9 +292,7 @@ async def get_users_list(
                 "telephone": row.telephone or "Non renseigné",
                 "metier": row.metier_nom or "Généraliste",
                 "type_abonnement": row.type_abonnement,
-                "questions_restantes": row.requetes_restantes_gratuites
-                if row.type_abonnement == "FREE"
-                else 999999,
+                "questions_restantes": questions_restantes,
                 "date_inscription": row.created_at.strftime("%Y-%m-%d")
                 if row.created_at
                 else "Non renseigné",
@@ -344,7 +359,8 @@ async def grant_pass_to_user(
     else:
         user.type_abonnement = "FREE"
         quota.date_fin_premium = None
-        quota.requetes_restantes_gratuites = 5
+        # Les crédits achetés restent acquis ; seul le quota du jour est rendu.
+        await quota_service.reinitialiser_quota_journalier(user_uuid)
 
     await audit_service.log_action(
         db,

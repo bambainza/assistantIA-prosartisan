@@ -124,10 +124,8 @@ async def register(
     db.add(new_user)
 
     # Créer le quota par défaut
-    new_quota = QuotaUtilisateur(
-        user_id=new_user.id,
-        requetes_restantes_gratuites=settings.max_questions_gratuites_par_jour,
-    )
+    # Quota gratuit journalier compté dans Redis ; aucun crédit acheté au départ.
+    new_quota = QuotaUtilisateur(user_id=new_user.id, credits_requetes=0)
     db.add(new_quota)
 
     await db.commit()
@@ -261,10 +259,7 @@ async def google_auth(
             db.add(user)
 
             # Créer le quota
-            quota = QuotaUtilisateur(
-                user_id=user.id,
-                requetes_restantes_gratuites=settings.max_questions_gratuites_par_jour,
-            )
+            quota = QuotaUtilisateur(user_id=user.id, credits_requetes=0)
             db.add(quota)
             await db.commit()
             await db.refresh(user)

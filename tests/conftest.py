@@ -38,6 +38,7 @@ def _isoler_cache():
     from app.services.cache_service import cache_service
 
     cache_service._redis_available = False
+    cache_service._redis_retry_at = float("inf")  # jamais de reconnexion en test
     cache_service._redis_client = None
     cache_service.reset()
     yield

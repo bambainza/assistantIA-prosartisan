@@ -22,6 +22,7 @@ En production (`APP_ENV=production`), l'application refuse de démarrer si les v
 | `QDRANT_HOST`, `QDRANT_PORT` | Base vectorielle Qdrant | Port 6333 |
 | `MISTRAL_API_KEY` | Clé API Mistral (chat/vision, embeddings, Voxtral STT/TTS) | Clé de production |
 | `CORS_ALLOWED_ORIGINS` | Origines autorisées (CORS) | `https://prosartisan.ci` (interdiction stricte de `*`) |
+| `TRUSTED_PROXY_HOPS` | Nombre de reverse proxies de confiance (IP client lue dans `X-Forwarded-For` depuis la droite) | `1` (Caddy, Render, Cloud Run direct) ; `2` derrière un Load Balancer GCP |
 
 ---
 

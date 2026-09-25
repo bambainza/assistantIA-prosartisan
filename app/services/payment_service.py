@@ -9,6 +9,7 @@ from __future__ import annotations
 
 import hashlib
 import hmac
+import logging
 import uuid
 from datetime import UTC, datetime, timedelta
 from typing import Any
@@ -19,6 +20,8 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.config import settings
 from app.models.quota import QuotaUtilisateur
 from app.models.transaction import TransactionMobileMoney
+
+logger = logging.getLogger(__name__)
 
 # Statuts opérateur considérés comme un paiement abouti
 STATUTS_PAIEMENT_ABOUTIS = {"ACCEPTED", "SUCCESS", "PAID"}
@@ -62,25 +65,23 @@ class PaymentService:
 
         info_pass = TARIFS_PASS[type_pass]
 
+        # Aucune URL de paiement n'est renvoyée si la transaction n'a pas pu
+        # être enregistrée : l'artisan paierait une référence inconnue qui ne
+        # serait jamais créditée par le webhook. L'erreur remonte donc (500).
         ref_ext = f"REF-{uuid.uuid4().hex[:12].upper()}"
-        txn_id = str(uuid.uuid4())
-        try:
-            txn = TransactionMobileMoney(
-                user_id=user_id,
-                montant=info_pass["montant"],
-                devise="XOF",
-                operateur=operateur,
-                statut_paiement="PENDING",
-                type_achat=type_pass,
-                reference_externe=ref_ext,
-            )
-            db.add(txn)
-            await db.commit()
-            await db.refresh(txn)
-            txn_id = str(txn.id)
-            ref_ext = txn.reference_externe
-        except Exception:
-            pass
+        txn = TransactionMobileMoney(
+            user_id=user_id,
+            montant=info_pass["montant"],
+            devise="XOF",
+            operateur=operateur,
+            statut_paiement="PENDING",
+            type_achat=type_pass,
+            reference_externe=ref_ext,
+        )
+        db.add(txn)
+        await db.commit()
+        await db.refresh(txn)
+        txn_id = str(txn.id)
 
         payment_checkout_url = (
             f"https://pay.wave.com/c/{ref_ext}"
@@ -101,6 +102,7 @@ class PaymentService:
         db: AsyncSession,
         transaction_id: str,
         statut: str,
+        montant: int | None = None,
     ) -> dict[str, Any]:
         """Traite le webhook de confirmation de paiement et débloque le compte artisan."""
         stmt = select(TransactionMobileMoney).where(
@@ -136,6 +138,21 @@ class PaymentService:
                 "user_id": str(txn.user_id),
             }
 
+        if statut_normalise in STATUTS_PAIEMENT_ABOUTIS and montant != txn.montant:
+            # Un paiement "abouti" d'un montant absent ou différent (ex. 100 F
+            # payés pour un Pass Mensuel à 3000 F) ne débloque jamais le Pass.
+            # La transaction reste en attente d'une notification conforme.
+            logger.warning(
+                "Webhook rejeté pour %s : montant reçu %s, attendu %s.",
+                txn.reference_externe,
+                montant,
+                txn.montant,
+            )
+            return {
+                "status": "montant_invalide",
+                "message": "Montant du paiement absent ou non conforme à la transaction",
+            }
+
         txn.statut_paiement = statut_normalise
 
         if statut_normalise in STATUTS_PAIEMENT_ABOUTIS:
@@ -147,9 +164,7 @@ class PaymentService:
             quota_obj = quota_res.scalar_one_or_none()
 
             if not quota_obj:
-                quota_obj = QuotaUtilisateur(
-                    user_id=txn.user_id, requetes_restantes_gratuites=5
-                )
+                quota_obj = QuotaUtilisateur(user_id=txn.user_id, credits_requetes=0)
                 db.add(quota_obj)
 
             now = datetime.now(UTC)
@@ -165,7 +180,9 @@ class PaymentService:
                 )
                 quota_obj.date_fin_premium = start_base + timedelta(hours=heures)
             elif "requetes" in info_pass:
-                quota_obj.requetes_restantes_gratuites += info_pass["requetes"]
+                quota_obj.credits_requetes = (
+                    quota_obj.credits_requetes or 0
+                ) + info_pass["requetes"]
 
             await db.commit()
             return {

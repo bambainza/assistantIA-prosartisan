@@ -351,7 +351,7 @@ class SubscriptionService:
             quota.date_fin_premium = None
 
         if quota_initial is not None and pkg.type_package == "CREDITS":
-            quota.requetes_restantes_gratuites = quota_initial
+            quota.credits_requetes = quota_initial
 
         await db.commit()
         await db.refresh(sub)

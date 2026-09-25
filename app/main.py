@@ -11,6 +11,7 @@ from contextlib import asynccontextmanager
 
 from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import JSONResponse
 from fastapi.staticfiles import StaticFiles
 
 from app.config import settings
@@ -33,6 +34,7 @@ from app.routers import (
     quota,
     quote,
 )
+from app.services.quota_service import QuotaIndisponibleError
 from app.services.rag_service import rag_service
 
 
@@ -109,6 +111,20 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"],
 )
+
+
+@app.exception_handler(QuotaIndisponibleError)
+async def quota_indisponible_handler(
+    request: Request, exc: QuotaIndisponibleError
+) -> JSONResponse:
+    """Compteur de quota (Redis) injoignable : 503 plutôt qu'un quota faussé."""
+    return JSONResponse(
+        status_code=503,
+        content={
+            "detail": "Service momentanément indisponible. Réessayez dans un instant."
+        },
+    )
+
 
 # ── Routers ──
 app.include_router(health.router)

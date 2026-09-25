@@ -188,3 +188,124 @@ async def test_webhook_idempotent_sur_transaction_deja_creditee():
         from tests.conftest import mock_get_db
 
         app.dependency_overrides[get_db] = mock_get_db
+
+
+def _signer(payload: dict) -> tuple[bytes, str]:
+    raw_body = json.dumps(payload).encode("utf-8")
+    secret = settings.mobile_money_secret_key.encode("utf-8")
+    return raw_body, hmac.new(secret, raw_body, hashlib.sha256).hexdigest()
+
+
+async def _poster_webhook_sur(txn: TransactionMobileMoney, payload: dict):
+    quota_add = MagicMock()
+
+    async def custom_mock_db():
+        session = MagicMock()
+        # 1er SELECT : la transaction ; 2e SELECT : aucun quota existant.
+        resultats = iter([txn, None])
+        session.execute = AsyncMock(
+            side_effect=lambda *a, **k: MagicMock(
+                scalar_one_or_none=MagicMock(return_value=next(resultats, None))
+            )
+        )
+        session.commit = AsyncMock()
+        session.add = quota_add
+        yield session
+
+    raw_body, sig = _signer(payload)
+    app.dependency_overrides[get_db] = custom_mock_db
+    try:
+        transport = ASGITransport(app=app)
+        async with AsyncClient(transport=transport, base_url="http://test") as client:
+            response = await client.post(
+                "/api/payment/webhook",
+                content=raw_body,
+                headers={"X-Signature": sig, "Content-Type": "application/json"},
+            )
+    finally:
+        from tests.conftest import mock_get_db
+
+        app.dependency_overrides[get_db] = mock_get_db
+    return response, quota_add
+
+
+def _txn_en_attente() -> TransactionMobileMoney:
+    return TransactionMobileMoney(
+        id=uuid.uuid4(),
+        user_id=uuid.uuid4(),
+        montant=3000,
+        operateur="WAVE",
+        statut_paiement="PENDING",
+        type_achat="pass_mois",
+        reference_externe="REF-EN-ATTENTE",
+    )
+
+
+@pytest.mark.asyncio
+async def test_webhook_montant_insuffisant_ne_credite_pas():
+    """Un paiement abouti de 100 F pour un Pass à 3000 F est rejeté (400)."""
+    txn = _txn_en_attente()
+    response, quota_add = await _poster_webhook_sur(
+        txn,
+        {"transaction_id": "REF-EN-ATTENTE", "status": "ACCEPTED", "montant": 100},
+    )
+
+    assert response.status_code == 400
+    assert txn.statut_paiement == "PENDING"
+    quota_add.assert_not_called()
+
+
+@pytest.mark.asyncio
+async def test_webhook_sans_montant_ne_credite_pas():
+    txn = _txn_en_attente()
+    response, quota_add = await _poster_webhook_sur(
+        txn, {"transaction_id": "REF-EN-ATTENTE", "status": "ACCEPTED"}
+    )
+
+    assert response.status_code == 400
+    assert txn.statut_paiement == "PENDING"
+    quota_add.assert_not_called()
+
+
+@pytest.mark.asyncio
+async def test_webhook_montant_conforme_debloque_le_pass():
+    txn = _txn_en_attente()
+    response, quota_add = await _poster_webhook_sur(
+        txn,
+        {"transaction_id": "REF-EN-ATTENTE", "status": "ACCEPTED", "montant": 3000},
+    )
+
+    assert response.status_code == 200
+    assert response.json()["message"] == "Pass débloqué avec succès"
+    assert txn.statut_paiement == "ACCEPTED"
+    quota_add.assert_called_once()
+
+
+@pytest.mark.asyncio
+async def test_init_payment_echec_base_ne_renvoie_pas_d_url():
+    """Si la transaction ne peut pas être enregistrée, aucune URL de paiement n'est émise."""
+
+    async def failing_db():
+        session = MagicMock()
+        session.add = MagicMock()
+        session.commit = AsyncMock(side_effect=RuntimeError("DB down"))
+        session.refresh = AsyncMock()
+        yield session
+
+    token = create_access_token(data={"sub": str(uuid.uuid4())})
+    app.dependency_overrides[get_db] = failing_db
+    try:
+        transport = ASGITransport(app=app, raise_app_exceptions=False)
+        async with AsyncClient(transport=transport, base_url="http://test") as client:
+            response = await client.post(
+                "/api/payment/init",
+                json={"type_pass": "pass_24h"},
+                headers={"Authorization": f"Bearer {token}"},
+            )
+    finally:
+        from tests.conftest import mock_get_db
+
+        app.dependency_overrides[get_db] = mock_get_db
+
+    assert response.status_code == 500
+    assert "payment_url" not in response.text

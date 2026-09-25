@@ -18,6 +18,11 @@ from app.config import settings
 
 logger = logging.getLogger(__name__)
 
+# Délai avant une nouvelle tentative de connexion après un échec Redis : sans
+# réessai, une indisponibilité passagère au démarrage bloquerait le worker sur
+# le cache local (non partagé) jusqu'à son redémarrage.
+REDIS_RETRY_DELAY_SECONDS = 30.0
+
 
 class CacheService:
     """Service de cache avec fallback transparent en mémoire si Redis est indisponible."""
@@ -25,6 +30,7 @@ class CacheService:
     def __init__(self) -> None:
         self._redis_client: Any | None = None
         self._redis_available: bool | None = None  # None = non testé
+        self._redis_retry_at: float = 0.0  # prochain essai après un échec
         self._redis_loop: Any | None = None  # event loop propriétaire du client
         self._memory_cache: dict[
             str, tuple[float, str]
@@ -32,7 +38,7 @@ class CacheService:
 
     async def _get_redis(self) -> Any | None:
         """Initialise ou récupère le client Redis asynchrone avec gestion d'erreur."""
-        if self._redis_available is False:
+        if self._redis_available is False and time.time() < self._redis_retry_at:
             return None
 
         try:
@@ -68,6 +74,7 @@ class CacheService:
                     e,
                 )
                 self._redis_available = False
+                self._redis_retry_at = time.time() + REDIS_RETRY_DELAY_SECONDS
                 self._redis_client = None
                 return None
 
@@ -87,6 +94,9 @@ class CacheService:
             "prosartisan:security:",
             "prosartisan:revoked_jti:",
             "prosartisan:rate_limit:",
+            # Compteurs de quota gratuit : un repli par worker multiplierait
+            # le quota journalier par le nombre de workers.
+            "prosartisan:quota:",
         )
         if settings.is_production and key.startswith(security_prefixes):
             raise RuntimeError(
@@ -142,6 +152,16 @@ class CacheService:
             count = 1
             self._memory_cache[key] = (now + ttl_seconds, str(count))
         return count
+
+    async def delete(self, key: str) -> None:
+        """Supprime une clé de Redis et du cache mémoire."""
+        client = await self._get_redis()
+        if client is not None:
+            try:
+                await client.delete(key)
+            except Exception as e:
+                logger.warning("Erreur suppression Redis pour la clé %s: %s", key, e)
+        self._memory_cache.pop(key, None)
 
     def reset(self) -> None:
         """Vide le cache mémoire local (usage test)."""

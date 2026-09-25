@@ -29,6 +29,10 @@ spec:
               value: "production"
             - name: APP_DEBUG
               value: "false"
+            # URL run.app directe : 1. Derrière un Load Balancer HTTPS externe
+            # (qui ajoute sa propre IP à X-Forwarded-For) : 2.
+            - name: TRUSTED_PROXY_HOPS
+              value: "1"
             - name: PORT
               value: "8000"
             - name: WORKERS

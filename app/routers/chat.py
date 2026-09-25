@@ -8,6 +8,7 @@ from __future__ import annotations
 
 import base64
 import json
+import logging
 import uuid
 
 from fastapi import (
@@ -15,6 +16,7 @@ from fastapi import (
     Depends,
     File,
     HTTPException,
+    Request,
     Response,
     UploadFile,
     WebSocket,
@@ -22,11 +24,13 @@ from fastapi import (
     status,
 )
 from fastapi.responses import StreamingResponse
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.db.session import get_db
 from app.middleware.auth import get_optional_user_id, get_user_id_from_token
+from app.middleware.client_ip import get_client_ip
+from app.middleware.rate_limiter import RATE_LIMIT_MESSAGE, is_rate_limited
 from app.models.feedback import Feedback
 from app.schemas.calculator import (
     CalculateRequest,
@@ -44,13 +48,23 @@ from app.services.audio_service import audio_service
 from app.services.cache_service import cache_service
 from app.services.calculator_service import calculator_service
 from app.services.chat_history_service import chat_history_service
-from app.services.quota_service import quota_service
+from app.services.quota_service import QuotaIndisponibleError, quota_service
 from app.services.rag_service import rag_service
+
+logger = logging.getLogger(__name__)
 
 router = APIRouter(prefix="/api", tags=["Chat IA Multimodal"])
 
-# Identité utilisée quand aucune authentification n'est fournie.
+# Identité de stockage (historique) quand aucune authentification n'est
+# fournie. Le quota des visiteurs anonymes, lui, est compté par IP cliente.
 ANONYMOUS_USER_ID = uuid.UUID("00000000-0000-0000-0000-000000000001")
+
+# Limites d'entrée : chaque appel Mistral (LLM, vision, STT, TTS) est facturé,
+# une entrée non bornée permettrait de faire exploser les coûts en une requête.
+MAX_QUESTION_CHARS = 4000
+MAX_IMAGE_URL_CHARS = 10_000_000  # ~7 Mo d'image encodée en Base64
+MAX_AUDIO_BYTES = 10 * 1024 * 1024
+MAX_TTS_CHARS = 2000
 
 
 class TranscribeResponse(BaseModel):
@@ -63,7 +77,12 @@ async def transcribe_audio_endpoint(
     current_user_id: uuid.UUID | None = Depends(get_optional_user_id),
 ) -> TranscribeResponse:
     """Transcrit une note vocale enregistrée sur le chantier via Mistral Voxtral (STT)."""
-    audio_bytes = await file.read()
+    audio_bytes = await file.read(MAX_AUDIO_BYTES + 1)
+    if len(audio_bytes) > MAX_AUDIO_BYTES:
+        raise HTTPException(
+            status_code=status.HTTP_413_REQUEST_ENTITY_TOO_LARGE,
+            detail="Note vocale trop volumineuse (10 Mo maximum).",
+        )
     filename = file.filename or "audio.wav"
     text = await audio_service.transcribe_audio(
         file_bytes=audio_bytes, filename=filename
@@ -72,7 +91,7 @@ async def transcribe_audio_endpoint(
 
 
 class SynthesizeRequest(BaseModel):
-    text: str
+    text: str = Field(..., max_length=MAX_TTS_CHARS)
     voice: str | None = None
 
 
@@ -91,22 +110,27 @@ async def synthesize_speech_endpoint(
 class ExtendedChatRequest(BaseModel):
     # L'utilisateur est déduit du JWT (ou anonyme), jamais transmis par le client.
     conversation_id: uuid.UUID | None = None
-    question: str
+    question: str = Field(..., min_length=1, max_length=MAX_QUESTION_CHARS)
     metier_id: int | None = None
-    image_url: str | None = None  # Photo de chantier (URL ou Base64)
+    # Photo de chantier (URL ou Base64)
+    image_url: str | None = Field(default=None, max_length=MAX_IMAGE_URL_CHARS)
 
 
 @router.post("/chat", response_model=ChatResponse)
 async def chat_endpoint(
     payload: ExtendedChatRequest,
+    request: Request,
     current_user_id: uuid.UUID | None = Depends(get_optional_user_id),
     db: AsyncSession = Depends(get_db),
 ) -> ChatResponse:
     """Pose une question technique à l'assistant RAG (avec photo optionnelle)."""
     user_id = current_user_id or ANONYMOUS_USER_ID
+    client_ip = get_client_ip(request)
 
     # 1. Vérification et décrémentation des quotas
-    allowed = await quota_service.consume_quota(db=db, user_id=user_id)
+    allowed = await quota_service.consume_quota(
+        db=db, user_id=current_user_id, client_ip=client_ip
+    )
     if not allowed:
         epuise_detail = QuotaEpuiseResponse().model_dump()
         raise HTTPException(
@@ -175,9 +199,16 @@ async def chat_endpoint(
     except HTTPException:
         raise
     except Exception:
-        pass
+        # La réponse reste servie (question déjà décomptée), mais la perte
+        # d'historique doit être visible dans les logs.
+        logger.exception(
+            "Échec d'enregistrement de l'historique (conversation %s).",
+            active_conv_id,
+        )
 
-    quota_info = await quota_service.get_user_quota_info(db=db, user_id=user_id)
+    quota_info = await quota_service.get_user_quota_info(
+        db=db, user_id=current_user_id, client_ip=client_ip
+    )
 
     return ChatResponse(
         reponse=rag_result["reponse"],
@@ -190,6 +221,7 @@ async def chat_endpoint(
 @router.post("/chat/stream")
 async def chat_stream_endpoint(
     payload: ExtendedChatRequest,
+    request: Request,
     current_user_id: uuid.UUID | None = Depends(get_optional_user_id),
     db: AsyncSession = Depends(get_db),
 ) -> StreamingResponse:
@@ -197,7 +229,9 @@ async def chat_stream_endpoint(
     user_id = current_user_id or ANONYMOUS_USER_ID
 
     # 1. Vérification et décrémentation des quotas
-    allowed = await quota_service.consume_quota(db=db, user_id=user_id)
+    allowed = await quota_service.consume_quota(
+        db=db, user_id=current_user_id, client_ip=get_client_ip(request)
+    )
     if not allowed:
         raise HTTPException(
             status_code=status.HTTP_402_PAYMENT_REQUIRED,
@@ -268,7 +302,10 @@ async def chat_stream_endpoint(
                 content=full_response,
             )
         except Exception:
-            pass
+            logger.exception(
+                "Échec d'enregistrement de l'historique (conversation %s).",
+                active_conv_id,
+            )
 
         yield "event: end\ndata: [DONE]\n\n"
 
@@ -289,7 +326,10 @@ async def chat_websocket_endpoint(
     - Synthèse vocale automatique (`type="audio_response"`) pour usage mains-libres
     - Ping/Pong (`type="ping"` -> `type="pong"`)
     """
-    user_id = ANONYMOUS_USER_ID
+    # Utilisateur authentifié via le message `{"action": "auth"}` ; None =
+    # anonyme, dont le quota est compté par IP cliente.
+    user_id: uuid.UUID | None = None
+    client_ip = get_client_ip(websocket)
     await websocket.accept()
     try:
         while True:
@@ -313,7 +353,7 @@ async def chat_websocket_endpoint(
                                 )
                                 return
                         else:
-                            user_id = ANONYMOUS_USER_ID
+                            user_id = None
                         continue
 
                     msg_type = parsed.get("type", "text")
@@ -333,6 +373,15 @@ async def chat_websocket_endpoint(
                         if not audio_b64:
                             err_msg = WebSocketMessage(
                                 type="error", message="Données audio manquantes."
+                            )
+                            await websocket.send_text(err_msg.model_dump_json())
+                            continue
+
+                        # Borne vérifiée avant décodage : ~4/3 octets Base64 par octet.
+                        if len(audio_b64) > MAX_AUDIO_BYTES * 4 // 3 + 4:
+                            err_msg = WebSocketMessage(
+                                type="error",
+                                message="Note vocale trop volumineuse (10 Mo maximum).",
                             )
                             await websocket.send_text(err_msg.model_dump_json())
                             continue
@@ -374,7 +423,28 @@ async def chat_websocket_endpoint(
             if not question_text:
                 continue
 
-            allowed = await quota_service.consume_quota(db=db, user_id=user_id)
+            # Le middleware de rate limiting ne voit pas les WebSockets : on
+            # applique la même limite par IP à chaque question.
+            if await is_rate_limited(client_ip):
+                await websocket.send_text(
+                    WebSocketMessage(
+                        type="error", message=RATE_LIMIT_MESSAGE
+                    ).model_dump_json()
+                )
+                continue
+
+            try:
+                allowed = await quota_service.consume_quota(
+                    db=db, user_id=user_id, client_ip=client_ip
+                )
+            except QuotaIndisponibleError:
+                await websocket.send_text(
+                    WebSocketMessage(
+                        type="error",
+                        message="Service momentanément indisponible. Réessayez dans un instant.",
+                    ).model_dump_json()
+                )
+                continue
             if not allowed:
                 epuise_msg = WebSocketMessage(
                     type="payment_required",
@@ -442,6 +512,19 @@ async def submit_feedback(
             status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
             detail="Le rating doit être égal à 1 (positif) ou -1 (négatif).",
         )
+
+    # Anti-IDOR : on ne note qu'une discussion qui appartient à l'appelant.
+    if payload.conversation_id is not None:
+        conv = await chat_history_service.get_conversation_with_messages(
+            db=db,
+            conversation_id=payload.conversation_id,
+            user_id=user_id or ANONYMOUS_USER_ID,
+        )
+        if conv is None:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail="Discussion non trouvée.",
+            )
 
     feedback = Feedback(
         id=uuid.uuid4(),

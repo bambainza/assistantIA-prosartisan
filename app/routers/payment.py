@@ -44,6 +44,7 @@ async def init_payment(
             db=db,
             user_id=current_user_id,
             type_pass=payload.type_pass,
+            operateur=payload.operateur,
         )
         return PaymentInitResponse(
             status=res["status"],
@@ -81,7 +82,14 @@ async def handle_webhook(
         db=db,
         transaction_id=payload.transaction_id,
         statut=payload.status,
+        montant=payload.montant,
     )
+
+    if result.get("status") == "montant_invalide":
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=result.get("message"),
+        )
 
     if result.get("status") == "error":
         raise HTTPException(

@@ -30,6 +30,8 @@ services:
       - JWT_SECRET_KEY=${JWT_SECRET_KEY}
       - MOBILE_MONEY_SECRET_KEY=${MOBILE_MONEY_SECRET_KEY}
       - CORS_ALLOWED_ORIGINS=${CORS_ALLOWED_ORIGINS:-https://${DOMAIN_NAME:-prosartisan.ci}}
+      # Caddy est l'unique proxy devant l'API (IP client dans X-Forwarded-For)
+      - TRUSTED_PROXY_HOPS=1
       - DB_REQUIRE_POSTGRES=true
       - DB_HOST=db
       - DB_PORT=5432
