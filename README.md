@@ -97,6 +97,12 @@ Après mise à jour du code, appliquez les migrations (`alembic upgrade head`) �
 
 Les photos de chantier sont stockées dans `UPLOAD_DIR/chat_images/` (volume persistant obligatoire en production). Pour sortir de la base les photos déjà enregistrées en Base64 : `python -m app.scripts.migrate_chat_images --dry-run` puis sans `--dry-run` (à lancer dans le conteneur qui monte `UPLOAD_DIR`).
 
+**Suppression documentaire** : l'administration confirme la suppression dans Qdrant avant de valider l'audit et d'invalider le cache RAG. Une indisponibilité Qdrant renvoie `503`; elle ne produit jamais un faux message de succès.
+
+**Ingestion documentaire admin** : l'upload exige les quatre métadonnées sémantiques (`metier_id`, `secteur_id`, `type_document`, `niveau_expertise`) et contrôle le métier et le secteur dans le référentiel. Le fichier est écrit sans écrasement dans un dossier isolé par tâche, puis ingéré en arrière-plan. La demande et son résultat sont audités avec un `job_id`; un fichier en échec est supprimé.
+
+**Données du back-office** : les listes vides restent vides et ne sont jamais remplacées par des artisans, documents ou statistiques de démonstration. Les routes documentaires renvoient `503` lorsque Qdrant est indisponible. Les journaux d'audit enregistrent l'IP cliente résolue selon `TRUSTED_PROXY_HOPS`.
+
 ## 📝 Documentation de référence
 
 - `PDR.md` est le PRD/PDR et la source de vérité produit et architecture.

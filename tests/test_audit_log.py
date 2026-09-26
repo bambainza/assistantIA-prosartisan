@@ -11,13 +11,16 @@ from unittest.mock import AsyncMock, MagicMock
 
 import pytest
 from httpx import ASGITransport, AsyncClient
+from starlette.requests import Request
 
+from app.config import settings
 from app.db.session import get_db
 from app.main import app
 from app.middleware.auth import create_access_token
 from app.models.audit_log import AuditLog
 from app.models.role import Permission, Role
 from app.models.user import User
+from app.services.audit_service import audit_service
 from tests.conftest import mock_get_db
 
 
@@ -62,6 +65,35 @@ def sample_audit_log(legacy_admin_user):
         ip_address="127.0.0.1",
         created_at=datetime.now(UTC).replace(tzinfo=None),
     )
+
+
+@pytest.mark.asyncio
+async def test_audit_utilise_ip_client_derriere_proxy(monkeypatch):
+    monkeypatch.setattr(settings, "trusted_proxy_hops", 1)
+    request = Request(
+        {
+            "type": "http",
+            "method": "POST",
+            "path": "/api/admin/test",
+            "headers": [(b"x-forwarded-for", b"203.0.113.9, 10.0.0.2")],
+            "client": ("10.0.0.3", 12345),
+            "server": ("test", 80),
+            "scheme": "http",
+            "query_string": b"",
+        }
+    )
+    session = MagicMock()
+    session.add = MagicMock()
+
+    entry = await audit_service.log_action(
+        session,
+        actor_id=uuid.uuid4(),
+        action="test.action",
+        resource_type="test",
+        request=request,
+    )
+
+    assert entry.ip_address == "10.0.0.2"
 
 
 @pytest.mark.asyncio

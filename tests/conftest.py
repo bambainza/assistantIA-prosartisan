@@ -3,6 +3,7 @@
 from unittest.mock import AsyncMock, MagicMock
 
 import pytest
+import qdrant_client
 from httpx import ASGITransport, AsyncClient
 
 from app.db.session import engine, get_db
@@ -26,6 +27,25 @@ async def mock_get_db():
 
 
 app.dependency_overrides[get_db] = mock_get_db
+
+
+@pytest.fixture
+def admin_qdrant(monkeypatch):
+    """Qdrant déterministe pour les routes admin, sans collection externe requise."""
+    client = MagicMock()
+    client.points = []
+    client.points_count = 0
+
+    async def _get_collection(**_kwargs):
+        return MagicMock(points_count=client.points_count)
+
+    async def _scroll(**_kwargs):
+        return client.points, None
+
+    client.get_collection = _get_collection
+    client.scroll = _scroll
+    monkeypatch.setattr(qdrant_client, "AsyncQdrantClient", lambda **_kwargs: client)
+    return client
 
 
 @pytest.fixture(autouse=True)

@@ -4,6 +4,7 @@ Router Admin — Utilisateurs : vue d'ensemble, liste des artisans, attribution 
 
 from __future__ import annotations
 
+import logging
 import uuid
 from datetime import UTC, datetime, timedelta
 from typing import Any
@@ -32,6 +33,7 @@ from app.services.quota_service import (
 )
 
 router = APIRouter()
+logger = logging.getLogger("app")
 
 
 @router.get("/overview")
@@ -78,7 +80,7 @@ async def get_admin_overview(
         )
         total_chunks = info.points_count
     except Exception:
-        pass
+        logger.exception("Statistiques Qdrant indisponibles pour le dashboard admin.")
 
     # Synthèse abonnements
     stmt_free = select(func.count(User.id)).where(
@@ -112,9 +114,7 @@ async def get_admin_overview(
             "pass_24h": pass_24h_count,
             "pass_mois": pass_mois_count,
         },
-        "metiers_top": [
-            {"nom": "Maçonnerie & Gros Œuvre", "requetes": total_questions},
-        ],
+        "metiers_top": [],
     }
 
 
@@ -170,22 +170,6 @@ async def get_users_list(
                 else "Non renseigné",
             }
         )
-
-    # Si aucun artisan en base, retourner un fallback de démo
-    if not users_data:
-        return {
-            "users": [
-                {
-                    "id": "00000000-0000-0000-0000-000000000001",
-                    "nom": "Kouassi Jean-Marc (Demo)",
-                    "telephone": "+2250708091011",
-                    "metier": "Maçonnerie & Gros Œuvre",
-                    "type_abonnement": "pass_mois",
-                    "questions_restantes": 999999,
-                    "date_inscription": "2026-08-01",
-                }
-            ]
-        }
 
     return {"users": users_data}
 

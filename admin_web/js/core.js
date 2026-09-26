@@ -50,6 +50,7 @@ document.addEventListener('DOMContentLoaded', () => {
     initTabs();
     initLoginForm();
     initUploadForm();
+    loadUploadMetiers();
     loadPromptInspector();
 
     // Check if already authenticated: only a 2xx response opens the dashboard.
@@ -141,6 +142,27 @@ function initLoginForm() {
             submitBtn.textContent = 'Se connecter';
         }
     });
+}
+
+async function loadUploadMetiers() {
+    const metierSelect = document.getElementById('metier_id');
+    const secteurSelect = document.getElementById('secteur_id');
+    if (!metierSelect || !secteurSelect) return;
+
+    try {
+        const res = await fetch('/api/metiers', { credentials: 'same-origin' });
+        if (!res.ok) throw new Error(`HTTP ${res.status}`);
+        const metiers = await res.json();
+        const options = ['<option value="">Sélectionner…</option>'].concat(
+            metiers.map((metier) => `<option value="${Number(metier.id)}">${escapeHtml(metier.nom)}</option>`)
+        ).join('');
+        metierSelect.innerHTML = options;
+        secteurSelect.innerHTML = options;
+    } catch (err) {
+        const unavailable = '<option value="">Référentiel indisponible</option>';
+        metierSelect.innerHTML = unavailable;
+        secteurSelect.innerHTML = unavailable;
+    }
 }
 
 // Tab Navigation — implémente le pattern WAI-ARIA Tabs (role=tab/tabpanel,
@@ -434,7 +456,9 @@ function initUploadForm() {
         const formData = new FormData();
         formData.append('file', fileInput.files[0]);
         formData.append('metier_id', document.getElementById('metier_id').value);
+        formData.append('secteur_id', document.getElementById('secteur_id').value);
         formData.append('type_document', document.getElementById('type_document').value);
+        formData.append('niveau_expertise', document.getElementById('niveau_expertise').value);
 
         const btn = document.getElementById('btn-submit-upload');
         btn.textContent = '⏳ Ingestion vectorielle en cours...';
@@ -446,6 +470,7 @@ function initUploadForm() {
                 body: formData
             });
             const data = await res.json();
+            if (!res.ok) throw new Error(data.detail || `HTTP ${res.status}`);
             alert(data.message);
             fileInput.value = '';
             await fetchDocuments();
