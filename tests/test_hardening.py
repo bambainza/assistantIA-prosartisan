@@ -79,6 +79,9 @@ async def test_security_headers_present():
     assert "'unsafe-inline'" not in script_src
     # Les feuilles de style et polices externes utilisées par les fronts sont permises.
     csp = response.headers["Content-Security-Policy"]
+    assert "script-src-attr 'none'" in csp
+    assert "object-src 'none'" in csp
+    assert "base-uri 'self'" in csp
     assert "https://fonts.googleapis.com" in csp
     assert "font-src 'self' data: https://fonts.gstatic.com" in csp
     assert "Permissions-Policy" in response.headers

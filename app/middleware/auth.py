@@ -35,6 +35,9 @@ REFRESH_TOKEN_EXPIRE_DAYS = 30
 # Security scheme
 bearer_scheme = HTTPBearer(auto_error=False)
 ADMIN_SESSION_COOKIE = "prosartisan_admin_session"
+WEB_ACCESS_COOKIE = "prosartisan_web_access"
+WEB_REFRESH_COOKIE = "prosartisan_web_refresh"
+CSRF_COOKIE = "prosartisan_csrf"
 
 
 def hash_password(password: str) -> str:
@@ -154,13 +157,18 @@ def get_user_id_from_token(token: str) -> uuid.UUID:
 async def get_current_user_id(
     credentials: HTTPAuthorizationCredentials | None = Depends(bearer_scheme),
     admin_session: str | None = Cookie(default=None, alias=ADMIN_SESSION_COOKIE),
+    web_session: str | None = Cookie(default=None, alias=WEB_ACCESS_COOKIE),
 ) -> uuid.UUID:
     """Dépendance FastAPI : extrait et valide le user_id depuis le JWT.
 
     Retourne le UUID de l'utilisateur authentifié.
     Lève HTTP 401 si le token est absent ou invalide.
     """
-    token = credentials.credentials if credentials is not None else admin_session
+    token = (
+        credentials.credentials
+        if credentials is not None
+        else admin_session or web_session
+    )
     if token is None:
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
@@ -172,16 +180,18 @@ async def get_current_user_id(
 
 async def get_optional_user_id(
     credentials: HTTPAuthorizationCredentials | None = Depends(bearer_scheme),
+    web_session: str | None = Cookie(default=None, alias=WEB_ACCESS_COOKIE),
 ) -> uuid.UUID | None:
     """Dépendance FastAPI : extrait le user_id si un JWT valide est fourni.
 
     Retourne None si pas de token (mode anonyme).
     Utile pour les routes accessibles en mode connecté ET déconnecté.
     """
-    if credentials is None:
+    token = credentials.credentials if credentials is not None else web_session
+    if token is None:
         return None
     try:
-        return get_user_id_from_token(credentials.credentials)
+        return get_user_id_from_token(token)
     except HTTPException:
         return None
 

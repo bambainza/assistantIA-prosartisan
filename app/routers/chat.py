@@ -28,8 +28,13 @@ from fastapi.responses import StreamingResponse
 from pydantic import BaseModel, Field
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.config import settings
 from app.db.session import get_db
-from app.middleware.auth import get_optional_user_id, get_user_id_from_token
+from app.middleware.auth import (
+    WEB_ACCESS_COOKIE,
+    get_optional_user_id,
+    get_user_id_from_token,
+)
 from app.middleware.client_ip import get_client_ip
 from app.middleware.rate_limiter import RATE_LIMIT_MESSAGE, is_rate_limited
 from app.models.feedback import Feedback
@@ -453,9 +458,25 @@ async def chat_websocket_endpoint(
     `audio_response` + `voice_turn_completed`. Taille, débit et quota sont
     vérifiés **avant** toute transcription (appel Voxtral facturé).
     """
-    # Utilisateur authentifié via `{"action": "auth"}` ; None = anonyme, dont le
-    # quota est compté par IP cliente.
+    # Le navigateur s'authentifie par cookie HttpOnly ; les clients natifs
+    # conservent le message `auth` avec Bearer JWT pour compatibilité.
+    cookie_token = websocket.cookies.get(WEB_ACCESS_COOKIE)
     user_id: uuid.UUID | None = None
+    if cookie_token:
+        origin = websocket.headers.get("origin", "")
+        allowed_origins = {
+            item.strip()
+            for item in settings.cors_allowed_origins.split(",")
+            if item.strip()
+        }
+        if "*" not in allowed_origins and origin not in allowed_origins:
+            await websocket.close(code=status.WS_1008_POLICY_VIOLATION)
+            return
+        try:
+            user_id = get_user_id_from_token(cookie_token)
+        except HTTPException:
+            await websocket.close(code=status.WS_1008_POLICY_VIOLATION)
+            return
     session_conversation_id: uuid.UUID | None = None
     client_ip = get_client_ip(websocket)
     await websocket.accept()

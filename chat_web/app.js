@@ -12,6 +12,33 @@ let state = {
     selectedImage: null, // base64 string or file URL
 };
 
+function readCookie(name) {
+    const prefix = `${encodeURIComponent(name)}=`;
+    const item = document.cookie.split('; ').find(value => value.startsWith(prefix));
+    return item ? decodeURIComponent(item.slice(prefix.length)) : null;
+}
+
+// Toutes les requêtes du chat utilisent la session HttpOnly. Pour les méthodes
+// mutantes, le cookie CSRF lisible est recopié dans un en-tête (double-submit).
+const nativeFetch = window.fetch.bind(window);
+window.fetch = function secureFetch(input, init = {}) {
+    const requestUrl = typeof input === 'string' ? input : input.url;
+    const url = new URL(requestUrl, window.location.origin);
+    const options = { ...init };
+    if (url.origin === window.location.origin) {
+        options.credentials = 'same-origin';
+        const method = String(options.method || 'GET').toUpperCase();
+        if (!['GET', 'HEAD', 'OPTIONS', 'TRACE'].includes(method)) {
+            const csrf = readCookie('prosartisan_csrf');
+            if (csrf) {
+                options.headers = new Headers(options.headers || {});
+                options.headers.set('X-CSRF-Token', csrf);
+            }
+        }
+    }
+    return nativeFetch(input, options);
+};
+
 // Historique local des visiteurs non connectés : le serveur ne conserve
 // aucune discussion anonyme (plus de compte partagé lisible par tous). Stocké
 // dans ce navigateur uniquement, borné, sans les photos (quota localStorage).
@@ -98,8 +125,51 @@ function announceToScreenReader(text) {
     srLiveRegion.textContent = text;
 }
 
+function migrateTrustedInlineHandlers() {
+    const allowed = new Set([
+        'startNewChat', 'toggleSidebar', 'openCalculatorsModal', 'openQuotesModal',
+        'openPaywallModal', 'openLoginModal', 'logout', 'toggleWebPushSubscription',
+        'toggleTheme', 'dismissActualitesBanner', 'fillInput', 'triggerImageUpload',
+        'clearSelectedImage', 'toggleVoiceRecording', 'sendMessage', 'closeLoginModal',
+        'simulateGoogleOAuth', 'submitLogin', 'switchAuthView', 'submitRegister',
+        'closePaywallModal', 'startPayment', 'closeCalculatorsModal', 'switchCalcTab',
+        'submitCalcBeton', 'submitCalcCable', 'submitCalcPlomb', 'submitCalcCarrelage',
+        'submitCalcClim', 'copyCalcResult', 'injectCalcResultToChat', 'closeQuotesModal',
+        'extractQuoteFromText', 'addQuoteItemRow', 'saveQuoteToServer',
+        'exportQuoteWhatsApp', 'previewQuoteHtml', 'recalculateQuoteTotals',
+        'handleInputKeyPress', 'handleSidebarSearch'
+    ]);
+    const attach = (element, attribute, eventName) => {
+        const expression = element.getAttribute(attribute) || '';
+        const match = expression.match(/^([A-Za-z_$][\w$]*)\((.*)\)$/s);
+        if (!match || !allowed.has(match[1])) return;
+        const argumentSource = match[2].trim();
+        let args = [];
+        let passEvent = false;
+        if (argumentSource) {
+            if (argumentSource === 'event') {
+                passEvent = true;
+            } else {
+                if (!(argumentSource.startsWith("'") && argumentSource.endsWith("'"))) return;
+                args = [argumentSource.slice(1, -1).replace(/\\'/g, "'").replace(/\\\\/g, '\\')];
+            }
+        }
+        element.removeAttribute(attribute);
+        if (element.getAttribute('href')?.toLowerCase().startsWith('javascript:')) {
+            element.setAttribute('href', '#');
+        }
+        element.addEventListener(eventName, event => {
+            if (element.tagName === 'A') event.preventDefault();
+            window[match[1]](...(passEvent ? [event] : args));
+        });
+    };
+    document.querySelectorAll('[onclick]').forEach(element => attach(element, 'onclick', 'click'));
+    document.querySelectorAll('[oninput]').forEach(element => attach(element, 'oninput', 'input'));
+}
+
 // Initialize App on DOM Loaded
-document.addEventListener('DOMContentLoaded', () => {
+document.addEventListener('DOMContentLoaded', async () => {
+    migrateTrustedInlineHandlers();
     // 1. Theme recovery
     const savedTheme = localStorage.getItem('prosartisan_theme') || 'dark';
     document.documentElement.setAttribute('data-theme', savedTheme);
@@ -110,25 +180,23 @@ document.addEventListener('DOMContentLoaded', () => {
         moonIcon?.classList.remove('hidden');
     }
 
-    // 2. Check local storage for existing session
-    const storedUser = localStorage.getItem('prosartisan_user');
-    const storedToken = localStorage.getItem('prosartisan_token');
-    
-    if (storedUser && storedToken) {
-        try {
-            state.user = JSON.parse(storedUser);
+    // Purge de l'ancien stockage JWT : les jetons Web vivent désormais dans
+    // des cookies HttpOnly et ne sont jamais accessibles au JavaScript.
+    localStorage.removeItem('prosartisan_token');
+    localStorage.removeItem('prosartisan_refresh_token');
+    localStorage.removeItem('prosartisan_user');
+    try {
+        const sessionResponse = await fetch('/api/auth/me');
+        if (sessionResponse.ok) {
+            state.user = await sessionResponse.json();
             state.isLoggedIn = true;
-            updateAuthUI();
             loadConversations();
-            updateQuotaUI();
-        } catch (e) {
-            console.error("Failed to parse stored session:", e);
-            logout();
         }
-    } else {
-        updateAuthUI();
-        updateQuotaUI();
+    } catch (_) {
+        // Mode visiteur si l'API est momentanément indisponible.
     }
+    updateAuthUI();
+    updateQuotaUI();
 
     loadActualitesBanner();
     handlePaymentReturn();
@@ -194,12 +262,7 @@ async function updateQuotaUI() {
     if (!quotaText || !progressBar) return;
     
     try {
-        const headers = {};
-        if (state.isLoggedIn) {
-            const token = localStorage.getItem('prosartisan_token');
-            headers['Authorization'] = `Bearer ${token}`;
-        }
-        const response = await fetch('/api/quota', { headers });
+        const response = await fetch('/api/quota');
         if (response.ok) {
             const data = await response.json();
             if (data.statut === 'premium') {
@@ -287,16 +350,11 @@ async function loadConversations(q = null) {
     }
 
     try {
-        const token = localStorage.getItem('prosartisan_token');
         let url = `/api/conversations`;
         if (q) {
             url += `?q=${encodeURIComponent(q)}`;
         }
-        const response = await fetch(url, {
-            headers: {
-                'Authorization': `Bearer ${token}`
-            }
-        });
+        const response = await fetch(url);
         if (response.ok) {
             state.conversations = await response.json();
             renderConversationsList();
@@ -338,17 +396,20 @@ function renderConversationsList() {
         const convTitle = escapeHtml(conv.title || "Discussions");
         
         li.innerHTML = `
-            <button class="conv-item ${activeClass}" onclick="selectConversation('${convId}')" id="conv-btn-${convId}">
+            <button class="conv-item ${activeClass}" id="conv-btn-${convId}">
                 <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="margin-right: 8px; flex-shrink: 0;"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/></svg>
                 <span class="conv-title-text" style="overflow: hidden; text-overflow: ellipsis; white-space: nowrap; width: 100%; display: block;">${convTitle}</span>
             </button>
-            <button class="edit-conv-btn" onclick="startRenameConversation('${convId}', event)" title="Renommer">
+            <button class="edit-conv-btn" title="Renommer">
                 <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 20h9"/><path d="M16.5 3.5a2.121 2.121 0 0 1 3 3L7 19l-4 1 1-4L16.5 3.5z"/></svg>
             </button>
-            <button class="delete-conv-btn" onclick="deleteConversation('${convId}', event)" title="Supprimer la discussion">
+            <button class="delete-conv-btn" title="Supprimer la discussion">
                 <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="3 6 5 6 21 6"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/></svg>
             </button>
         `;
+        li.querySelector('.conv-item').addEventListener('click', () => selectConversation(conv.id));
+        li.querySelector('.edit-conv-btn').addEventListener('click', event => startRenameConversation(conv.id, event));
+        li.querySelector('.delete-conv-btn').addEventListener('click', event => deleteConversation(conv.id, event));
         conversationsList.appendChild(li);
     });
 }
@@ -393,12 +454,10 @@ function startRenameConversation(id, event) {
         }
         
         try {
-            const token = localStorage.getItem('prosartisan_token');
             const response = await fetch(`/api/conversations/${id}`, {
                 method: 'PATCH',
                 headers: {
-                    'Content-Type': 'application/json',
-                    'Authorization': `Bearer ${token}`
+                    'Content-Type': 'application/json'
                 },
                 body: JSON.stringify({ title: newTitle })
             });
@@ -451,12 +510,7 @@ async function selectConversation(id) {
     }
 
     try {
-        const token = localStorage.getItem('prosartisan_token');
-        const response = await fetch(`/api/conversations/${id}`, {
-            headers: {
-                'Authorization': `Bearer ${token}`
-            }
-        });
+        const response = await fetch(`/api/conversations/${id}`);
         if (response.ok) {
             const data = await response.json();
             
@@ -494,12 +548,8 @@ async function deleteConversation(id, event) {
     }
 
     try {
-        const token = localStorage.getItem('prosartisan_token');
         const response = await fetch(`/api/conversations/${id}`, { 
-            method: 'DELETE',
-            headers: {
-                'Authorization': `Bearer ${token}`
-            }
+            method: 'DELETE'
         });
         if (response.ok) {
             showToast("Discussion supprimée.");
@@ -655,9 +705,6 @@ async function toggleVoiceRecording() {
                 formData.append('file', audioBlob, `vocal_${Date.now()}.${extension}`);
 
                 const headers = {};
-                if (state.token) {
-                    headers['Authorization'] = `Bearer ${state.token}`;
-                }
 
                 const response = await fetch('/api/chat/transcribe', {
                     method: 'POST',
@@ -792,10 +839,6 @@ async function sendMessage() {
 
     try {
         const headers = { 'Content-Type': 'application/json' };
-        if (state.isLoggedIn) {
-            const token = localStorage.getItem('prosartisan_token');
-            headers['Authorization'] = `Bearer ${token}`;
-        }
         
         const response = await fetch('/api/chat/stream', {
             method: 'POST',
@@ -916,17 +959,11 @@ async function sendMessage() {
         }
 
         // Append actions block
-        const actionsDiv = document.createElement('div');
-        actionsDiv.className = 'msg-actions';
-        const escapedResponse = fullResponseText.replace(/'/g, "\\'").replace(/"/g, '&quot;').replace(/\n/g, '\\n');
-        actionsDiv.innerHTML = `
-            <button class="action-icon-btn" onclick="copyMessageText('${escapedResponse}', this)">📋 Copier</button>
-            <button class="action-icon-btn speak-btn" onclick="toggleSpeakMessage('${escapedResponse}', this)">🔊 Écouter</button>
-            <button class="action-icon-btn" onclick="regenerateLastResponse()">🔄 Régénérer</button>
-            <button class="action-icon-btn feedback-btn" onclick="sendAssistantFeedback(1, '${assistantBubbleId}', this)" title="Réponse utile">👍 Utile</button>
-            <button class="action-icon-btn feedback-btn" onclick="sendAssistantFeedback(-1, '${assistantBubbleId}', this)" title="Réponse imprécise">👎 Inexact</button>
-        `;
-        bubble.querySelector('.msg-content').appendChild(actionsDiv);
+        appendMessageActions(
+            bubble.querySelector('.msg-content'),
+            fullResponseText,
+            assistantBubbleId
+        );
         scrollToBottom();
 
         // Update quota display
@@ -959,6 +996,30 @@ function escapeHtml(value) {
         .replace(/'/g, '&#39;');
 }
 
+function appendMessageActions(container, content, messageId, extended = false) {
+    const actions = document.createElement('div');
+    actions.className = 'msg-actions';
+    const add = (label, handler, className = 'action-icon-btn', title = '') => {
+        const button = document.createElement('button');
+        button.type = 'button';
+        button.className = className;
+        button.textContent = label;
+        if (title) button.title = title;
+        button.addEventListener('click', () => handler(button));
+        actions.appendChild(button);
+    };
+    add('📋 Copier', button => copyMessageText(content, button));
+    add('🔊 Écouter', button => toggleSpeakMessage(content, button), 'action-icon-btn speak-btn');
+    add('🔄 Régénérer', () => regenerateLastResponse());
+    if (extended) {
+        add('🖨️ Exporter', () => exportMessageAsPdf(content), 'action-icon-btn', 'Exporter en PDF (impression navigateur)');
+        add('📤 Partager', () => shareMessage(content), 'action-icon-btn', 'Partager');
+    }
+    add('👍 Utile', button => sendAssistantFeedback(1, messageId, button), 'action-icon-btn feedback-btn', 'Réponse utile');
+    add('👎 Inexact', button => sendAssistantFeedback(-1, messageId, button), 'action-icon-btn feedback-btn', 'Réponse imprécise');
+    container.appendChild(actions);
+}
+
 function appendMessageBubble(role, content, imageSrc = null, sources = null) {
     const bubble = document.createElement('div');
     bubble.className = `message-bubble ${role}`;
@@ -970,22 +1031,10 @@ function appendMessageBubble(role, content, imageSrc = null, sources = null) {
         imageHtml = `<img src="${escapeHtml(imageSrc)}" class="msg-image" alt="Photo de chantier envoyée par l'utilisateur">`;
     }
 
-    let actionsHtml = '';
     let sourcesHtml = '';
+    let bubbleMsgId = '';
     if (role === 'assistant') {
-        const escapedContent = content.replace(/'/g, "\\'").replace(/"/g, '&quot;').replace(/\n/g, '\\n');
-        const bubbleMsgId = 'history_' + Math.random().toString(36).substring(2, 9);
-        actionsHtml = `
-            <div class="msg-actions">
-                <button class="action-icon-btn" onclick="copyMessageText('${escapedContent}', this)">📋 Copier</button>
-                <button class="action-icon-btn speak-btn" onclick="toggleSpeakMessage('${escapedContent}', this)">🔊 Écouter</button>
-                <button class="action-icon-btn" onclick="regenerateLastResponse()">🔄 Régénérer</button>
-                <button class="action-icon-btn" onclick="exportMessageAsPdf('${escapedContent}')" title="Exporter en PDF (impression navigateur)">🖨️ Exporter</button>
-                <button class="action-icon-btn" onclick="shareMessage('${escapedContent}')" title="Partager">📤 Partager</button>
-                <button class="action-icon-btn feedback-btn" onclick="sendAssistantFeedback(1, '${bubbleMsgId}', this)" title="Réponse utile">👍 Utile</button>
-                <button class="action-icon-btn feedback-btn" onclick="sendAssistantFeedback(-1, '${bubbleMsgId}', this)" title="Réponse imprécise">👎 Inexact</button>
-            </div>
-        `;
+        bubbleMsgId = 'history_' + Math.random().toString(36).substring(2, 9);
         
         if (sources && sources.length > 0) {
             const listItems = sources.map(s => {
@@ -1013,9 +1062,12 @@ function appendMessageBubble(role, content, imageSrc = null, sources = null) {
             ${imageHtml}
             <div class="bubble-text">${formatMarkdownText(content)}</div>
             ${sourcesHtml}
-            ${actionsHtml}
         </div>
     `;
+
+    if (role === 'assistant') {
+        appendMessageActions(bubble.querySelector('.msg-content'), content, bubbleMsgId, true);
+    }
 
     messagesStream.appendChild(bubble);
 }
@@ -1029,10 +1081,6 @@ async function sendAssistantFeedback(rating, messageId, btn) {
             conversation_id: state.currentConversationId || null,
         };
         const headers = { 'Content-Type': 'application/json' };
-        if (state.isLoggedIn) {
-            const token = localStorage.getItem('prosartisan_token');
-            if (token) headers['Authorization'] = `Bearer ${token}`;
-        }
         const res = await fetch('/api/chat/feedback', {
             method: 'POST',
             headers: headers,
@@ -1061,6 +1109,41 @@ async function sendAssistantFeedback(rating, messageId, btn) {
 }
 
 // Format markdown elements using marked.js and highlight.js
+function sanitizeRenderedHtml(html) {
+    const template = document.createElement('template');
+    template.innerHTML = html;
+    const allowedTags = new Set([
+        'A', 'P', 'BR', 'STRONG', 'EM', 'DEL', 'UL', 'OL', 'LI', 'BLOCKQUOTE',
+        'PRE', 'CODE', 'H1', 'H2', 'H3', 'H4', 'H5', 'H6', 'TABLE', 'THEAD',
+        'TBODY', 'TR', 'TH', 'TD', 'HR'
+    ]);
+    const allowedAttributes = new Set(['href', 'title', 'target', 'rel', 'class']);
+    for (const element of [...template.content.querySelectorAll('*')]) {
+        if (!allowedTags.has(element.tagName)) {
+            element.replaceWith(...element.childNodes);
+            continue;
+        }
+        for (const attribute of [...element.attributes]) {
+            if (!allowedAttributes.has(attribute.name.toLowerCase())) {
+                element.removeAttribute(attribute.name);
+            }
+        }
+        if (element.tagName === 'A') {
+            const href = element.getAttribute('href') || '';
+            try {
+                const parsed = new URL(href, window.location.origin);
+                if (!['http:', 'https:', 'mailto:'].includes(parsed.protocol)) {
+                    element.removeAttribute('href');
+                }
+            } catch (_) {
+                element.removeAttribute('href');
+            }
+            element.setAttribute('rel', 'noopener noreferrer');
+        }
+    }
+    return template.innerHTML;
+}
+
 function formatMarkdownText(text) {
     if (!text) return "";
     try {
@@ -1082,14 +1165,14 @@ function formatMarkdownText(text) {
                 }
             }, 0);
             
-            return parsedHtml;
+            return sanitizeRenderedHtml(parsedHtml);
         }
     } catch (e) {
         console.warn("Marked parsing failed:", e);
     }
     
     // Fallback basic formatter
-    let formatted = text.replace(/\n/g, '<br>');
+    let formatted = escapeHtml(text).replace(/\n/g, '<br>');
     formatted = formatted.replace(/\*\*(.*?)\*\*/g, '<strong>$1</strong>');
     formatted = formatted.replace(/(\d+)\.\s(.*?)(<br>|$)/g, '$1. $2$3');
     return formatted;
@@ -1216,9 +1299,6 @@ async function toggleSpeakMessage(text, btnElement) {
 
     try {
         const headers = { 'Content-Type': 'application/json' };
-        if (state.token) {
-            headers['Authorization'] = `Bearer ${state.token}`;
-        }
 
         const response = await fetch('/api/chat/synthesize', {
             method: 'POST',
@@ -1419,7 +1499,7 @@ async function submitLogin() {
     }
 
     try {
-        const response = await fetch('/api/auth/login', {
+        const response = await fetch('/api/auth/web/login', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({ email, password })
@@ -1479,7 +1559,7 @@ async function submitRegister() {
 // Handle Google ID Token response from gsi client
 async function handleGoogleCredentialResponse(googleResponse) {
     try {
-        const res = await fetch('/api/auth/google', {
+        const res = await fetch('/api/auth/web/google', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({ credential: googleResponse.credential })
@@ -1510,9 +1590,6 @@ async function simulateGoogleOAuth() {
 function loginUser(data) {
     state.isLoggedIn = true;
     state.user = data.user;
-    localStorage.setItem('prosartisan_user', JSON.stringify(data.user));
-    localStorage.setItem('prosartisan_token', data.access_token);
-    localStorage.setItem('prosartisan_refresh_token', data.refresh_token);
     
     closeLoginModal();
     updateAuthUI();
@@ -1524,10 +1601,8 @@ function loginUser(data) {
 }
 
 // Logout session
-function logout() {
-    localStorage.removeItem('prosartisan_user');
-    localStorage.removeItem('prosartisan_token');
-    localStorage.removeItem('prosartisan_refresh_token');
+async function logout() {
+    await fetch('/api/auth/web/logout', { method: 'POST' }).catch(() => {});
     state.isLoggedIn = false;
     state.user = null;
     state.currentConversationId = null;
@@ -1558,12 +1633,7 @@ function showToast(message) {
 
 async function loadActualitesBanner() {
     try {
-        const headers = {};
-        if (state.isLoggedIn) {
-            const token = localStorage.getItem('prosartisan_token');
-            if (token) headers['Authorization'] = `Bearer ${token}`;
-        }
-        const res = await fetch('/api/actualites', { headers });
+        const res = await fetch('/api/actualites');
         if (!res.ok) return;
         const actualites = await res.json();
         if (!actualites || actualites.length === 0) return;
@@ -1628,12 +1698,10 @@ async function toggleWebPushSubscription() {
             applicationServerKey: urlBase64ToUint8Array(public_key),
         });
 
-        const token = localStorage.getItem('prosartisan_token');
         await fetch('/api/notifications/web-push/subscribe', {
             method: 'POST',
             headers: {
                 'Content-Type': 'application/json',
-                ...(token ? { Authorization: `Bearer ${token}` } : {}),
             },
             body: JSON.stringify(subscription.toJSON()),
         });
@@ -1650,12 +1718,10 @@ async function unsubscribeWebPush(subscription) {
     try {
         const endpoint = subscription.endpoint;
         await subscription.unsubscribe();
-        const token = localStorage.getItem('prosartisan_token');
         await fetch('/api/notifications/web-push/unsubscribe', {
             method: 'POST',
             headers: {
                 'Content-Type': 'application/json',
-                ...(token ? { Authorization: `Bearer ${token}` } : {}),
             },
             body: JSON.stringify({ endpoint }),
         });
@@ -1837,12 +1903,10 @@ async function extractQuoteFromText() {
     btn.textContent = "⏳ Analyse IA en cours...";
 
     try {
-        const token = localStorage.getItem('prosartisan_token');
         const res = await fetch('/api/quotes/extract', {
             method: 'POST',
             headers: {
-                'Content-Type': 'application/json',
-                ...(token ? { 'Authorization': `Bearer ${token}` } : {})
+                'Content-Type': 'application/json'
             },
             body: JSON.stringify({ prompt: promptInput.value.trim() })
         });
@@ -1880,12 +1944,17 @@ function addQuoteItemRow(item = { description: "", quantite: 1, unite: "u", prix
     row.className = "quote-item-row";
     row.innerHTML = `
         <td><input type="text" class="item-desc" value="${escapeHtml(item.description || '')}" placeholder="Désignation"></td>
-        <td><input type="number" class="item-qty" value="${item.quantite || 1}" min="0.1" step="any" oninput="recalculateQuoteTotals()"></td>
+        <td><input type="number" class="item-qty" value="${item.quantite || 1}" min="0.1" step="any"></td>
         <td><input type="text" class="item-unit" value="${escapeHtml(item.unite || 'u')}"></td>
-        <td><input type="number" class="item-price" value="${item.prix_unitaire || 0}" min="0" step="100" oninput="recalculateQuoteTotals()"></td>
+        <td><input type="number" class="item-price" value="${item.prix_unitaire || 0}" min="0" step="100"></td>
         <td class="item-total-cell">${Math.round((item.quantite || 1) * (item.prix_unitaire || 0)).toLocaleString('fr-FR')} F</td>
-        <td><button class="remove-item-btn" onclick="removeQuoteItemRow(this)" title="Supprimer" aria-label="Supprimer la ligne">✕</button></td>
+        <td><button class="remove-item-btn" title="Supprimer" aria-label="Supprimer la ligne">✕</button></td>
     `;
+    row.querySelectorAll('.item-qty, .item-price').forEach(input => {
+        input.addEventListener('input', recalculateQuoteTotals);
+    });
+    const removeButton = row.querySelector('.remove-item-btn');
+    removeButton.addEventListener('click', () => removeQuoteItemRow(removeButton));
     tbody.appendChild(row);
     recalculateQuoteTotals();
 }
@@ -1954,8 +2023,7 @@ async function saveQuoteToServer() {
         return;
     }
 
-    const token = localStorage.getItem('prosartisan_token');
-    if (!token) {
+    if (!state.isLoggedIn) {
         showToast("Connectez-vous pour enregistrer vos devis dans votre compte.");
         openLoginModal();
         return;
@@ -1965,8 +2033,7 @@ async function saveQuoteToServer() {
         const res = await fetch('/api/quotes', {
             method: 'POST',
             headers: {
-                'Content-Type': 'application/json',
-                'Authorization': `Bearer ${token}`
+                'Content-Type': 'application/json'
             },
             body: JSON.stringify(payload)
         });
@@ -2020,8 +2087,7 @@ async function previewQuoteHtml() {
         return;
     }
 
-    const token = localStorage.getItem('prosartisan_token');
-    if (currentQuoteData.id && token) {
+    if (currentQuoteData.id && state.isLoggedIn) {
         window.open(`/api/quotes/${currentQuoteData.id}/html`, '_blank');
     } else {
         // Envoi pour sauvegarde ou preview directe
@@ -2066,10 +2132,8 @@ async function startLiveVoiceSession() {
         liveVoiceWs = new WebSocket(wsUrl);
 
         liveVoiceWs.onopen = () => {
-            const token = localStorage.getItem('prosartisan_token');
             liveVoiceWs.send(JSON.stringify({
                 action: 'auth',
-                token: token || null,
                 conversation_id: state.currentConversationId
             }));
 
@@ -2201,11 +2265,11 @@ function appendAssistantStreamingBubble() {
     return {
         appendChunk: (chunk) => {
             fullText += chunk;
-            textEl.innerHTML = marked.parse(fullText);
+            textEl.innerHTML = formatMarkdownText(fullText);
             messagesStream.scrollTop = messagesStream.scrollHeight;
         },
         finalize: () => {
-            textEl.innerHTML = marked.parse(fullText);
+            textEl.innerHTML = formatMarkdownText(fullText);
             hljs.highlightAll();
         }
     };
@@ -2270,10 +2334,7 @@ async function startPayment(operateur) {
     try {
         const response = await fetch('/api/payment/init', {
             method: 'POST',
-            headers: {
-                'Content-Type': 'application/json',
-                'Authorization': `Bearer ${localStorage.getItem('prosartisan_token')}`
-            },
+            headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({ type_pass: typePass, operateur })
         });
         if (response.status === 401) {
@@ -2308,14 +2369,11 @@ async function handlePaymentReturn() {
         showToast("Paiement annulé ou refusé : aucun montant n'a été débité.");
         return;
     }
-    const token = localStorage.getItem('prosartisan_token');
-    if (!token) return;
+    if (!state.isLoggedIn) return;
     showToast("Paiement en cours de confirmation…");
     for (let tentative = 0; tentative < 15; tentative++) {
         try {
-            const response = await fetch(`/api/payment/transactions/${encodeURIComponent(transactionId)}`, {
-                headers: { 'Authorization': `Bearer ${token}` }
-            });
+            const response = await fetch(`/api/payment/transactions/${encodeURIComponent(transactionId)}`);
             if (response.ok) {
                 const txn = await response.json();
                 if (txn.statut === 'ACCEPTED') {

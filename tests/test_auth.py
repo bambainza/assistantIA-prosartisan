@@ -12,6 +12,9 @@ from app.db.session import get_db
 from app.main import app
 from app.middleware.auth import (
     ADMIN_SESSION_COOKIE,
+    CSRF_COOKIE,
+    WEB_ACCESS_COOKIE,
+    WEB_REFRESH_COOKIE,
     create_access_token,
     create_refresh_token,
     hash_password,
@@ -126,6 +129,71 @@ async def test_login_success():
         from tests.conftest import mock_get_db
 
         app.dependency_overrides[get_db] = mock_get_db
+
+
+@pytest.mark.asyncio
+async def test_web_login_garde_les_jetons_dans_des_cookies_httponly():
+    """Le navigateur ne reçoit jamais les JWT dans un JSON lisible."""
+    mock_user = User(
+        id=uuid.uuid4(),
+        email="web@example.com",
+        nom="Web User",
+        password_hash=hash_password("mypassword"),
+        auth_provider="local",
+        type_abonnement="FREE",
+        created_at=datetime.now(UTC),
+    )
+
+    async def custom_mock_db():
+        session = MagicMock()
+        session.execute = AsyncMock(
+            return_value=MagicMock(scalar_one_or_none=MagicMock(return_value=mock_user))
+        )
+        yield session
+
+    app.dependency_overrides[get_db] = custom_mock_db
+    try:
+        transport = ASGITransport(app=app)
+        async with AsyncClient(transport=transport, base_url="http://test") as client:
+            response = await client.post(
+                "/api/auth/web/login",
+                json={"email": "web@example.com", "password": "mypassword"},
+            )
+
+        assert response.status_code == 200
+        assert "access_token" not in response.json()
+        assert "refresh_token" not in response.json()
+        cookies = response.headers.get_list("set-cookie")
+        assert any(
+            WEB_ACCESS_COOKIE in value and "HttpOnly" in value for value in cookies
+        )
+        assert any(
+            WEB_REFRESH_COOKIE in value and "HttpOnly" in value for value in cookies
+        )
+        assert any(
+            CSRF_COOKIE in value and "HttpOnly" not in value for value in cookies
+        )
+    finally:
+        from tests.conftest import mock_get_db
+
+        app.dependency_overrides[get_db] = mock_get_db
+
+
+@pytest.mark.asyncio
+async def test_web_session_exige_csrf_sur_une_mutation():
+    """Une session cookie ne peut pas effectuer de mutation cross-site."""
+    access_token = create_access_token(data={"sub": str(uuid.uuid4())})
+    transport = ASGITransport(app=app)
+    async with AsyncClient(transport=transport, base_url="http://test") as client:
+        client.cookies.set(WEB_ACCESS_COOKIE, access_token)
+        client.cookies.set(CSRF_COOKIE, "csrf-test")
+        rejected = await client.post("/api/auth/web/logout")
+        accepted = await client.post(
+            "/api/auth/web/logout", headers={"X-CSRF-Token": "csrf-test"}
+        )
+
+    assert rejected.status_code == 403
+    assert accepted.status_code == 204
 
 
 @pytest.mark.asyncio
