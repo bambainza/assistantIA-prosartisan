@@ -150,7 +150,8 @@ Sur toutes les routes ci-dessous, l'identité de l'artisan est déduite du JWT (
 **Back-Office Admin** (`/api/admin`, JWT admin requis)
 
 - `POST /upload-pdf` : upload d'un PDF technique ; l'ingestion (extraction, découpage, embeddings, indexation Qdrant) s'exécute en tâche de fond et la réponse (`202 Accepted`) est immédiate.
-- `GET /stats`, `GET /overview`, `GET /users`, `POST /users/{id}/grant-pass`, `GET /documents`, `DELETE /documents/{id}`, `GET /transactions`, `GET /logs`.
+- `GET /stats`, `GET /overview`, `GET /users`, `POST /users/{id}/grant-pass`, `GET /documents`, `GET /transactions`, `GET /logs`.
+- `DELETE /documents/{id}` : suppression idempotente par filtre `document_name`, avec `wait=true`. Un audit `document.delete`, le retrait de `DocumentConfig`, le commit et l'invalidation du cache RAG n'ont lieu qu'après confirmation `completed` de Qdrant ; panne ou statut non confirmé → `503`, sans faux succès ni audit mensonger.
 - **RBAC** : `GET /roles`, `GET /permissions`, `POST /users/{id}/role` (assigne ou retire un rôle RBAC — permissions `roles.read`/`roles.write`). Un admin sans rôle assigné garde l'accès complet historique ; un admin avec un rôle n'a que les permissions accordées à ce rôle.
 - **Audit** : `GET /audit-logs` (permission `audit.read`) — journal filtrable (acteur, action, type de ressource) de toutes les mutations admin sensibles (packages, abonnements, documents, rôles, Pass attribués).
 - **Sécurité** : `GET /security-stats` (permission `audit.read`) — actions admin des dernières 24h, tentatives de connexion échouées, webhooks rejetés et tokens révoqués (fenêtre glissante 30 jours).

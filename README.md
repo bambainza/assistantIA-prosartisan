@@ -97,6 +97,8 @@ Après mise à jour du code, appliquez les migrations (`alembic upgrade head`) �
 
 Les photos de chantier sont stockées dans `UPLOAD_DIR/chat_images/` (volume persistant obligatoire en production). Pour sortir de la base les photos déjà enregistrées en Base64 : `python -m app.scripts.migrate_chat_images --dry-run` puis sans `--dry-run` (à lancer dans le conteneur qui monte `UPLOAD_DIR`).
 
+**Suppression documentaire** : l'administration confirme la suppression dans Qdrant avant de valider l'audit et d'invalider le cache RAG. Une indisponibilité Qdrant renvoie `503`; elle ne produit jamais un faux message de succès.
+
 ## 📝 Documentation de référence
 
 - `PDR.md` est le PRD/PDR et la source de vérité produit et architecture.

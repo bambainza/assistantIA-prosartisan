@@ -4,6 +4,7 @@ Router Admin — Contenus RAG : upload et ingestion de documents, statistiques Q
 
 from __future__ import annotations
 
+import logging
 import os
 import re
 import uuid
@@ -31,10 +32,12 @@ from app.middleware.auth import require_permission
 from app.models.document_config import DocumentConfig
 from app.models.metier import Metier
 from app.services.audit_service import audit_service
+from app.services.document_service import DocumentVectorStoreError, document_service
 from app.services.rag_service import rag_service
 from ingestion.pipeline import run_ingestion
 
 router = APIRouter()
+logger = logging.getLogger(__name__)
 
 
 MAX_ADMIN_UPLOAD_BYTES = 25 * 1024 * 1024
@@ -331,48 +334,43 @@ async def delete_document(
     admin_id: uuid.UUID = Depends(require_permission("documents.delete")),
     db: AsyncSession = Depends(get_db),
 ) -> dict[str, Any]:
-    """Supprime un document technique de la base de connaissances Qdrant."""
+    """Supprime un document après confirmation explicite de Qdrant."""
+    config_result = await db.execute(
+        select(DocumentConfig).where(DocumentConfig.filename == doc_id)
+    )
+    config = config_result.scalar_one_or_none()
+    try:
+        deletion = await document_service.delete_vectors(doc_id)
+    except DocumentVectorStoreError as exc:
+        logger.exception("Échec de suppression Qdrant du document %s", doc_id)
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail="Suppression momentanément indisponible. Le document reste actif.",
+        ) from exc
+
+    if config is not None:
+        await db.delete(config)
     await audit_service.log_action(
         db,
         actor_id=admin_id,
         action="document.delete",
         resource_type="document",
         resource_id=doc_id,
+        before={"config_present": config is not None},
+        after={
+            "status": "deleted",
+            "qdrant_status": deletion.status,
+            "qdrant_operation_id": deletion.operation_id,
+        },
         request=request,
     )
     await db.commit()
-    try:
-        from qdrant_client import AsyncQdrantClient
-        from qdrant_client.http.models import FieldCondition, Filter, MatchValue
-
-        qdrant_client = AsyncQdrantClient(
-            host=settings.qdrant_host,
-            port=settings.qdrant_port,
-        )
-
-        # Supprimer par filtre document_name ou par point ID
-        await qdrant_client.delete(
-            collection_name=settings.qdrant_collection,
-            points_selector=Filter(
-                should=[
-                    FieldCondition(key="document_name", match=MatchValue(value=doc_id)),
-                ]
-            ),
-        )
-        try:
-            await qdrant_client.delete(
-                collection_name=settings.qdrant_collection,
-                points_selector=[doc_id],
-            )
-        except Exception:
-            pass
-    except Exception:
-        pass
 
     # Les réponses en cache pourraient encore citer le document supprimé.
     await rag_service.invalidate_activation_cache()
 
     return {
         "status": "success",
+        "operation_id": deletion.operation_id,
         "message": f"Document {doc_id} supprimé de la base Qdrant.",
     }
