@@ -4,11 +4,12 @@ Router Auth : Enregistrement, connexion locale, Google OAuth 2.0, rafraîchissem
 
 from __future__ import annotations
 
+import secrets
 import uuid
 from typing import Any
 
 import httpx
-from fastapi import APIRouter, Depends, HTTPException, Response, status
+from fastapi import APIRouter, Cookie, Depends, Header, HTTPException, Response, status
 from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -16,6 +17,9 @@ from app.config import settings
 from app.db.session import get_db
 from app.middleware.auth import (
     ADMIN_SESSION_COOKIE,
+    CSRF_COOKIE,
+    WEB_ACCESS_COOKIE,
+    WEB_REFRESH_COOKIE,
     create_access_token,
     create_refresh_token,
     decode_token,
@@ -37,6 +41,7 @@ from app.schemas.auth import (
     TotpCodeRequest,
     TotpSetupResponse,
     UserProfile,
+    WebSessionResponse,
 )
 from app.services.cache_service import cache_service
 from app.services.totp_service import totp_service
@@ -47,6 +52,63 @@ _SECURITY_COUNTER_TTL_SECONDS = 30 * 86400
 _LOGIN_FAILED_COUNTER_KEY = "prosartisan:security:login_failed_total"
 
 router = APIRouter(prefix="/api/auth", tags=["Authentification"])
+
+
+def _set_web_session_cookies(
+    response: Response, access_token: str, refresh_token: str
+) -> None:
+    """Pose les jetons navigateur hors de portée de JavaScript."""
+    cookie_options = {
+        "secure": settings.is_production,
+        "samesite": "lax",
+        "path": "/",
+    }
+    response.set_cookie(
+        WEB_ACCESS_COOKIE,
+        access_token,
+        max_age=settings.jwt_expiration_minutes * 60,
+        httponly=True,
+        **cookie_options,
+    )
+    response.set_cookie(
+        WEB_REFRESH_COOKIE,
+        refresh_token,
+        max_age=30 * 86400,
+        httponly=True,
+        **cookie_options,
+    )
+    response.set_cookie(
+        CSRF_COOKIE,
+        secrets.token_urlsafe(32),
+        max_age=30 * 86400,
+        httponly=False,
+        **cookie_options,
+    )
+
+
+def _delete_web_session_cookies(response: Response) -> None:
+    for name, httponly in (
+        (WEB_ACCESS_COOKIE, True),
+        (WEB_REFRESH_COOKIE, True),
+        (CSRF_COOKIE, False),
+    ):
+        response.delete_cookie(
+            name,
+            path="/",
+            secure=settings.is_production,
+            httponly=httponly,
+            samesite="lax",
+        )
+
+
+def _verify_csrf(csrf_cookie: str | None, csrf_header: str | None) -> None:
+    if not csrf_cookie or not csrf_header or not secrets.compare_digest(
+        csrf_cookie, csrf_header
+    ):
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Jeton CSRF absent ou invalide.",
+        )
 
 
 @router.get("/google/config")
@@ -203,6 +265,20 @@ async def login(
     }
 
 
+@router.post("/web/login", response_model=WebSessionResponse)
+async def web_login(
+    payload: LoginRequest,
+    response: Response,
+    db: AsyncSession = Depends(get_db),
+) -> Any:
+    """Connexion navigateur par cookies HttpOnly, sans JWT dans le JSON."""
+    tokens = await login(payload, response, db)
+    _set_web_session_cookies(
+        response, tokens["access_token"], tokens["refresh_token"]
+    )
+    return {"expires_in": tokens["expires_in"], "user": tokens["user"]}
+
+
 @router.post("/google", response_model=TokenResponse)
 async def google_auth(
     payload: GoogleAuthRequest,
@@ -275,6 +351,20 @@ async def google_auth(
     }
 
 
+@router.post("/web/google", response_model=WebSessionResponse)
+async def web_google_auth(
+    payload: GoogleAuthRequest,
+    response: Response,
+    db: AsyncSession = Depends(get_db),
+) -> Any:
+    """Connexion Google navigateur sans exposer les jetons au JavaScript."""
+    tokens = await google_auth(payload, db)
+    _set_web_session_cookies(
+        response, tokens["access_token"], tokens["refresh_token"]
+    )
+    return {"expires_in": tokens["expires_in"], "user": tokens["user"]}
+
+
 @router.post("/refresh", response_model=TokenResponse)
 async def refresh(
     payload: RefreshRequest,
@@ -339,6 +429,28 @@ async def refresh(
     }
 
 
+@router.post("/web/refresh", response_model=WebSessionResponse)
+async def web_refresh(
+    response: Response,
+    refresh_cookie: str | None = Cookie(default=None, alias=WEB_REFRESH_COOKIE),
+    csrf_cookie: str | None = Cookie(default=None, alias=CSRF_COOKIE),
+    csrf_header: str | None = Header(default=None, alias="X-CSRF-Token"),
+    db: AsyncSession = Depends(get_db),
+) -> Any:
+    """Rotation de la session Web avec double soumission CSRF."""
+    _verify_csrf(csrf_cookie, csrf_header)
+    if not refresh_cookie:
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Session de rafraîchissement absente.",
+        )
+    tokens = await refresh(RefreshRequest(refresh_token=refresh_cookie), db)
+    _set_web_session_cookies(
+        response, tokens["access_token"], tokens["refresh_token"]
+    )
+    return {"expires_in": tokens["expires_in"], "user": tokens["user"]}
+
+
 @router.post("/logout", status_code=status.HTTP_204_NO_CONTENT, response_model=None)
 async def logout(payload: RefreshRequest) -> None:
     """Révoque le refresh token fourni : il ne pourra plus servir à renouveler l'accès."""
@@ -349,6 +461,23 @@ async def logout(payload: RefreshRequest) -> None:
         return
     await revoke_refresh_token(decoded)
     return
+
+
+@router.post("/web/logout", status_code=status.HTTP_204_NO_CONTENT, response_model=None)
+async def web_logout(
+    response: Response,
+    refresh_cookie: str | None = Cookie(default=None, alias=WEB_REFRESH_COOKIE),
+    csrf_cookie: str | None = Cookie(default=None, alias=CSRF_COOKIE),
+    csrf_header: str | None = Header(default=None, alias="X-CSRF-Token"),
+) -> None:
+    """Révoque la session navigateur puis efface tous ses cookies."""
+    _verify_csrf(csrf_cookie, csrf_header)
+    if refresh_cookie:
+        try:
+            await revoke_refresh_token(decode_token(refresh_cookie))
+        except HTTPException:
+            pass
+    _delete_web_session_cookies(response)
 
 
 @router.post(

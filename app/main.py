@@ -17,6 +17,7 @@ from fastapi.staticfiles import StaticFiles
 from app.config import settings
 from app.db.init_db import init_db
 from app.db.session import engine
+from app.middleware.csrf import CSRFMiddleware
 from app.middleware.logging import LoggingAndRequestIdMiddleware
 from app.middleware.rate_limiter import RateLimitMiddleware
 from app.middleware.security_headers import SecurityHeadersMiddleware
@@ -88,6 +89,7 @@ app.add_middleware(LoggingAndRequestIdMiddleware)
 
 # ── En-têtes de sécurité HTTP (CSP, HSTS, X-Frame-Options...) ──
 app.add_middleware(SecurityHeadersMiddleware)
+app.add_middleware(CSRFMiddleware)
 
 # ── Rate Limiting Middleware ──
 app.add_middleware(RateLimitMiddleware)

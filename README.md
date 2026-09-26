@@ -93,6 +93,8 @@ Après mise à jour du code, appliquez les migrations (`alembic upgrade head`) �
 
 **Historique anonyme** : le serveur ne conserve plus de discussions pour les visiteurs non connectés (historique local dans le navigateur). Pour supprimer celles de l'ancien compte anonyme partagé : `python -m app.scripts.purge_anonymous_history --dry-run`, puis sans `--dry-run`.
 
+**Session Web sécurisée** : `chat_web` utilise les endpoints `/api/auth/web/*` et des cookies JWT `HttpOnly`; les jetons ne sont jamais stockés dans `localStorage`. Les mutations ajoutent automatiquement le double-submit `X-CSRF-Token`. Le client Flutter conserve l'authentification `Authorization: Bearer`. Les réponses Markdown sont filtrées avant leur insertion dans le DOM et la CSP du chat bloque les scripts et attributs événementiels inline.
+
 Les photos de chantier sont stockées dans `UPLOAD_DIR/chat_images/` (volume persistant obligatoire en production). Pour sortir de la base les photos déjà enregistrées en Base64 : `python -m app.scripts.migrate_chat_images --dry-run` puis sans `--dry-run` (à lancer dans le conteneur qui monte `UPLOAD_DIR`).
 
 ## 📝 Documentation de référence

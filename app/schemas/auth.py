@@ -85,6 +85,13 @@ class TokenResponse(BaseModel):
     user: UserProfile
 
 
+class WebSessionResponse(BaseModel):
+    """Réponse navigateur : aucun JWT n'est exposé au JavaScript."""
+
+    expires_in: int
+    user: UserProfile
+
+
 class RefreshRequest(BaseModel):
     """Corps de requête pour rafraîchir un token."""
 

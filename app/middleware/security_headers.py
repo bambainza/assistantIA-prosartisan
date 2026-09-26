@@ -14,9 +14,7 @@ from starlette.responses import Response
 
 from app.config import settings
 
-# Les blocs <script> inline sont interdits. Les attributs événementiels hérités
-# restent temporairement autorisés séparément, le temps de leur migration vers
-# addEventListener, sans autoriser pour autant l'injection de nouveaux scripts.
+# Les scripts et attributs événementiels inline sont interdits.
 _CSP_SCRIPT_SRC = (
     "script-src 'self' "
     "https://accounts.google.com https://cdn.jsdelivr.net https://cdnjs.cloudflare.com"
@@ -31,12 +29,18 @@ _CSP_DIRECTIVES = (
     ),
     "font-src 'self' data: https://fonts.gstatic.com",
     _CSP_SCRIPT_SRC,
-    "script-src-attr 'unsafe-inline'",
+    "script-src-attr 'none'",
     "connect-src 'self' https://accounts.google.com",
     "frame-src https://accounts.google.com",
     "frame-ancestors 'none'",
+    "object-src 'none'",
+    "base-uri 'self'",
+    "form-action 'self'",
 )
 _CONTENT_SECURITY_POLICY = "; ".join(_CSP_DIRECTIVES)
+_ADMIN_CONTENT_SECURITY_POLICY = _CONTENT_SECURITY_POLICY.replace(
+    "script-src-attr 'none'", "script-src-attr 'unsafe-inline'"
+)
 
 
 class SecurityHeadersMiddleware(BaseHTTPMiddleware):
@@ -51,7 +55,11 @@ class SecurityHeadersMiddleware(BaseHTTPMiddleware):
         response.headers["Permissions-Policy"] = (
             "camera=(self), microphone=(self), geolocation=(), payment=()"
         )
-        response.headers["Content-Security-Policy"] = _CONTENT_SECURITY_POLICY
+        response.headers["Content-Security-Policy"] = (
+            _ADMIN_CONTENT_SECURITY_POLICY
+            if request.url.path.startswith("/admin")
+            else _CONTENT_SECURITY_POLICY
+        )
 
         if settings.is_production:
             # HSTS n'a de sens que derrière HTTPS (systématique en production).
