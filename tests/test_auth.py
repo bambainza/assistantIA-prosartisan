@@ -164,9 +164,15 @@ async def test_web_login_garde_les_jetons_dans_des_cookies_httponly():
         assert "access_token" not in response.json()
         assert "refresh_token" not in response.json()
         cookies = response.headers.get_list("set-cookie")
-        assert any(WEB_ACCESS_COOKIE in value and "HttpOnly" in value for value in cookies)
-        assert any(WEB_REFRESH_COOKIE in value and "HttpOnly" in value for value in cookies)
-        assert any(CSRF_COOKIE in value and "HttpOnly" not in value for value in cookies)
+        assert any(
+            WEB_ACCESS_COOKIE in value and "HttpOnly" in value for value in cookies
+        )
+        assert any(
+            WEB_REFRESH_COOKIE in value and "HttpOnly" in value for value in cookies
+        )
+        assert any(
+            CSRF_COOKIE in value and "HttpOnly" not in value for value in cookies
+        )
     finally:
         from tests.conftest import mock_get_db
 

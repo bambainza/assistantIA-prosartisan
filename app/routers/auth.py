@@ -102,8 +102,10 @@ def _delete_web_session_cookies(response: Response) -> None:
 
 
 def _verify_csrf(csrf_cookie: str | None, csrf_header: str | None) -> None:
-    if not csrf_cookie or not csrf_header or not secrets.compare_digest(
-        csrf_cookie, csrf_header
+    if (
+        not csrf_cookie
+        or not csrf_header
+        or not secrets.compare_digest(csrf_cookie, csrf_header)
     ):
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
@@ -273,9 +275,7 @@ async def web_login(
 ) -> Any:
     """Connexion navigateur par cookies HttpOnly, sans JWT dans le JSON."""
     tokens = await login(payload, response, db)
-    _set_web_session_cookies(
-        response, tokens["access_token"], tokens["refresh_token"]
-    )
+    _set_web_session_cookies(response, tokens["access_token"], tokens["refresh_token"])
     return {"expires_in": tokens["expires_in"], "user": tokens["user"]}
 
 
@@ -359,9 +359,7 @@ async def web_google_auth(
 ) -> Any:
     """Connexion Google navigateur sans exposer les jetons au JavaScript."""
     tokens = await google_auth(payload, db)
-    _set_web_session_cookies(
-        response, tokens["access_token"], tokens["refresh_token"]
-    )
+    _set_web_session_cookies(response, tokens["access_token"], tokens["refresh_token"])
     return {"expires_in": tokens["expires_in"], "user": tokens["user"]}
 
 
@@ -445,9 +443,7 @@ async def web_refresh(
             detail="Session de rafraîchissement absente.",
         )
     tokens = await refresh(RefreshRequest(refresh_token=refresh_cookie), db)
-    _set_web_session_cookies(
-        response, tokens["access_token"], tokens["refresh_token"]
-    )
+    _set_web_session_cookies(response, tokens["access_token"], tokens["refresh_token"])
     return {"expires_in": tokens["expires_in"], "user": tokens["user"]}
 
 
