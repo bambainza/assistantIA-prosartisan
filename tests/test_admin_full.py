@@ -76,7 +76,7 @@ async def test_admin_get_users(mock_db_with_admin, admin_user):
 
         assert response.status_code == 200
         data = response.json()
-        assert "users" in data
+        assert data == {"users": []}
     finally:
         app.dependency_overrides.pop(get_db, None)
 

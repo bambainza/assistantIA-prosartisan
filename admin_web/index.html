@@ -406,18 +406,33 @@
                                             <div class="col-md-6 mb-3 mb-md-0">
                                                 <label class="form-label" for="metier_id">Métier Cible</label>
                                                 <select class="form-select" id="metier_id" required>
-                                                    <option value="1">Bâtiment & Construction</option>
-                                                    <option value="2">Électricité & Énergie</option>
-                                                    <option value="3">Plomberie & Sanitaire</option>
-                                                    <option value="4">Mécanique & Automobile</option>
+                                                    <option value="">Chargement des métiers…</option>
                                                 </select>
                                             </div>
                                             <div class="col-md-6">
+                                                <label class="form-label" for="secteur_id">Secteur Cible</label>
+                                                <select class="form-select" id="secteur_id" required>
+                                                    <option value="">Chargement des secteurs…</option>
+                                                </select>
+                                            </div>
+                                        </div>
+
+                                        <div class="row mb-3">
+                                            <div class="col-md-6 mb-3 mb-md-0">
                                                 <label class="form-label" for="type_document">Type de Document</label>
                                                 <select class="form-select" id="type_document" required>
                                                     <option value="guide_technique">Guide / Fiche Technique</option>
-                                                    <option value="norme_securite">Norme de Sécurité</option>
-                                                    <option value="manuel_maintenance">Manuel de Maintenance</option>
+                                                    <option value="guide_pratique">Guide Pratique</option>
+                                                    <option value="fiche_technique">Fiche Technique</option>
+                                                    <option value="norme_officielle">Norme Officielle</option>
+                                                </select>
+                                            </div>
+                                            <div class="col-md-6">
+                                                <label class="form-label" for="niveau_expertise">Niveau d'Expertise</label>
+                                                <select class="form-select" id="niveau_expertise" required>
+                                                    <option value="debutant">Débutant</option>
+                                                    <option value="intermediaire" selected>Intermédiaire</option>
+                                                    <option value="avance">Avancé</option>
                                                 </select>
                                             </div>
                                         </div>

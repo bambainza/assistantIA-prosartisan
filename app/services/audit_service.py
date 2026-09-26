@@ -14,6 +14,7 @@ from fastapi import Request
 from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.middleware.client_ip import get_client_ip
 from app.models.audit_log import AuditLog
 
 
@@ -46,7 +47,7 @@ class AuditService:
             resource_id=resource_id,
             before_json=before,
             after_json=after,
-            ip_address=request.client.host if request and request.client else None,
+            ip_address=get_client_ip(request) if request is not None else None,
         )
         db.add(entry)
         return entry

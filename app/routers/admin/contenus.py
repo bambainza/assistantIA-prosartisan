@@ -4,6 +4,8 @@ Router Admin — Contenus RAG : upload et ingestion de documents, statistiques Q
 
 from __future__ import annotations
 
+import asyncio
+import hashlib
 import logging
 import os
 import re
@@ -27,7 +29,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
 from app.config import settings
-from app.db.session import get_db
+from app.db.session import async_session, get_db
 from app.middleware.auth import require_permission
 from app.models.document_config import DocumentConfig
 from app.models.metier import Metier
@@ -44,17 +46,98 @@ MAX_ADMIN_UPLOAD_BYTES = 25 * 1024 * 1024
 
 
 _SAFE_UPLOAD_NAME_RE = re.compile(r"^[A-Za-z0-9][A-Za-z0-9 ._-]{0,150}$")
+_ALLOWED_DOCUMENT_TYPES = {
+    "fiche_technique",
+    "guide_pratique",
+    "guide_technique",
+    "norme_officielle",
+}
+_ALLOWED_EXPERTISE_LEVELS = {"debutant", "intermediaire", "avance"}
+
+
+def _write_upload_exclusive(file_path: str, content: bytes) -> None:
+    """Écrit un upload sans jamais remplacer silencieusement un fichier."""
+    with open(file_path, "xb") as destination:
+        destination.write(content)
+
+
+def _remove_upload(file_path: str, upload_dir: str) -> None:
+    """Supprime le fichier temporaire puis son dossier de tâche s'il est vide."""
+    try:
+        os.remove(file_path)
+    except FileNotFoundError:
+        pass
+    try:
+        os.rmdir(upload_dir)
+    except (FileNotFoundError, OSError):
+        pass
+
+
+async def _run_admin_ingestion_task(
+    *,
+    job_id: uuid.UUID,
+    actor_id: uuid.UUID,
+    file_path: str,
+    docs_dir: str,
+    metier_id: int,
+    secteur_id: int,
+    type_document: str,
+    niveau_expertise: str,
+) -> None:
+    """Exécute l'ingestion et trace son résultat avec une session dédiée."""
+    action = "document.ingestion.completed"
+    after: dict[str, Any]
+    try:
+        result = await run_ingestion(
+            docs_dir=docs_dir,
+            metier_id=metier_id,
+            secteur_id=secteur_id,
+            type_document=type_document,
+            niveau_expertise=niveau_expertise,
+        )
+        errors = list(result.get("erreurs") or [])
+        if errors:
+            action = "document.ingestion.failed"
+            after = {"status": "failed", "errors": errors}
+            await asyncio.to_thread(_remove_upload, file_path, docs_dir)
+        else:
+            after = {
+                "status": "completed",
+                "processed_files": result.get("processed_files", 0),
+                "ingested_chunks": result.get("ingested_chunks", 0),
+            }
+    except Exception as exc:
+        logger.exception("Échec de l'ingestion admin %s", job_id)
+        action = "document.ingestion.failed"
+        after = {"status": "failed", "error": type(exc).__name__}
+        await asyncio.to_thread(_remove_upload, file_path, docs_dir)
+
+    try:
+        async with async_session() as session:
+            await audit_service.log_action(
+                session,
+                actor_id=actor_id,
+                action=action,
+                resource_type="document",
+                resource_id=str(job_id),
+                after=after,
+            )
+            await session.commit()
+    except Exception:
+        logger.exception("Échec de journalisation de l'ingestion admin %s", job_id)
 
 
 @router.post("/upload-pdf", status_code=status.HTTP_202_ACCEPTED)
 async def upload_pdf(
     background_tasks: BackgroundTasks,
+    request: Request,
     file: UploadFile = File(...),
-    metier_id: int = Form(1),
-    secteur_id: int = Form(1),
-    type_document: str = Form("guide_technique"),
-    niveau_expertise: str = Form("intermédiaire"),
+    metier_id: int = Form(..., gt=0),
+    secteur_id: int = Form(..., gt=0),
+    type_document: str = Form(...),
+    niveau_expertise: str = Form(...),
     admin_id: uuid.UUID = Depends(require_permission("documents.write")),
+    db: AsyncSession = Depends(get_db),
 ) -> dict[str, Any]:
     """Upload un document PDF technique et lance son ingestion vectorielle en
     arrière-plan (sécurisé admin). L'ingestion (extraction, découpage,
@@ -63,6 +146,31 @@ async def upload_pdf(
     /api/admin/documents une fois le traitement terminé.
     """
     allowed_exts = (".pdf", ".md", ".markdown", ".txt")
+    normalized_type = type_document.strip().lower()
+    normalized_level = niveau_expertise.strip().lower().replace("é", "e")
+    if normalized_type not in _ALLOWED_DOCUMENT_TYPES:
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
+            detail="Type de document non reconnu.",
+        )
+    if normalized_level not in _ALLOWED_EXPERTISE_LEVELS:
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
+            detail="Niveau d'expertise non reconnu.",
+        )
+
+    metier_result = await db.execute(select(Metier).where(Metier.id == metier_id))
+    if metier_result.scalar_one_or_none() is None:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Métier introuvable.",
+        )
+    secteur_result = await db.execute(select(Metier).where(Metier.id == secteur_id))
+    if secteur_result.scalar_one_or_none() is None:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Secteur introuvable.",
+        )
     # Nom réduit à sa dernière composante et limité à un jeu de caractères sûr :
     # un nom comme "../../app/main.py" écrirait sinon hors du dossier d'upload.
     safe_name = os.path.basename((file.filename or "").replace("\\", "/"))
@@ -78,8 +186,9 @@ async def upload_pdf(
             ),
         )
 
-    upload_dir = os.path.join(settings.upload_dir, "admin_docs")
-    os.makedirs(upload_dir, exist_ok=True)
+    job_id = uuid.uuid4()
+    upload_dir = os.path.join(settings.upload_dir, "admin_docs", str(job_id))
+    await asyncio.to_thread(os.makedirs, upload_dir, exist_ok=True)
     file_path = os.path.join(upload_dir, safe_name)
 
     content = await file.read(MAX_ADMIN_UPLOAD_BYTES + 1)
@@ -93,21 +202,55 @@ async def upload_pdf(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail="Le fichier envoyé est vide.",
         )
-    with open(file_path, "wb") as f:
-        f.write(content)
+    file_sha256 = hashlib.sha256(content).hexdigest()
+    try:
+        await asyncio.to_thread(_write_upload_exclusive, file_path, content)
+    except FileExistsError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail="Un fichier portant ce nom existe déjà pour cette ingestion.",
+        ) from exc
+
+    await audit_service.log_action(
+        db,
+        actor_id=admin_id,
+        action="document.ingestion.requested",
+        resource_type="document",
+        resource_id=str(job_id),
+        after={
+            "filename": safe_name,
+            "sha256": file_sha256,
+            "size_bytes": len(content),
+            "metier_id": metier_id,
+            "secteur_id": secteur_id,
+            "type_document": normalized_type,
+            "niveau_expertise": normalized_level,
+        },
+        request=request,
+    )
+    try:
+        await db.commit()
+    except Exception:
+        await asyncio.to_thread(_remove_upload, file_path, upload_dir)
+        raise
 
     background_tasks.add_task(
-        run_ingestion,
+        _run_admin_ingestion_task,
+        job_id=job_id,
+        actor_id=admin_id,
+        file_path=file_path,
         docs_dir=upload_dir,
         metier_id=metier_id,
         secteur_id=secteur_id,
-        type_document=type_document,
-        niveau_expertise=niveau_expertise,
+        type_document=normalized_type,
+        niveau_expertise=normalized_level,
     )
 
     return {
         "message": f"Fichier {safe_name} reçu : ingestion vectorielle lancée en arrière-plan.",
         "file_path": file_path,
+        "job_id": str(job_id),
+        "sha256": file_sha256,
         "status": "processing",
     }
 
@@ -117,7 +260,6 @@ async def get_ingestion_stats(
     admin_id: uuid.UUID = Depends(require_permission("documents.write")),
 ) -> dict[str, Any]:
     """Retourne les statistiques réelles de la base de connaissances Qdrant."""
-    total_chunks = 0
     try:
         from qdrant_client import AsyncQdrantClient
 
@@ -129,17 +271,16 @@ async def get_ingestion_stats(
             collection_name=settings.qdrant_collection
         )
         total_chunks = info.points_count
-    except Exception:
-        pass
+    except Exception as exc:
+        logger.exception("Statistiques Qdrant indisponibles.")
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail="Base vectorielle momentanément indisponible.",
+        ) from exc
 
     return {
         "collection": settings.qdrant_collection,
-        "metiers_coverts": [
-            {"metier_id": 1, "nom": "Bâtiment & Construction", "documents_ingeres": 12},
-            {"metier_id": 2, "nom": "Électricité & Énergie", "documents_ingeres": 8},
-            {"metier_id": 3, "nom": "Plomberie & Sanitaire", "documents_ingeres": 15},
-            {"metier_id": 4, "nom": "Mécanique & Automobile", "documents_ingeres": 6},
-        ],
+        "metiers_coverts": [],
         "total_chunks": total_chunks,
     }
 
@@ -151,14 +292,12 @@ async def get_documents_list(
 ) -> dict[str, Any]:
     """Retourne la liste des fiches et guides techniques ingérés dans Qdrant avec statut d'activation."""
     documents_map = {}
-    doc_configs = {}
-    try:
-        stmt = select(DocumentConfig)
-        res = await db.execute(stmt)
-        for cfg in res.scalars().all():
-            doc_configs[cfg.filename] = cfg.is_active
-    except Exception:
-        pass
+    stmt = select(DocumentConfig)
+    res = await db.execute(stmt)
+    doc_configs = {cfg.filename: cfg.is_active for cfg in res.scalars().all()}
+
+    metiers_res = await db.execute(select(Metier))
+    metier_names = {metier.id: metier.nom for metier in metiers_res.scalars().all()}
 
     try:
         from qdrant_client import AsyncQdrantClient
@@ -186,35 +325,19 @@ async def get_documents_list(
                     documents_map[doc_name] = {
                         "id": doc_name,  # Identifier par son nom de fichier
                         "filename": doc_name,
-                        "metier": "Bâtiment & Construction"
-                        if metier_id == 1
-                        else ("Électricité" if metier_id == 2 else "Autre"),
+                        "metier": metier_names.get(metier_id, f"Métier {metier_id}"),
                         "metier_id": metier_id,
                         "chunks_count": 0,
                         "date_ingestion": datetime.now(UTC).strftime("%Y-%m-%d"),
                         "is_active": doc_configs.get(doc_name, True),
                     }
                 documents_map[doc_name]["chunks_count"] += 1
-    except Exception:
-        pass
-
-    # Fallback de démo si Qdrant est vide
-    if not documents_map:
-        return {
-            "documents": [
-                {
-                    "id": "doc-01",
-                    "filename": "guide_dosage_beton_maconnerie.pdf",
-                    "metier": "Bâtiment & Construction",
-                    "metier_id": 1,
-                    "chunks_count": 18,
-                    "date_ingestion": "2026-08-10",
-                    "is_active": doc_configs.get(
-                        "guide_dosage_beton_maconnerie.pdf", True
-                    ),
-                }
-            ]
-        }
+    except Exception as exc:
+        logger.exception("Liste documentaire Qdrant indisponible.")
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail="Base vectorielle momentanément indisponible.",
+        ) from exc
 
     return {"documents": list(documents_map.values())}
 
