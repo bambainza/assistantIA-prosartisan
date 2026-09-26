@@ -105,7 +105,7 @@ async def test_admin_grant_pass(mock_db_with_admin, admin_user):
 
 
 @pytest.mark.asyncio
-async def test_admin_get_documents(mock_db_with_admin, admin_user):
+async def test_admin_get_documents(mock_db_with_admin, admin_user, admin_qdrant):
     """GET /api/admin/documents doit retourner la liste des documents avec un token admin."""
     app.dependency_overrides[get_db] = mock_db_with_admin
     token = create_access_token(data={"sub": str(admin_user.id)})
@@ -118,7 +118,7 @@ async def test_admin_get_documents(mock_db_with_admin, admin_user):
 
         assert response.status_code == 200
         data = response.json()
-        assert "documents" in data
+        assert data == {"documents": []}
     finally:
         app.dependency_overrides.pop(get_db, None)
 

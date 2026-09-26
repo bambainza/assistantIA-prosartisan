@@ -54,8 +54,18 @@ def mock_db_with_admin(admin_user):
 
 
 @pytest.mark.asyncio
-async def test_admin_get_documents_with_active_status(mock_db_with_admin, admin_user):
+async def test_admin_get_documents_with_active_status(
+    mock_db_with_admin, admin_user, admin_qdrant
+):
     """GET /api/admin/documents doit retourner is_active pour chaque document."""
+    admin_qdrant.points = [
+        MagicMock(
+            payload={
+                "document_name": "guide_test.md",
+                "metier_id": 1,
+            }
+        )
+    ]
     app.dependency_overrides[get_db] = mock_db_with_admin
     token = create_access_token(data={"sub": str(admin_user.id)})
     headers = {"Authorization": f"Bearer {token}"}

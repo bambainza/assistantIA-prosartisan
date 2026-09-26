@@ -47,7 +47,7 @@ async def test_admin_get_stats_unauthorized():
 
 
 @pytest.mark.asyncio
-async def test_admin_get_stats_success(mock_db_with_admin, admin_user):
+async def test_admin_get_stats_success(mock_db_with_admin, admin_user, admin_qdrant):
     """GET /api/admin/stats avec token admin valide doit retourner 200."""
     app.dependency_overrides[get_db] = mock_db_with_admin
     token = create_access_token(data={"sub": str(admin_user.id)})
@@ -61,7 +61,7 @@ async def test_admin_get_stats_success(mock_db_with_admin, admin_user):
         assert response.status_code == 200
         data = response.json()
         assert "collection" in data
-        assert "total_chunks" in data
+        assert data["total_chunks"] == 0
     finally:
         app.dependency_overrides.pop(get_db, None)
 
