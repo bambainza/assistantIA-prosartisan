@@ -344,12 +344,14 @@ async def run_ingestion(
             continue
 
         points: list[PointStruct] = []
+        indexed_at = datetime.now(UTC).isoformat()
         for idx, (chunk, vector) in enumerate(zip(chunks, vectors, strict=True)):
             payload = {
                 "text": chunk,
                 "document_name": filename,
                 "chunk_index": idx,
                 "sha256": file_sha,
+                "indexed_at": indexed_at,
                 **meta,
             }
             points.append(

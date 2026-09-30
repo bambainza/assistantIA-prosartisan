@@ -9,7 +9,12 @@ from httpx import ASGITransport, AsyncClient
 from app.db.session import get_db
 from app.main import app
 from app.middleware.auth import create_access_token
+from app.models.metier import Metier
 from app.models.user import User
+from app.routers.admin.contenus import (
+    _scroll_all_qdrant_points,
+    get_ingestion_stats,
+)
 
 
 @pytest.fixture
@@ -64,6 +69,49 @@ async def test_admin_get_stats_success(mock_db_with_admin, admin_user, admin_qdr
         assert data["total_chunks"] == 0
     finally:
         app.dependency_overrides.pop(get_db, None)
+
+
+@pytest.mark.asyncio
+async def test_stats_qdrant_agregent_documents_par_metier(admin_qdrant):
+    admin_qdrant.points = [
+        MagicMock(payload={"document_name": "a.md", "metier_id": 7}),
+        MagicMock(payload={"document_name": "a.md", "metier_id": 7}),
+        MagicMock(payload={"document_name": "b.md", "metier_id": 7}),
+    ]
+    admin_qdrant.points_count = 3
+    db = MagicMock()
+    metier = Metier(id=7, nom="Menuiserie", slug="menuiserie")
+    db.execute = AsyncMock(
+        return_value=MagicMock(
+            scalars=MagicMock(
+                return_value=MagicMock(all=MagicMock(return_value=[metier]))
+            )
+        )
+    )
+
+    data = await get_ingestion_stats(admin_id=uuid.uuid4(), db=db)
+
+    assert data["total_chunks"] == 3
+    assert data["metiers_coverts"] == [
+        {"metier_id": 7, "nom": "Menuiserie", "documents_ingeres": 2}
+    ]
+
+
+@pytest.mark.asyncio
+async def test_scroll_qdrant_parcourt_toutes_les_pages():
+    client = MagicMock()
+    client.scroll = AsyncMock(
+        side_effect=[
+            ([MagicMock(id=1)], "page-2"),
+            ([MagicMock(id=2)], None),
+        ]
+    )
+
+    points = await _scroll_all_qdrant_points(client)
+
+    assert [point.id for point in points] == [1, 2]
+    assert client.scroll.await_count == 2
+    assert client.scroll.await_args_list[1].kwargs["offset"] == "page-2"
 
 
 @pytest.mark.asyncio
