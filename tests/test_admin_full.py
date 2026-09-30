@@ -1,6 +1,7 @@
 """Tests complets pour les routes d'administration du Back-Office (avec authentification)."""
 
 import uuid
+from types import SimpleNamespace
 from unittest.mock import AsyncMock, MagicMock
 
 import pytest
@@ -10,6 +11,7 @@ from app.db.session import get_db
 from app.main import app
 from app.middleware.auth import create_access_token
 from app.models.user import User
+from app.routers.admin.utilisateurs import get_admin_overview
 
 
 @pytest.fixture
@@ -60,6 +62,43 @@ async def test_admin_get_overview(mock_db_with_admin, admin_user):
         assert "abonnements" in data
     finally:
         app.dependency_overrides.pop(get_db, None)
+
+
+@pytest.mark.asyncio
+async def test_admin_overview_calcule_activite_et_metiers_reels(admin_qdrant):
+    """Les DAU et métiers populaires proviennent des requêtes SQL, sans valeur factice."""
+    session = MagicMock()
+
+    def _scalar_result(value):
+        return MagicMock(scalar=MagicMock(return_value=value))
+
+    top_result = MagicMock()
+    top_result.all.return_value = [
+        SimpleNamespace(nom="Électricité", requetes=12),
+        SimpleNamespace(nom="Plomberie", requetes=7),
+    ]
+    session.execute = AsyncMock(
+        side_effect=[
+            _scalar_result(20),
+            _scalar_result(6),
+            _scalar_result(15000),
+            _scalar_result(42),
+            _scalar_result(14),
+            _scalar_result(4),
+            _scalar_result(2),
+            top_result,
+        ]
+    )
+
+    data = await get_admin_overview(admin_id=uuid.uuid4(), db=session)
+
+    assert data["kpis"]["total_artisans"] == 20
+    assert data["kpis"]["artisans_actifs_dau"] == 6
+    assert data["kpis"]["total_questions_rag"] == 42
+    assert data["metiers_top"] == [
+        {"nom": "Électricité", "requetes": 12},
+        {"nom": "Plomberie", "requetes": 7},
+    ]
 
 
 @pytest.mark.asyncio

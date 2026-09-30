@@ -22,6 +22,9 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.config import settings
 from app.db.session import get_db
 from app.middleware.auth import require_permission
+from app.models.conversation import Conversation
+from app.models.message import Message
+from app.models.metier import Metier
 from app.models.quota import QuotaUtilisateur
 from app.models.transaction import TransactionMobileMoney
 from app.models.user import User
@@ -47,8 +50,19 @@ async def get_admin_overview(
     res_total = await db.execute(stmt_total)
     total_artisans = res_total.scalar() or 0
 
-    # Artisans actifs connectés ces dernières 24 heures (ou au total)
-    stmt_active = select(func.count(User.id)).where(User.is_admin == False)
+    # Artisans ayant réellement posé au moins une question dans les dernières 24 h.
+    since = datetime.now(UTC) - timedelta(hours=24)
+    stmt_active = (
+        select(func.count(func.distinct(Conversation.user_id)))
+        .select_from(Message)
+        .join(Conversation, Message.conversation_id == Conversation.id)
+        .join(User, Conversation.user_id == User.id)
+        .where(
+            User.is_admin == False,
+            Message.role == "user",
+            Message.created_at >= since,
+        )
+    )
     res_active = await db.execute(stmt_active)
     artisans_actifs = res_active.scalar() or 0
 
@@ -60,8 +74,6 @@ async def get_admin_overview(
     ca = res_ca.scalar() or 0
 
     # Total questions
-    from app.models.message import Message
-
     stmt_questions = select(func.count(Message.id)).where(Message.role == "user")
     res_questions = await db.execute(stmt_questions)
     total_questions = res_questions.scalar() or 0
@@ -101,6 +113,22 @@ async def get_admin_overview(
     res_mois = await db.execute(stmt_mois)
     pass_mois_count = res_mois.scalar() or 0
 
+    stmt_metiers_top = (
+        select(Metier.nom, func.count(Message.id).label("requetes"))
+        .select_from(Message)
+        .join(Conversation, Message.conversation_id == Conversation.id)
+        .join(User, Conversation.user_id == User.id)
+        .join(Metier, User.metier_id == Metier.id)
+        .where(User.is_admin == False, Message.role == "user")
+        .group_by(Metier.id, Metier.nom)
+        .order_by(func.count(Message.id).desc(), Metier.nom.asc())
+        .limit(5)
+    )
+    res_metiers_top = await db.execute(stmt_metiers_top)
+    metiers_top = [
+        {"nom": row.nom, "requetes": row.requetes} for row in res_metiers_top.all()
+    ]
+
     return {
         "kpis": {
             "total_artisans": total_artisans,
@@ -114,7 +142,7 @@ async def get_admin_overview(
             "pass_24h": pass_24h_count,
             "pass_mois": pass_mois_count,
         },
-        "metiers_top": [],
+        "metiers_top": metiers_top,
     }
 
 

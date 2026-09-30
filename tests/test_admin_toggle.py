@@ -63,6 +63,7 @@ async def test_admin_get_documents_with_active_status(
             payload={
                 "document_name": "guide_test.md",
                 "metier_id": 1,
+                "indexed_at": "2026-09-26T12:00:00+00:00",
             }
         )
     ]
@@ -81,6 +82,7 @@ async def test_admin_get_documents_with_active_status(
         assert len(data["documents"]) > 0
         assert "is_active" in data["documents"][0]
         assert data["documents"][0]["is_active"] is True
+        assert data["documents"][0]["date_ingestion"] == "2026-09-26T12:00:00+00:00"
     finally:
         app.dependency_overrides.pop(get_db, None)
 
