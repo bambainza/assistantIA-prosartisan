@@ -72,6 +72,14 @@ _CONFIG_VERSION_TTL_SECONDS = 30 * 86400
 EMBEDDING_BATCH_SIZE = 16
 
 
+class RechercheIndisponibleError(RuntimeError):
+    """La recherche documentaire (embedding ou Qdrant) a échoué.
+
+    À distinguer d'une recherche aboutie sans résultat : seule cette dernière
+    autorise le message de repli « zéro hallucination ».
+    """
+
+
 def load_system_prompt() -> str:
     """Charge le modèle de prompt système."""
     if os.path.exists(PROMPT_PATH):
@@ -164,8 +172,9 @@ class RAGService:
         except Exception as exc:
             logger.warning(
                 "Qdrant indisponible, impossible de préparer la collection '%s' "
-                "(%s). Le RAG répondra par le message de repli standard tant "
-                "qu'aucun contexte ne peut être recherché.",
+                "(%s). Tant que la recherche reste impossible, les questions "
+                "reçoivent une erreur 503 et sont rendues (repli standard en "
+                "mode mock uniquement).",
                 settings.qdrant_collection,
                 exc,
             )
@@ -301,7 +310,12 @@ class RAGService:
         metier_id: int | None = None,
         top_k: int = 4,
     ) -> list[dict[str, Any]]:
-        """Recherche les passages pertinents dans Qdrant avec filtre optionnel par métier et exclusion des documents désactivés."""
+        """Recherche les passages pertinents dans Qdrant avec filtre optionnel par métier et exclusion des documents désactivés.
+
+        Une liste vide signifie « recherche aboutie, aucun extrait pertinent ».
+        Une panne (embedding Mistral, Qdrant) lève `RechercheIndisponibleError` :
+        elle ne doit jamais être confondue avec une absence d'information.
+        """
         try:
             vector = await self.get_embedding(query)
             query_filter = None
@@ -337,9 +351,10 @@ class RAGService:
                 if hit.score >= settings.rag_min_score
                 and (hit.payload or {}).get("document_name") not in inactive_docs
             ]
-        except Exception:
-            # Fallback gracieux si Qdrant n'est pas encore disponible
-            return []
+        except Exception as exc:
+            raise RechercheIndisponibleError(
+                f"Recherche documentaire impossible ({type(exc).__name__}: {exc})"
+            ) from exc
 
     # ── Préparation commune ──
 
@@ -405,7 +420,17 @@ class RAGService:
                     sources=cached.get("sources", []), immediate=cached["reponse"]
                 )
 
-        docs = await self.search_context(query=question, metier_id=metier_id)
+        try:
+            docs = await self.search_context(query=question, metier_id=metier_id)
+        except RechercheIndisponibleError as exc:
+            # Mode réel : la panne remonte au routeur (503 + question rendue).
+            # Répondre « pas d'information » serait faux, et le mettre en cache
+            # figerait cette fausse réponse pendant 24 h.
+            if not self._is_mock_mode():
+                raise
+            # Mode mock (dev/tests sans Qdrant) : repli servi, jamais mis en cache.
+            logger.warning("%s — repli servi sans mise en cache (mode mock).", exc)
+            return _Preparation(sources=[], immediate=FALLBACK_MESSAGE)
         sources = [doc["metadata"] for doc in docs if "metadata" in doc]
 
         # Garde-fou "zéro hallucination" (AGENTS.md §3) : sans photo à analyser
