@@ -2277,7 +2277,9 @@ function appendAssistantStreamingBubble() {
 // PWA : enregistrement depuis un fichier externe, compatible avec la CSP.
 if ('serviceWorker' in navigator) {
     window.addEventListener('load', () => {
-        navigator.serviceWorker.register('/chat/sw.js').catch(() => {});
+        navigator.serviceWorker.register('/chat/sw.js').then(reg => {
+            reg.update().catch(() => {});
+        }).catch(() => {});
     });
 }
 

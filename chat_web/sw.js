@@ -6,7 +6,7 @@
 // mises en cache ici : une réponse technique périmée servie hors-ligne
 // serait pire qu'une absence de réponse.
 
-const CACHE_NAME = 'prosartisan-shell-v1';
+const CACHE_NAME = 'prosartisan-shell-v2';
 const SHELL_ASSETS = [
   '/chat/',
   '/chat/styles.css',
@@ -23,11 +23,21 @@ self.addEventListener('install', (event) => {
 
 self.addEventListener('activate', (event) => {
   event.waitUntil(
-    caches.keys().then((keys) =>
-      Promise.all(keys.filter((k) => k !== CACHE_NAME).map((k) => caches.delete(k)))
-    )
+    (async () => {
+      const keys = await caches.keys();
+      const oldKeys = keys.filter((k) => k !== CACHE_NAME);
+      await Promise.all(oldKeys.map((k) => caches.delete(k)));
+      await self.clients.claim();
+      if (oldKeys.length > 0) {
+        const windowClients = await self.clients.matchAll({ type: 'window' });
+        await Promise.all(
+          windowClients.map((client) =>
+            typeof client.navigate === 'function' ? client.navigate(client.url) : null
+          )
+        );
+      }
+    })()
   );
-  self.clients.claim();
 });
 
 self.addEventListener('fetch', (event) => {
@@ -35,18 +45,24 @@ self.addEventListener('fetch', (event) => {
 
   // Ne jamais intercepter les appels API : toujours réseau, jamais de cache
   // périmé pour une réponse technique ou un état de quota/session.
-  if (url.pathname.startsWith('/api/')) {
+  if (url.pathname.startsWith('/api/') || event.request.method !== 'GET') {
     return;
   }
 
-  // Assets statiques du shell : cache d'abord, réseau en repli.
+  // Assets statiques du shell : réseau d'abord (mise à jour du cache),
+  // puis repli sur le cache en cas de coupure réseau (mode hors-ligne 3G/4G).
   event.respondWith(
-    caches.match(event.request).then((cached) => {
-      return (
-        cached ||
-        fetch(event.request).catch(() => caches.match('/chat/'))
-      );
-    })
+    fetch(event.request)
+      .then((response) => {
+        if (response && response.ok && url.origin === self.location.origin) {
+          const copy = response.clone();
+          caches.open(CACHE_NAME).then((cache) => cache.put(event.request, copy));
+        }
+        return response;
+      })
+      .catch(() =>
+        caches.match(event.request).then((cached) => cached || caches.match('/chat/'))
+      )
   );
 });
 
