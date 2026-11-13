@@ -506,6 +506,18 @@
                                     <div id="fin-par-operateur"><!-- Injected via JS --></div>
                                 </div>
                             </div>
+                            <div class="card mt-3">
+                                <div class="card-header">
+                                    <h4 class="card-title mb-0">Moyens de paiement actifs</h4>
+                                    <small class="text-muted">Opérateurs proposés aux utilisateurs dans le chat</small>
+                                </div>
+                                <div class="card-body p-0">
+                                    <table class="table table-sm mb-0 align-middle">
+                                        <caption class="visually-hidden">Activation des moyens de paiement</caption>
+                                        <tbody id="fin-payment-methods-tbody"><!-- Injected via JS --></tbody>
+                                    </table>
+                                </div>
+                            </div>
                         </div>
                         <div class="col-lg-8 mb-4">
                             <div class="card">
@@ -564,6 +576,7 @@
                                         <option value="">Tous les opérateurs</option>
                                         <option value="WAVE">WAVE</option>
                                         <option value="ORANGE">ORANGE</option>
+                                        <option value="CINETPAY">CINETPAY</option>
                                         <option value="MTN">MTN</option>
                                         <option value="MOOV">MOOV</option>
                                     </select>
@@ -1233,6 +1246,31 @@
                                                 </tr>
                                             </thead>
                                             <tbody id="categories-tbody"><!-- Injected via JS --></tbody>
+                                        </table>
+                                    </div>
+                                </div>
+                            </div>
+
+                            <div class="card mt-4">
+                                <div class="card-header d-flex justify-content-between align-items-center flex-wrap gap-2">
+                                    <div>
+                                        <h4 class="card-title mb-0">Moyens de paiement (Mobile Money &amp; CinetPay)</h4>
+                                        <small class="text-muted">Activez ou désactivez les opérateurs proposés aux artisans lors de l'achat d'un Pass (Wave, Orange Money, CinetPay).</small>
+                                    </div>
+                                </div>
+                                <div class="card-body">
+                                    <div class="table-responsive">
+                                        <table class="table table-sm mb-0">
+                                            <caption class="visually-hidden">Liste des moyens de paiement et leur statut d'activation</caption>
+                                            <thead class="table-light">
+                                                <tr>
+                                                    <th scope="col">Code</th>
+                                                    <th scope="col">Opérateur</th>
+                                                    <th scope="col">Statut</th>
+                                                    <th scope="col">Action</th>
+                                                </tr>
+                                            </thead>
+                                            <tbody id="payment-methods-tbody"><!-- Injected via JS --></tbody>
                                         </table>
                                     </div>
                                 </div>

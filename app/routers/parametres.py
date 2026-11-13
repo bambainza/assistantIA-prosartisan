@@ -27,6 +27,7 @@ from app.schemas.parametres import (
     MetierCreateRequest,
     MetierOut,
     MetierUpdateRequest,
+    PaymentMethodOut,
     SousMetierCreateRequest,
     SousMetierOut,
     SousMetierUpdateRequest,
@@ -402,3 +403,41 @@ async def delete_categorie(
     )
     await db.commit()
     return {"status": "success", "message": "Catégorie supprimée."}
+
+
+# ── Moyens de paiement (Wave, Orange Money, CinetPay) ────────────────────
+@router.get("/payment-methods", response_model=list[PaymentMethodOut])
+async def list_payment_methods(
+    admin_id: uuid.UUID = Depends(require_permission("parametres.read")),
+    db: AsyncSession = Depends(get_db),
+) -> Any:
+    """Liste des moyens de paiement (Wave, Orange Money, CinetPay) et leur état d'activation."""
+    return await parametres_service.list_payment_methods(db)
+
+
+@router.patch("/payment-methods/{code}/toggle", response_model=PaymentMethodOut)
+async def toggle_payment_method(
+    code: str,
+    request: Request,
+    admin_id: uuid.UUID = Depends(require_permission("parametres.write")),
+    db: AsyncSession = Depends(get_db),
+) -> Any:
+    """Active ou désactive un moyen de paiement (WAVE, ORANGE, CINETPAY)."""
+    method = await parametres_service.toggle_payment_method(db, code)
+    if method is None:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Moyen de paiement introuvable.",
+        )
+    await audit_service.log_action(
+        db,
+        actor_id=admin_id,
+        action="parametres.payment_method.toggle",
+        resource_type="payment_method",
+        resource_id=method.code,
+        after={"code": method.code, "is_active": method.is_active},
+        request=request,
+    )
+    await db.commit()
+    await db.refresh(method)
+    return method

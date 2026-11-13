@@ -126,8 +126,8 @@ Sur toutes les routes ci-dessous, l'identité de l'artisan est déduite du JWT (
 **Paiement Mobile Money** (`/api/payment`)
 
 - `GET /tarifs` : grille tarifaire des Pass et Packs.
-- `GET /tarifs` renvoie aussi `operateurs`, `mode` (`demo` / `live`) et `disponible`.
-- `POST /init` : `{type_pass, operateur: WAVE | ORANGE | CINETPAY}` (JWT requis). Enregistre la transaction `PENDING`, crée le paiement chez l'opérateur (ou le simulateur) et renvoie `payment_url`, `transaction_id`, `mode`. Aucune URL si la transaction n'a pas pu être enregistrée (`500`) ; opérateur injoignable ou démo désactivée en production → `503`. Retour de l'opérateur vers `/chat/?transaction=<id>&paiement=succes|echec`.
+- `GET /tarifs` renvoie aussi `operateurs` (liste des opérateurs actuellement activés dans le back-office : `WAVE`, `ORANGE`, `CINETPAY`), `mode` (`demo` / `live`) et `disponible`.
+- `POST /init` : `{type_pass, operateur: WAVE | ORANGE | CINETPAY}` (JWT requis). Vérifie que l'opérateur est activé (`503` s'il a été désactivé par un administrateur), enregistre la transaction `PENDING`, crée le paiement chez l'opérateur (ou le simulateur) et renvoie `payment_url`, `transaction_id`, `mode`. Aucune URL si la transaction n'a pas pu être enregistrée (`500`) ; opérateur injoignable, désactivé ou démo désactivée en production → `503`. Retour de l'opérateur vers `/chat/?transaction=<id>&paiement=succes|echec`.
 - `GET /transactions/{id}` : statut d'une transaction de l'appelant (`PENDING`, `ACCEPTED`, `FAILED`, `EXPIRED`, `REFUNDED`), filtré par propriétaire.
 - `POST /webhooks/wave` : webhook Wave Checkout, `Wave-Signature` obligatoire (`401` sinon, compteur de sécurité).
 - `POST /webhooks/orange-money` : notification Orange Money WebPay, `notif_token` connu obligatoire (`401` sinon), crédit seulement après confirmation `transactionstatus`.
@@ -158,6 +158,7 @@ Sur toutes les routes ci-dessous, l'identité de l'artisan est déduite du JWT (
 - **Sécurité** : `GET /security-stats` (permission `audit.read`) — actions admin des dernières 24h, tentatives de connexion échouées, webhooks rejetés et tokens révoqués (fenêtre glissante 30 jours).
 - **Actualités** (permissions `actualites.read`/`actualites.write`) : `GET/POST /actualites`, `PUT /actualites/{id}`, `POST /actualites/{id}/publish|unpublish`, `DELETE /actualites/{id}`, `GET /actualites/suggestions` (sujets suggérés à partir des conversations les plus mal notées).
 - **Notifications** (permission `notifications.send`) : `POST /notifications/broadcast` — composition et diffusion (in-app ou push) vers tous les artisans ou ceux d'un métier ciblé, exécutée en tâche de fond.
+- **Paramètres & Moyens de paiement** (`/api/admin/parametres`, permissions `parametres.read`/`parametres.write`) : CRUD des métiers, sous-métiers et catégories d'actualités, ainsi que `GET /payment-methods` et `PATCH /payment-methods/{code}/toggle` pour activer ou désactiver dynamiquement chaque moyen de paiement (`WAVE`, `ORANGE`, `CINETPAY`) avec traçabilité dans le journal d'audit (`parametres.payment_method.toggle`).
 
 ---
 

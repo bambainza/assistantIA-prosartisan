@@ -9,12 +9,14 @@
 
 let parametresMetiersCache = null;
 let parametresCategoriesCache = null;
+let parametresPaymentMethodsCache = null;
 
 async function loadParametresTab() {
     try {
-        const [metiersRes, categoriesRes] = await Promise.all([
+        const [metiersRes, categoriesRes, paymentMethodsRes] = await Promise.all([
             adminFetch('/api/admin/parametres/metiers'),
             adminFetch('/api/admin/parametres/actualite-categories'),
+            adminFetch('/api/admin/parametres/payment-methods'),
         ]);
 
         if (metiersRes.ok) {
@@ -36,6 +38,14 @@ async function loadParametresTab() {
         } else if (categoriesRes.status === 403) {
             const ct = document.getElementById('categories-tbody');
             if (ct) ct.innerHTML = '<tr><td colspan="4" class="text-muted">Votre rôle ne donne pas accès au module Paramètres.</td></tr>';
+        }
+
+        if (paymentMethodsRes.ok) {
+            parametresPaymentMethodsCache = await paymentMethodsRes.json();
+            renderPaymentMethodsTable(parametresPaymentMethodsCache);
+        } else if (paymentMethodsRes.status === 403) {
+            const pmt = document.getElementById('payment-methods-tbody');
+            if (pmt) pmt.innerHTML = '<tr><td colspan="4" class="text-muted">Votre rôle ne donne pas accès au module Paramètres.</td></tr>';
         }
     } catch (err) {
         console.error('Erreur chargement onglet Paramètres:', err);
@@ -385,3 +395,74 @@ window.deleteCategoriePrompt = async function(id) {
         alert('Erreur réseau');
     }
 };
+
+// --- Moyens de paiement (Wave, Orange Money, CinetPay) ---
+function renderPaymentMethodsTable(methods) {
+    const tbody = document.getElementById('payment-methods-tbody');
+    const finTbody = document.getElementById('fin-payment-methods-tbody');
+    const htmlRows = (!methods || methods.length === 0)
+        ? '<tr><td colspan="4" class="text-muted">Aucun moyen de paiement configuré.</td></tr>'
+        : methods.map(pm => `
+            <tr>
+                <td class="font-monospace small fw-semibold">${escapeHtml(pm.code)}</td>
+                <td>${escapeHtml(pm.label)}</td>
+                <td>${pm.is_active ? '<span class="badge bg-success-subtle text-success">Activé</span>' : '<span class="badge bg-secondary-subtle text-secondary">Désactivé</span>'}</td>
+                <td class="text-nowrap">
+                    <div class="form-check form-switch d-inline-block mb-0">
+                        <input class="form-check-input" type="checkbox" role="switch" id="switch-pm-${escapeHtml(pm.code)}" ${pm.is_active ? 'checked' : ''} onchange="togglePaymentMethodActive('${escapeHtml(pm.code)}')" aria-label="${pm.is_active ? 'Désactiver' : 'Activer'} ${escapeHtml(pm.label)}">
+                        <label class="form-check-label small" for="switch-pm-${escapeHtml(pm.code)}">${pm.is_active ? 'Actif' : 'Inactif'}</label>
+                    </div>
+                </td>
+            </tr>
+        `).join('');
+    if (tbody) tbody.innerHTML = htmlRows;
+    if (finTbody) {
+        finTbody.innerHTML = (!methods || methods.length === 0)
+            ? '<tr><td class="text-muted p-2">Aucun opérateur.</td></tr>'
+            : methods.map(pm => `
+                <tr>
+                    <td class="ps-3">
+                        <span class="fw-semibold">${escapeHtml(pm.label)}</span>
+                        <small class="text-muted font-monospace ms-1">(${escapeHtml(pm.code)})</small>
+                    </td>
+                    <td>${pm.is_active ? '<span class="badge bg-success-subtle text-success">Activé</span>' : '<span class="badge bg-secondary-subtle text-secondary">Désactivé</span>'}</td>
+                    <td class="text-end pe-3">
+                        <button type="button" class="btn btn-sm ${pm.is_active ? 'btn-outline-warning' : 'btn-outline-success'}" onclick="togglePaymentMethodActive('${escapeHtml(pm.code)}')" title="${pm.is_active ? 'Désactiver' : 'Activer'} ${escapeHtml(pm.label)}">
+                            ${pm.is_active ? 'Désactiver' : 'Activer'}
+                        </button>
+                    </td>
+                </tr>
+            `).join('');
+    }
+}
+
+window.loadPaymentMethodsAdmin = async function() {
+    try {
+        const res = await adminFetch('/api/admin/parametres/payment-methods');
+        if (res.ok) {
+            parametresPaymentMethodsCache = await res.json();
+            renderPaymentMethodsTable(parametresPaymentMethodsCache);
+        }
+    } catch (err) {
+        console.error('Erreur chargement moyens de paiement:', err);
+    }
+};
+
+window.togglePaymentMethodActive = async function(code) {
+    try {
+        const res = await adminFetch(`/api/admin/parametres/payment-methods/${encodeURIComponent(code)}/toggle`, {
+            method: 'PATCH',
+        });
+        const data = await res.json().catch(() => ({}));
+        if (res.ok) {
+            await window.loadPaymentMethodsAdmin();
+        } else {
+            alert(data.detail || 'Échec de la mise à jour du moyen de paiement.');
+            await window.loadPaymentMethodsAdmin();
+        }
+    } catch (e) {
+        alert('Erreur réseau');
+        await window.loadPaymentMethodsAdmin();
+    }
+};
+

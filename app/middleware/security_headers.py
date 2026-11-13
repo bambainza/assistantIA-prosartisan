@@ -61,6 +61,11 @@ class SecurityHeadersMiddleware(BaseHTTPMiddleware):
             else _CONTENT_SECURITY_POLICY
         )
 
+        if request.url.path.startswith(("/chat", "/admin")):
+            # Évite qu'un Service Worker ou un cache HTTP serve une ancienne coquille
+            # HTML/JS sans revalidation auprès du serveur.
+            response.headers.setdefault("Cache-Control", "no-cache")
+
         if settings.is_production:
             # HSTS n'a de sens que derrière HTTPS (systématique en production).
             response.headers["Strict-Transport-Security"] = (

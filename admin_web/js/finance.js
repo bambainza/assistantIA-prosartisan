@@ -34,6 +34,7 @@ async function loadFinanceTab() {
         loadFinanceOverview(),
         loadFinanceReport(),
         loadFinanceTransactions(),
+        typeof window.loadPaymentMethodsAdmin === 'function' ? window.loadPaymentMethodsAdmin() : Promise.resolve(),
     ]);
 }
 

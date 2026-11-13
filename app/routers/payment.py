@@ -40,6 +40,7 @@ from app.schemas.payment import (
     WebhookPayload,
 )
 from app.services.cache_service import cache_service
+from app.services.parametres_service import parametres_service
 from app.services.payment_providers.demo import (
     NotificationSimulee,
     charger_session,
@@ -79,13 +80,16 @@ async def _rejeter_webhook(detail: str) -> HTTPException:
 
 
 @router.get("/tarifs")
-async def get_tarifs() -> dict[str, Any]:
-    """Retourne la grille tarifaire des Pass et Packs ProsArtisan."""
+async def get_tarifs(
+    db: AsyncSession = Depends(get_db),
+) -> dict[str, Any]:
+    """Retourne la grille tarifaire des Pass et Packs ProsArtisan ainsi que les opérateurs actifs."""
+    operateurs_actifs = await parametres_service.list_active_payment_operators(db)
     return {
         "offres": TARIFS_PASS,
-        "operateurs": list(_NOMS_OPERATEURS),
+        "operateurs": operateurs_actifs,
         "mode": "demo" if settings.payment_demo_mode else "live",
-        "disponible": payment_service.paiement_disponible(),
+        "disponible": payment_service.paiement_disponible() and bool(operateurs_actifs),
     }
 
 

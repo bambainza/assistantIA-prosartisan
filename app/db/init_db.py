@@ -11,6 +11,7 @@ from app.models.actualite import ActualiteCategorie
 from app.models.base import Base
 from app.models.metier import Metier, SousMetier
 from app.models.package import Package
+from app.models.payment_method import PaymentMethodConfig
 from app.models.role import Permission, Role
 from app.models.user import User
 
@@ -444,6 +445,21 @@ async def seed_data() -> None:
             existing_cat = (await session.execute(cat_stmt)).scalar_one_or_none()
             if existing_cat is None:
                 session.add(ActualiteCategorie(code=code, label=label))
+        await session.commit()
+
+        # 1quater. Grainage des moyens de paiement (module Paramètres / Finance,
+        # idempotent par code) — Wave, Orange Money et CinetPay actifs par défaut.
+        for code, label in [
+            ("WAVE", "Wave"),
+            ("ORANGE", "Orange Money"),
+            ("CINETPAY", "CinetPay"),
+        ]:
+            pm_stmt = select(PaymentMethodConfig).where(
+                PaymentMethodConfig.code == code
+            )
+            existing_pm = (await session.execute(pm_stmt)).scalar_one_or_none()
+            if existing_pm is None:
+                session.add(PaymentMethodConfig(code=code, label=label, is_active=True))
         await session.commit()
 
         # 2. Grainage de l'administrateur par défaut

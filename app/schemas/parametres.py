@@ -123,3 +123,19 @@ class ActualiteCategorieUpdateRequest(BaseModel):
     pour ne pas invalider les actualités qui le référencent déjà)."""
 
     label: str = Field(..., min_length=2, max_length=100)
+
+
+class PaymentMethodOut(BaseModel):
+    """Configuration d'un moyen de paiement (Wave, Orange Money, CinetPay)."""
+
+    model_config = ConfigDict(from_attributes=True)
+
+    id: int
+    code: str
+    label: str
+    is_active: bool
+
+    @field_validator("is_active", mode="before")
+    @classmethod
+    def _default_is_active(cls, value: object) -> object:
+        return value if value is not None else True

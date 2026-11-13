@@ -6,7 +6,7 @@
 // mises en cache ici : une réponse technique périmée servie hors-ligne
 // serait pire qu'une absence de réponse.
 
-const CACHE_NAME = 'prosartisan-shell-v2';
+const CACHE_NAME = 'prosartisan-shell-v3';
 const SHELL_ASSETS = [
   '/chat/',
   '/chat/styles.css',
@@ -16,7 +16,15 @@ const SHELL_ASSETS = [
 
 self.addEventListener('install', (event) => {
   event.waitUntil(
-    caches.open(CACHE_NAME).then((cache) => cache.addAll(SHELL_ASSETS))
+    caches.open(CACHE_NAME).then((cache) =>
+      Promise.all(
+        SHELL_ASSETS.map((asset) =>
+          fetch(asset, { cache: 'reload' }).then((res) =>
+            res.ok ? cache.put(asset, res) : null
+          )
+        )
+      )
+    )
   );
   self.skipWaiting();
 });

@@ -34,6 +34,7 @@ from app.config import settings
 from app.models.quota import QuotaUtilisateur
 from app.models.transaction import TransactionMobileMoney
 from app.models.user import User
+from app.services.parametres_service import parametres_service
 from app.services.payment_providers import OPERATEURS, get_provider
 from app.services.payment_providers.base import (
     CheckoutRequest,
@@ -125,6 +126,10 @@ class PaymentService:
         if not self.paiement_disponible():
             raise PaiementIndisponibleError(
                 "Paiement Mobile Money bientôt disponible (intégration opérateur en cours)."
+            )
+        if not await parametres_service.is_payment_operator_active(db, operateur):
+            raise PaiementIndisponibleError(
+                f"Le moyen de paiement {operateur} est temporairement désactivé."
             )
 
         info_pass = TARIFS_PASS[type_pass]

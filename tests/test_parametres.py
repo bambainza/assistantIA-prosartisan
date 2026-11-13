@@ -20,6 +20,7 @@ from app.main import app
 from app.middleware.auth import create_access_token
 from app.models.actualite import ActualiteCategorie
 from app.models.metier import Metier
+from app.models.payment_method import PaymentMethodConfig
 from app.models.role import Permission, Role
 from app.models.user import User
 from tests.conftest import mock_get_db
@@ -276,5 +277,109 @@ async def test_delete_categorie_success(legacy_admin_user):
                 headers={"Authorization": f"Bearer {token}"},
             )
         assert res.status_code == 200
+    finally:
+        app.dependency_overrides[get_db] = mock_get_db
+
+
+@pytest.mark.asyncio
+async def test_list_payment_methods_bloque_sans_permission(restricted_admin_user):
+    """Un admin sans 'parametres.read' ne peut pas consulter la configuration des moyens de paiement."""
+    app.dependency_overrides[get_db] = _mock_db([("scalar", restricted_admin_user)])
+    token = create_access_token(data={"sub": str(restricted_admin_user.id)})
+    try:
+        transport = ASGITransport(app=app)
+        async with AsyncClient(transport=transport, base_url="http://test") as client:
+            res = await client.get(
+                "/api/admin/parametres/payment-methods",
+                headers={"Authorization": f"Bearer {token}"},
+            )
+        assert res.status_code == 403
+    finally:
+        app.dependency_overrides[get_db] = mock_get_db
+
+
+@pytest.mark.asyncio
+async def test_list_payment_methods_success(legacy_admin_user):
+    """Un admin autorisé récupère les 3 opérateurs (WAVE, ORANGE, CINETPAY)."""
+    methods = [
+        PaymentMethodConfig(id=1, code="WAVE", label="Wave", is_active=True),
+        PaymentMethodConfig(id=2, code="ORANGE", label="Orange Money", is_active=True),
+        PaymentMethodConfig(id=3, code="CINETPAY", label="CinetPay", is_active=False),
+    ]
+    app.dependency_overrides[get_db] = _mock_db(
+        [("scalar", legacy_admin_user), ("rows", methods)]
+    )
+    token = create_access_token(data={"sub": str(legacy_admin_user.id)})
+    try:
+        transport = ASGITransport(app=app)
+        async with AsyncClient(transport=transport, base_url="http://test") as client:
+            res = await client.get(
+                "/api/admin/parametres/payment-methods",
+                headers={"Authorization": f"Bearer {token}"},
+            )
+        assert res.status_code == 200
+        body = res.json()
+        assert [(m["code"], m["is_active"]) for m in body] == [
+            ("WAVE", True),
+            ("ORANGE", True),
+            ("CINETPAY", False),
+        ]
+    finally:
+        app.dependency_overrides[get_db] = mock_get_db
+
+
+@pytest.mark.asyncio
+async def test_toggle_payment_method_bloque_sans_permission(restricted_admin_user):
+    """Un admin sans 'parametres.write' ne peut pas activer/désactiver un moyen de paiement."""
+    app.dependency_overrides[get_db] = _mock_db([("scalar", restricted_admin_user)])
+    token = create_access_token(data={"sub": str(restricted_admin_user.id)})
+    try:
+        transport = ASGITransport(app=app)
+        async with AsyncClient(transport=transport, base_url="http://test") as client:
+            res = await client.patch(
+                "/api/admin/parametres/payment-methods/CINETPAY/toggle",
+                headers={"Authorization": f"Bearer {token}"},
+            )
+        assert res.status_code == 403
+    finally:
+        app.dependency_overrides[get_db] = mock_get_db
+
+
+@pytest.mark.asyncio
+async def test_toggle_payment_method_success_et_operateur_desactive_refuse_init(
+    legacy_admin_user,
+):
+    """Désactiver un opérateur en back-office le retire de /tarifs et bloque /init (503)."""
+    cinetpay_cfg = PaymentMethodConfig(
+        id=3, code="CINETPAY", label="CinetPay", is_active=True
+    )
+    app.dependency_overrides[get_db] = _mock_db(
+        [("scalar", legacy_admin_user), ("scalar", cinetpay_cfg)]
+    )
+    token = create_access_token(data={"sub": str(legacy_admin_user.id)})
+    try:
+        transport = ASGITransport(app=app)
+        async with AsyncClient(transport=transport, base_url="http://test") as client:
+            res = await client.patch(
+                "/api/admin/parametres/payment-methods/CINETPAY/toggle",
+                headers={"Authorization": f"Bearer {token}"},
+            )
+        assert res.status_code == 200
+        assert res.json()["is_active"] is False
+    finally:
+        app.dependency_overrides[get_db] = mock_get_db
+
+    # Une tentative d'initialisation sur un opérateur désactivé renvoie 503
+    app.dependency_overrides[get_db] = _mock_db([("scalar", cinetpay_cfg)])
+    try:
+        transport = ASGITransport(app=app)
+        async with AsyncClient(transport=transport, base_url="http://test") as client:
+            init_res = await client.post(
+                "/api/payment/init",
+                headers={"Authorization": f"Bearer {token}"},
+                json={"type_pass": "pass_24h", "operateur": "CINETPAY"},
+            )
+        assert init_res.status_code == 503
+        assert "désactivé" in init_res.json()["detail"]
     finally:
         app.dependency_overrides[get_db] = mock_get_db

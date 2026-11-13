@@ -2283,17 +2283,40 @@ if ('serviceWorker' in navigator) {
     });
 }
 
-// ── Paiement Mobile Money (Wave / Orange Money) ──
+// ── Paiement Mobile Money (Wave / Orange Money / CinetPay) ──
 // Parcours : POST /api/payment/init → redirection vers l'URL de l'opérateur
 // (simulateur en mode démo) → retour sur /chat/?transaction=…&paiement=… →
 // suivi de GET /api/payment/transactions/{id} jusqu'à la confirmation, qui
 // arrive par le webhook opérateur indépendamment du retour navigateur.
 let paywallTrigger = null;
 
+function ensurePaywallOperateurButtons(operateursDisponibles = ['WAVE', 'ORANGE', 'CINETPAY']) {
+    const group = document.querySelector('#paywall-modal .modal-form-group');
+    if (!group) return;
+    const labels = {
+        WAVE: 'Payer avec Wave',
+        ORANGE: 'Payer avec Orange Money',
+        CINETPAY: 'Payer avec CinetPay',
+    };
+    const activeSet = new Set(operateursDisponibles.map(op => String(op).toUpperCase()));
+    group.innerHTML = '';
+    ['WAVE', 'ORANGE', 'CINETPAY'].forEach((code) => {
+        if (!activeSet.has(code)) return;
+        const btn = document.createElement('button');
+        btn.type = 'button';
+        btn.className = 'btn btn-primary btn-block btn-lg paywall-pay-btn';
+        btn.dataset.operateur = code;
+        btn.textContent = labels[code];
+        btn.addEventListener('click', () => startPayment(code));
+        group.appendChild(btn);
+    });
+}
+
 async function openPaywallModal() {
     const modal = document.getElementById('paywall-modal');
     if (!modal) return;
     paywallTrigger = document.activeElement;
+    ensurePaywallOperateurButtons();
     modal.classList.remove('hidden');
     const hint = document.getElementById('paywall-mode-hint');
     if (hint) {
@@ -2302,10 +2325,16 @@ async function openPaywallModal() {
             const response = await fetch('/api/payment/tarifs');
             if (response.ok) {
                 const tarifs = await response.json();
-                if (!tarifs.disponible) {
-                    hint.textContent = "Paiement Mobile Money bientôt disponible.";
+                if (Array.isArray(tarifs.operateurs)) {
+                    ensurePaywallOperateurButtons(tarifs.operateurs);
+                }
+                if (!tarifs.disponible || (Array.isArray(tarifs.operateurs) && tarifs.operateurs.length === 0)) {
+                    hint.textContent = "Aucun moyen de paiement n'est actuellement activé.";
                 } else if (tarifs.mode === 'demo') {
-                    hint.textContent += " Mode démonstration : aucun montant ne sera débité.";
+                    const opsLabel = Array.isArray(tarifs.operateurs) && tarifs.operateurs.length > 0
+                        ? ` (${tarifs.operateurs.join(' / ')})`
+                        : '';
+                    hint.textContent += ` Mode démonstration${opsLabel} : aucun montant ne sera débité.`;
                 }
             }
         } catch (e) {
