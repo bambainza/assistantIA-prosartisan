@@ -4,7 +4,7 @@ Ce fichier guide Claude Code pour ce dépôt précis. **Il prévaut sur tout CLA
 
 ## Vue d'ensemble
 
-**ProsArtisan IA Expert** — assistant IA conversationnel (RAG) pour artisans du BTP et métiers d'art en Côte d'Ivoire (maçonnerie, électricité, plomberie, menuiserie, mécanique...). Multilingue (français + Nouchi, Dioula, Baoulé, Bété), multimodal (photos de chantier via la vision Mistral, vocal via Voxtral), monétisé en Mobile Money (Wave, Orange Money).
+**ProsArtisan IA Expert** — assistant IA conversationnel (RAG) pour artisans du BTP et métiers d'art en Côte d'Ivoire (maçonnerie, électricité, plomberie, menuiserie, mécanique...). Multilingue (français + Nouchi, Dioula, Baoulé, Bété), multimodal (photos de chantier via la vision Mistral, vocal via Voxtral), monétisé en Mobile Money (Wave, Orange Money, CinetPay).
 
 **Ce n'est pas un marketplace** (pas de clients/artisans/fournisseurs mis en relation, pas de J-Code, pas de séquestre) — c'est un copilot technique conversationnel avec freemium par quota de questions.
 
@@ -19,7 +19,7 @@ Documents de référence à consulter en priorité : `AGENTS.md` (règles d'ing�
 | Cache / quotas / rate-limit | Redis 7 (jamais d'état en mémoire par worker) |
 | Base vectorielle (RAG) | Qdrant, embeddings Mistral `mistral-embed` |
 | IA | Mistral Small / Medium (texte + vision), Voxtral (vocal STT/TTS) |
-| Paiement | Wave Business API, Orange Money API (webhooks signés HMAC SHA-256) |
+| Paiement | Wave Business API, Orange Money API, CinetPay v1 API (webhooks signés HMAC SHA-256 ou confirmés par API) |
 | Mobile | Flutter (`mobile_app_flutter/`, Android prioritaire) |
 | Web statique | `admin_web/` (back-office, template Dastone v2.1.0), `chat_web/` (front chat) |
 
@@ -72,7 +72,7 @@ Séparation stricte imposée : logique métier dans `app/services/`, jamais dans
 2. **Identité déduite du JWT, jamais du client** : aucun `user_id` n'est accepté depuis le corps/query/path d'une requête entrante — toujours `get_current_user_id` / `get_optional_user_id`. Seul un token `type=access` est accepté (refresh token en `Bearer` → `401`). Mode non connecté → aucun historique serveur (plus de compte anonyme partagé ; `/api/conversations` exige le JWT, `conversation_id` anonyme → `401`) ; quota anonyme compté par IP.
 2 bis. **Sessions navigateur** : `chat_web` passe par `/api/auth/web/*` et des cookies access/refresh `HttpOnly`; aucun JWT dans `localStorage`. Les mutations cookie exigent `X-CSRF-Token`, tandis que Flutter conserve le Bearer. Le Markdown LLM est assaini par liste blanche avant toute insertion DOM et la CSP du chat interdit les attributs de script inline.
 3. **Isolation par propriétaire (anti-IDOR)** : toute ressource retrouvée par ID opaque (conversation, transaction, document) doit être filtrée par `WHERE user_id = ...`.
-4. **Webhooks Mobile Money** : Wave → `Wave-Signature` (HMAC SHA-256 de `t + corps`, anti-rejeu) ; Orange Money → `notif_token` puis confirmation `transactionstatus` ; générique → `X-Signature`. Non authentifié → `401` systématique, jamais optionnel. Crédit unique (idempotent) et seulement si le montant confirmé = montant de la transaction. `PAYMENT_MODE=demo` (défaut) = simulateur fidèle des parcours officiels, désactivé en production sauf `PAYMENT_DEMO_IN_PRODUCTION=true`.
+4. **Webhooks Mobile Money** : Wave → `Wave-Signature` (HMAC SHA-256 de `t + corps`, anti-rejeu) ; Orange Money → `notif_token` puis confirmation `transactionstatus` ; CinetPay v1 → `notify_token` + `merchant_transaction_id` puis confirmation `GET /v1/payment/{merchant_transaction_id}` ; générique → `X-Signature`. Non authentifié → `401` systématique, jamais optionnel. Crédit unique (idempotent) et seulement si le montant confirmé = montant de la transaction. `PAYMENT_MODE=demo` (défaut) = simulateur fidèle des parcours officiels, désactivé en production sauf `PAYMENT_DEMO_IN_PRODUCTION=true`.
 5. **Garde-fous de démarrage en production** (`APP_ENV=production`) : refus de démarrer si `APP_SECRET_KEY`, `JWT_SECRET_KEY`, `MOBILE_MONEY_SECRET_KEY`, `DB_PASSWORD`, `VAPID_PRIVATE_KEY` sont à leur valeur par défaut, si `CORS_ALLOWED_ORIGINS=*`, ou si `APP_DEBUG=true`.
 6. **Jamais de secrets en dur** — tout passe par `app.config.settings` / `.env`. Le compte admin seed exige `ADMIN_PASSWORD` en prod (pas de valeur par défaut).
 7. **État partagé entre workers** (quotas, rate-limit) → Redis obligatoire, jamais un attribut de classe Python. Quota = Pass premium → compteur Redis journalier (`INCR` atomique) → crédits achetés (`credits_requetes`, décrément SQL atomique) ; Redis injoignable en prod → `503`. Réponse IA en échec après décompte → question rendue (`quota_service.restituer_quota`). `metier_id` jamais codé en dur dans un client (`GET /api/metiers`). IP cliente via `get_client_ip` (`TRUSTED_PROXY_HOPS`), jamais `request.client.host`.

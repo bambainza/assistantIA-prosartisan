@@ -118,6 +118,18 @@ class DemoOrangeMoneyProvider(_DemoProvider):
         )
 
 
+class DemoCinetPayProvider(_DemoProvider):
+    operateur = "CINETPAY"
+
+    async def create_checkout(self, request: CheckoutRequest) -> CheckoutSession:
+        payment_token = f"cp-{secrets.token_hex(12)}"
+        notif_token = secrets.token_hex(16)
+        url = await self._creer(request, payment_token, notif_token=notif_token)
+        return CheckoutSession(
+            session_id=payment_token, payment_url=url, notif_token=notif_token
+        )
+
+
 @dataclass(frozen=True)
 class NotificationSimulee:
     """Notification que l'opérateur réel enverrait, prête à être traitée."""
@@ -143,8 +155,15 @@ async def decision_du_payeur(
     statut = StatutOperateur.SUCCES if accepte else StatutOperateur.ECHEC
     state["statut"] = statut.value
     if accepte:
-        prefixe = "T_" if state["operateur"] == "WAVE" else "MP"
+        if state["operateur"] == "WAVE":
+            prefixe = "T_"
+        elif state["operateur"] == "CINETPAY":
+            prefixe = "CP"
+        else:
+            prefixe = "MP"
         state["transaction_id"] = f"{prefixe}{secrets.token_hex(6).upper()}"
+    elif state["operateur"] == "CINETPAY":
+        state["transaction_id"] = f"CP{secrets.token_hex(6).upper()}"
     await _enregistrer(session_id, state)
 
     redirect_url = state["success_url"] if accepte else state["error_url"]
@@ -172,6 +191,23 @@ async def decision_du_payeur(
             body=body,
             headers={WAVE_SIGNATURE_HEADER: f"t={timestamp},v1={signature}"},
             redirect_url=redirect_url,
+        )
+
+    if state["operateur"] == "CINETPAY":
+        body = json.dumps(
+            {
+                "notify_token": state["notif_token"],
+                "merchant_transaction_id": state["reference"],
+                "transaction_id": state["transaction_id"],
+                "user": {
+                    "name": "Artisan ProsArtisan",
+                    "email": "artisan@prosartisan.ci",
+                    "phone_number": "+2250700000000",
+                },
+            }
+        ).encode("utf-8")
+        return NotificationSimulee(
+            operateur="CINETPAY", body=body, headers={}, redirect_url=redirect_url
         )
 
     body = json.dumps(

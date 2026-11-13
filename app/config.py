@@ -151,6 +151,13 @@ class Settings(BaseSettings):
     # "OUV" en bac à sable, "XOF" en production.
     orange_currency: str = "OUV"
 
+    # CinetPay v1 API (https://docs.cinetpay.com)
+    cinetpay_api_base: str = "https://api.cinetpay.net"
+    cinetpay_api_key: str = ""
+    cinetpay_api_password: str = ""
+    cinetpay_currency: str = "XOF"
+    cinetpay_payment_method: str = ""
+
     @property
     def payment_demo_mode(self) -> bool:
         return self.payment_mode.lower() != "live"

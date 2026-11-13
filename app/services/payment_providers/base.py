@@ -1,4 +1,4 @@
-"""Contrat commun des fournisseurs de paiement Mobile Money (Wave, Orange Money)."""
+"""Contrat commun des fournisseurs de paiement Mobile Money (Wave, Orange Money, CinetPay)."""
 
 from __future__ import annotations
 
@@ -22,20 +22,29 @@ class StatutOperateur(StrEnum):
 class CheckoutRequest:
     """Demande de création d'un paiement auprès de l'opérateur."""
 
-    reference: str  # notre référence unique (`client_reference` / `order_id`)
+    reference: str  # notre référence unique (`client_reference` / `order_id` / `merchant_transaction_id`)
     montant: int  # FCFA, entier
     success_url: str
     error_url: str
     notif_url: str
+    designation: str = "Pass ProsArtisan"
+    client_email: str = "artisan@prosartisan.ci"
+    client_first_name: str = "Artisan"
+    client_last_name: str = "ProsArtisan"
+    client_phone_number: str | None = None
 
 
 @dataclass(frozen=True)
 class CheckoutSession:
     """Réponse de l'opérateur : où envoyer l'artisan pour payer."""
 
-    session_id: str  # Wave : id `cos-...` ; Orange Money : `pay_token`
-    payment_url: str  # Wave : `wave_launch_url` ; Orange Money : `payment_url`
-    notif_token: str | None = None  # Orange Money uniquement
+    session_id: str  # Wave : id `cos-...` ; Orange Money : `pay_token` ; CinetPay : `payment_token`
+    payment_url: (
+        str  # Wave : `wave_launch_url` ; Orange Money / CinetPay : `payment_url`
+    )
+    notif_token: str | None = (
+        None  # Orange Money (`notif_token`) / CinetPay (`notify_token`)
+    )
 
 
 @dataclass(frozen=True)

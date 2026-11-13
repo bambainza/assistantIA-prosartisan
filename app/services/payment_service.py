@@ -41,6 +41,7 @@ from app.services.payment_providers.base import (
     PaymentProviderError,
     StatutOperateur,
 )
+from app.services.payment_providers.cinetpay import parse_cinetpay_notification
 from app.services.payment_providers.orange_money import parse_orange_notification
 from app.services.payment_providers.wave import parse_wave_event, verify_wave_signature
 
@@ -72,6 +73,28 @@ def urls_de_retour(txn_id: uuid.UUID) -> tuple[str, str]:
     """URLs de retour transmises à l'opérateur (succès, échec/annulation)."""
     base = f"{settings.public_base_url}/chat/?transaction={txn_id}&paiement="
     return base + "succes", base + "echec"
+
+
+_URLS_WEBHOOK_OPERATEUR = {
+    "WAVE": "/api/payment/webhooks/wave",
+    "ORANGE": "/api/payment/webhooks/orange-money",
+    "CINETPAY": "/api/payment/webhooks/cinetpay",
+}
+
+
+def _decouper_nom_client(nom_complet: str | None) -> tuple[str, str]:
+    """Découpe un nom complet en (prénom, nom) d'au moins 2 caractères chacun (exigence CinetPay)."""
+    parties = [p for p in (nom_complet or "").strip().split() if p]
+    if not parties:
+        return "Artisan", "ProsArtisan"
+    if len(parties) == 1:
+        prenom = parties[0] if len(parties[0]) >= 2 else "Artisan"
+        return prenom, "ProsArtisan"
+    prenom = parties[0] if len(parties[0]) >= 2 else "Artisan"
+    nom = " ".join(parties[1:])
+    if len(nom) < 2:
+        nom = "ProsArtisan"
+    return prenom[:255], nom[:255]
 
 
 class PaymentService:
@@ -124,6 +147,21 @@ class PaymentService:
         await db.commit()
 
         success_url, error_url = urls_de_retour(txn.id)
+        notif_path = _URLS_WEBHOOK_OPERATEUR.get(
+            operateur, "/api/payment/webhooks/orange-money"
+        )
+        client_email = "artisan@prosartisan.ci"
+        client_first_name, client_last_name = "Artisan", "ProsArtisan"
+        client_phone: str | None = None
+        if operateur == "CINETPAY":
+            user_res = await db.execute(select(User).where(User.id == user_id))
+            user_obj = user_res.scalar_one_or_none()
+            if isinstance(user_obj, User):
+                if user_obj.email:
+                    client_email = user_obj.email
+                client_first_name, client_last_name = _decouper_nom_client(user_obj.nom)
+                client_phone = user_obj.telephone
+
         try:
             session = await get_provider(operateur).create_checkout(
                 CheckoutRequest(
@@ -131,7 +169,12 @@ class PaymentService:
                     montant=info_pass["montant"],
                     success_url=success_url,
                     error_url=error_url,
-                    notif_url=f"{settings.public_base_url}/api/payment/webhooks/orange-money",
+                    notif_url=f"{settings.public_base_url}{notif_path}",
+                    designation=info_pass["nom"],
+                    client_email=client_email,
+                    client_first_name=client_first_name,
+                    client_last_name=client_last_name,
+                    client_phone_number=client_phone,
                 )
             )
         except PaymentProviderError as exc:
@@ -319,6 +362,54 @@ class PaymentService:
                 txn.reference_externe,
                 notification.statut,
                 etat.statut,
+            )
+        return await self._appliquer_etat(db, txn, etat)
+
+    async def handle_cinetpay_notification(
+        self, db: AsyncSession, raw_body: bytes
+    ) -> dict[str, Any]:
+        """Notification CinetPay v1 : `notify_token` obligatoire, puis confirmation `GET /v1/payment/{id}`.
+
+        Le payload CinetPay ne contient pas de statut signé et ne doit jamais
+        servir de source de vérité : après validation en temps constant du
+        `notify_token` et de `merchant_transaction_id`, l'état canonique est
+        interrogé auprès de l'API CinetPay (`fetch_status`) avant tout crédit.
+        """
+        try:
+            notification = parse_cinetpay_notification(raw_body)
+        except ValueError as exc:
+            raise WebhookNonAuthentifieError("Notification CinetPay invalide") from exc
+
+        res = await db.execute(
+            select(TransactionMobileMoney).where(
+                TransactionMobileMoney.provider_notif_token
+                == notification.notify_token,
+                TransactionMobileMoney.operateur == "CINETPAY",
+            )
+        )
+        txn = res.scalar_one_or_none()
+        if (
+            txn is None
+            or not hmac.compare_digest(
+                txn.provider_notif_token or "", notification.notify_token
+            )
+            or txn.reference_externe != notification.merchant_transaction_id
+        ):
+            raise WebhookNonAuthentifieError(
+                "notify_token ou merchant_transaction_id CinetPay inconnu"
+            )
+
+        try:
+            etat = await get_provider("CINETPAY").fetch_status(txn)
+        except PaymentProviderError as exc:
+            logger.warning("Confirmation CinetPay impossible : %s", exc)
+            return {"status": "pending", "message": "Confirmation opérateur en attente"}
+
+        if etat.transaction_id is None and notification.transaction_id:
+            etat = EtatPaiement(
+                statut=etat.statut,
+                transaction_id=notification.transaction_id,
+                montant=etat.montant,
             )
         return await self._appliquer_etat(db, txn, etat)
 

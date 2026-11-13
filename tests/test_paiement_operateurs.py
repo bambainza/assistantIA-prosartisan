@@ -17,7 +17,7 @@ from app.middleware.auth import create_access_token
 from app.models.quota import QuotaUtilisateur
 from app.models.transaction import TransactionMobileMoney
 from app.routers import payment as payment_router
-from app.services.payment_providers import demo, orange_money, wave
+from app.services.payment_providers import cinetpay, demo, orange_money, wave
 from app.services.payment_providers.base import CheckoutRequest, StatutOperateur
 from app.services.payment_service import (
     WebhookNonAuthentifieError,
@@ -223,6 +223,93 @@ async def test_orange_money_notification_forgee_non_confirmee_non_creditee():
     assert _quota_cree(db) is None
 
 
+# ── Parcours démo et sécurité CinetPay v1 ──
+
+
+@pytest.mark.asyncio
+async def test_demo_cinetpay_parcours_complet_credite_le_pass():
+    _, txn = await _initier("CINETPAY", "pass_24h")
+    assert txn.provider_session_id.startswith("cp-")
+    assert txn.provider_notif_token
+
+    notification = await demo.decision_du_payeur(txn.provider_session_id, True)
+    corps = json.loads(notification.body)
+    assert corps["notify_token"] == txn.provider_notif_token
+    assert corps["merchant_transaction_id"] == txn.reference_externe
+    assert corps["transaction_id"].startswith("CP")
+
+    db = FakeDB(txn, None)
+    resultat = await payment_service.handle_cinetpay_notification(db, notification.body)
+
+    assert resultat["status"] == "success"
+    assert txn.statut_paiement == "ACCEPTED"
+    assert txn.provider_transaction_id == corps["transaction_id"]
+    assert _quota_cree(db).date_fin_premium is not None
+
+
+@pytest.mark.asyncio
+async def test_cinetpay_notify_token_inconnu_ou_merchant_id_falsifie_rejete():
+    _, txn = await _initier("CINETPAY")
+    # 1. Mauvais notify_token
+    body_faux_token = json.dumps(
+        {
+            "notify_token": "faux_token",
+            "merchant_transaction_id": txn.reference_externe,
+            "transaction_id": "CP123",
+        }
+    ).encode()
+    with pytest.raises(WebhookNonAuthentifieError):
+        await payment_service.handle_cinetpay_notification(
+            FakeDB(None), body_faux_token
+        )
+
+    # 2. Bon notify_token mais merchant_transaction_id falsifié
+    body_faux_ref = json.dumps(
+        {
+            "notify_token": txn.provider_notif_token,
+            "merchant_transaction_id": "REF-AUTRE",
+            "transaction_id": "CP123",
+        }
+    ).encode()
+    with pytest.raises(WebhookNonAuthentifieError):
+        await payment_service.handle_cinetpay_notification(FakeDB(txn), body_faux_ref)
+
+
+@pytest.mark.asyncio
+async def test_cinetpay_notification_forgee_sans_paiement_reel_non_creditee():
+    """Un attaquant envoie status=SUCCESS dans le webhook : le serveur appelle fetch_status (PENDING) et ne crédite pas."""
+    _, txn = await _initier("CINETPAY")
+    body = json.dumps(
+        {
+            "status": "SUCCESS",
+            "notify_token": txn.provider_notif_token,
+            "merchant_transaction_id": txn.reference_externe,
+            "transaction_id": "CP_FAKE",
+        }
+    ).encode()
+
+    db = FakeDB(txn)
+    resultat = await payment_service.handle_cinetpay_notification(db, body)
+
+    assert resultat["status"] == "pending"
+    assert txn.statut_paiement == "PENDING"
+    assert _quota_cree(db) is None
+
+
+@pytest.mark.asyncio
+async def test_routes_webhook_cinetpay_get_probe_et_post_non_authentifie():
+    transport = ASGITransport(app=app)
+    async with AsyncClient(transport=transport, base_url="http://test") as client:
+        probe = await client.get("/api/payment/webhooks/cinetpay")
+        post_invalide = await client.post(
+            "/api/payment/webhooks/cinetpay", content=b'{"transaction_id":"test-123"}'
+        )
+
+    assert probe.status_code == 200
+    assert probe.json() == {"status": "ok"}
+    assert post_invalide.status_code == 401
+
+
 # ── Routes du simulateur ──
 
 
@@ -395,6 +482,101 @@ async def test_client_orange_money_live_format_officiel(monkeypatch):
         "pay_token": "v1pt",
     }
     assert etat.statut is StatutOperateur.SUCCES and etat.transaction_id == "MP42"
+
+
+@pytest.mark.asyncio
+async def test_client_cinetpay_live_format_officiel(monkeypatch):
+    monkeypatch.setattr(settings, "cinetpay_api_key", "cp_key")
+    monkeypatch.setattr(settings, "cinetpay_api_password", "cp_pwd")
+    requetes = []
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        requetes.append(request)
+        if request.url.path == "/v1/oauth/login":
+            return httpx.Response(
+                200, json={"access_token": "cp_jwt_tok", "expires_in": 3600}
+            )
+        if request.method == "POST" and request.url.path == "/v1/payment":
+            return httpx.Response(
+                200,
+                json={
+                    "code": 200,
+                    "status": "OK",
+                    "merchant_transaction_id": "REF-3",
+                    "notify_token": "cp_nt_123",
+                    "transaction_id": "cp_tx_456",
+                    "payment_token": "cp_pt_789",
+                    "payment_url": "https://secure.cinetpay.net/payment/cp_pt_789",
+                },
+            )
+        return httpx.Response(
+            200,
+            json={
+                "code": 100,
+                "status": "SUCCESS",
+                "merchant_transaction_id": "REF-3",
+                "transaction_id": "cp_tx_456",
+                "amount": 3000,
+                "currency": "XOF",
+            },
+        )
+
+    _transport_simule(monkeypatch, cinetpay, handler)
+    provider = cinetpay.CinetPayLiveProvider()
+    session = await provider.create_checkout(
+        CheckoutRequest(
+            "REF-3",
+            3000,
+            "https://s",
+            "https://e",
+            "https://n",
+            designation="Pass Mensuel Pro",
+            client_email="koffi@prosartisan.ci",
+            client_first_name="Koffi",
+            client_last_name="Kouassi",
+            client_phone_number="+2250707000000",
+        )
+    )
+    txn = TransactionMobileMoney(
+        provider_session_id="cp_pt_789",
+        reference_externe="REF-3",
+        montant=3000,
+    )
+    etat = await provider.fetch_status(txn)
+
+    login_req, pay_req, status_req = requetes
+    assert json.loads(login_req.content) == {
+        "api_key": "cp_key",
+        "api_password": "cp_pwd",
+    }
+    assert pay_req.headers["Authorization"] == "Bearer cp_jwt_tok"
+    assert json.loads(pay_req.content) == {
+        "currency": "XOF",
+        "merchant_transaction_id": "REF-3",
+        "amount": 3000,
+        "lang": "fr",
+        "designation": "Pass Mensuel Pro",
+        "client_email": "koffi@prosartisan.ci",
+        "client_first_name": "Koffi",
+        "client_last_name": "Kouassi",
+        "client_phone_number": "+2250707000000",
+        "direct_pay": False,
+        "success_url": "https://s",
+        "failed_url": "https://e",
+        "notify_url": "https://n",
+    }
+    assert (session.session_id, session.notif_token, session.payment_url) == (
+        "cp_pt_789",
+        "cp_nt_123",
+        "https://secure.cinetpay.net/payment/cp_pt_789",
+    )
+    assert status_req.method == "GET"
+    assert status_req.url.path == "/v1/payment/REF-3"
+    assert (
+        etat.statut is StatutOperateur.SUCCES
+        and etat.transaction_id == "cp_tx_456"
+        and etat.montant == 3000
+    )
 
 
 # ── Réconciliation, suivi, configuration ──
