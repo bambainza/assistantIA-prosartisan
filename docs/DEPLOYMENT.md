@@ -112,10 +112,10 @@ Le projet est configuré avec 2 workflows GitHub Actions dans `.github/workflows
 
 - **`cd.yml` (Déploiement Continu)** :
   - Déclenché lors d'un `push` sur la branche `main` ou de la publication d'un tag `v*`.
-  - Construit et publie l'image multi-architecture vers `ghcr.io`.
-  - Déclenche le webhook de déploiement sécurisé (secret `DEPLOY_WEBHOOK_URL` ; une réponse HTTP en erreur fait échouer le job).
-  - Valide automatiquement la disponibilité de l'application via le sonde de disponibilité `/api/ready` (secret `PROD_URL`).
-  - Sans ces secrets, le job reste vert mais affiche un avertissement (« Aucun déploiement » / « Vérification de santé ignorée ») et le signale dans le résumé du run : seule l'image est publiée.
+  - Construit et publie l'image vers `ghcr.io` après réussite de la CI.
+  - Si `ENABLE_REMOTE_DEPLOY=true`, déclenche le webhook de déploiement sécurisé (secret `DEPLOY_WEBHOOK_URL` ; une réponse HTTP en erreur fait échouer le job).
+  - Lorsque le mode distant est activé, vérifie la disponibilité et la révision via `/api/ready` (secret `PROD_URL`).
+  - Par défaut, le job distant est ignoré : seule l’image est publiée après validation CI. Si `ENABLE_REMOTE_DEPLOY=true`, les deux secrets sont obligatoires et leur absence fait échouer le job.
 
 Au démarrage, le conteneur applique `alembic upgrade head` (désactivable avec `RUN_MIGRATIONS=false`) ; **un échec de migration arrête le conteneur** au lieu de servir l'API sur un schéma en retard — consulter ses logs en cas de redémarrages en boucle.
 
@@ -140,7 +140,14 @@ Le CD exécute le workflow CI complet pour le commit livré avant de publier l'i
 
 Les anciens refresh tokens sans `jti` sont refusés après mise à jour : les utilisateurs concernés se reconnectent. Aucune migration ORM supplémentaire n'est nécessaire pour ce lot. Avant livraison, vérifier `alembic upgrade head`, `alembic check`, les tests Python avec `RUN_SHARED_BACKEND_TESTS=1`, Ruff et les tests/analyse Flutter.
 
-Le job de déploiement exige `DEPLOY_WEBHOOK_URL` et `PROD_URL` avant de déclencher le webhook ; une cible absente fait échouer le job.
+Le job de déploiement distant est désactivé par défaut. Il ne s’exécute que si la variable de dépôt GitHub Actions `ENABLE_REMOTE_DEPLOY` vaut exactement `true`. Une fois activé, il exige `DEPLOY_WEBHOOK_URL` et `PROD_URL` avant de déclencher le webhook ; une cible absente fait échouer ce job.
 
 
 Les scripts `.sh` sont conservés en LF via `.gitattributes`. Le build Docker normalise aussi `docker-entrypoint.sh` avant de le rendre exécutable : un shebang CRLF provoquerait `exec ./docker-entrypoint.sh: no such file or directory` sous Linux. Après ce correctif, reconstruire avec `docker compose -f docker-compose.prod.yml up -d --build --force-recreate app`.
+
+
+## Mode courant : Docker local et registre GitHub
+
+Conserver `ENABLE_REMOTE_DEPLOY` absent ou à `false` dans les variables GitHub Actions du dépôt. Aucun webhook ni hébergeur distant n'est requis : GitHub valide le commit et publie l'image, puis le job cloud apparaît ignoré. Les variables GitHub Actions sont distinctes du `.env` conservé sur l'ordinateur.
+
+Après publication réussie : `docker compose -f docker-compose.prod.yml pull app`, puis `docker compose -f docker-compose.prod.yml up -d --no-build --force-recreate app`. Vérifier ensuite `/api/ready` depuis le conteneur. Les données restent dans les volumes Docker locaux. Une simple relance de l'ancien workflow utilise encore l'ancien commit ; pousser le correctif pour déclencher le nouveau comportement.

@@ -131,3 +131,16 @@ Tests Redis réels : sélectionner le backend via `REDIS_HOST`, `REDIS_PORT`, `R
 
 
 Les scripts `.sh` sont conservés en LF via `.gitattributes`. Le build Docker normalise aussi `docker-entrypoint.sh` avant de le rendre exécutable : un shebang CRLF provoquerait `exec ./docker-entrypoint.sh: no such file or directory` sous Linux. Après ce correctif, reconstruire avec `docker compose -f docker-compose.prod.yml up -d --build --force-recreate app`.
+
+
+### Docker local et GitHub
+
+Le workflow CD publie l'image sur GHCR après réussite de la CI. Le déploiement distant est ignoré par défaut ; `DEPLOY_WEBHOOK_URL` et `PROD_URL` ne sont pas nécessaires pour ce mode. Pour activer un hébergeur distant ultérieurement, définir la variable de dépôt GitHub Actions `ENABLE_REMOTE_DEPLOY=true` puis renseigner les deux secrets. Cette variable ne se place pas dans `.env`.
+
+Après réussite de la publication GitHub, mettre à jour Docker local avec :
+
+```powershell
+docker compose -f docker-compose.prod.yml pull app
+docker compose -f docker-compose.prod.yml up -d --no-build --force-recreate app
+docker compose -f docker-compose.prod.yml exec app curl -fsS http://localhost:8000/api/ready
+```

@@ -206,3 +206,8 @@ Validation : tests de régression sur TOTP Google, liaison de compte, rejeu conc
 
 
 Les scripts `.sh` sont conservés en LF via `.gitattributes`. Le build Docker normalise aussi `docker-entrypoint.sh` avant de le rendre exécutable : un shebang CRLF provoquerait `exec ./docker-entrypoint.sh: no such file or directory` sous Linux. Après ce correctif, reconstruire avec `docker compose -f docker-compose.prod.yml up -d --build --force-recreate app`.
+
+
+### Mode de livraison retenu : Docker local + GitHub
+
+GitHub Actions valide le code puis publie l'image sur GHCR. Le job de déploiement distant est désactivé par défaut : il exige la variable de dépôt GitHub Actions `ENABLE_REMOTE_DEPLOY=true`, en plus de la branche/tag autorisé. Une variable absente ou différente de `true` ignore ce job sans échec ; aucun secret de déploiement distant n'est alors requis. Si le mode distant est explicitement activé, `DEPLOY_WEBHOOK_URL` et `PROD_URL` restent obligatoires et la révision déployée est vérifiée. `ENABLE_REMOTE_DEPLOY` est une variable GitHub, pas une variable du `.env` applicatif. Docker local se met à jour manuellement après publication de l'image.

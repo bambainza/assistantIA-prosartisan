@@ -105,3 +105,5 @@ Côte d'Ivoire, français + langues locales, FCFA (entiers, jamais de décimales
 - La publication et le déploiement dépendent de la CI complète du même commit. Le webhook reçoit l'image par digest et la révision ; le contrôle final exige cette révision via `/api/ready` (`BUILD_SHA` intégré à l'image).
 
 - Les scripts shell exécutés dans les conteneurs Linux utilisent LF (`*.sh text eol=lf` dans `.gitattributes`) ; le build normalise également le script de démarrage avant exécution.
+
+- En mode Docker local + GitHub, la CI publie l’image sur GHCR et le déploiement distant est ignoré par défaut. Seule la variable de dépôt GitHub Actions `ENABLE_REMOTE_DEPLOY=true` active ce dernier ; ses secrets et son contrôle de révision restent obligatoires lorsqu’il est activé.
