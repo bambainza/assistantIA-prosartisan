@@ -68,10 +68,11 @@ def _isoler_cache():
 @pytest.fixture(autouse=True)
 def _isoler_services_externes(monkeypatch):
     """Garantit que la suite de tests s'exécute de façon autonome et déterministe
-    en mode mock pour les APIs IA externes (Mistral LLM, Voxtral STT/TTS)."""
+    en mode mock pour les APIs IA externes (Mistral LLM, Google Gemini, Voxtral STT/TTS)."""
     from app.config import settings
 
     monkeypatch.setattr(settings, "mistral_api_key", "sk-placeholder-test")
+    monkeypatch.setattr(settings, "gemini_api_key", "AIza-placeholder-test")
 
 
 @pytest.fixture(autouse=True)

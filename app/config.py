@@ -95,7 +95,14 @@ class Settings(BaseSettings):
     # plutôt que de laisser le LLM broder sur un contexte hors sujet.
     rag_min_score: float = 0.15
 
-    # ── LLM (Mistral) & Vision / Audio ──
+    # ── LLM (Mistral & Google Gemini) & Vision / Audio ──
+    # Stratégie de routage IA : "auto" (sélectionne la ressource la plus stable et
+    # disponible), "mistral" (Mistral prioritaire) ou "gemini" (Gemini prioritaire).
+    llm_provider: str = "auto"
+    llm_failover_enabled: bool = True
+    llm_circuit_breaker_threshold: int = 3
+    llm_circuit_breaker_cooldown_seconds: int = 120
+
     mistral_api_key: str = "sk-placeholder"
     google_client_id: str = ""
     llm_model: str = "mistral-small-latest"
@@ -113,6 +120,25 @@ class Settings(BaseSettings):
     tts_voice_id: str | None = "5a271406-039d-46fe-835b-fbbb00eaf08d"
     llm_temperature: float = 0.2
     embedding_model: str = "mistral-embed"
+
+    # Configuration Google Gemini (Interactions API v1beta — gemini-3.8-flash par défaut)
+    gemini_api_key: str = "AIza-placeholder"
+    gemini_base_url: str = "https://generativelanguage.googleapis.com/v1beta"
+    gemini_model: str = "gemini-3.8-flash"
+    gemini_vision_model: str = "gemini-3.8-flash"
+    gemini_stt_model: str = "gemini-3.5-transcribe"
+    gemini_thinking_level: str = "low"
+    gemini_timeout_seconds: float = 45.0
+
+    @property
+    def gemini_api_base_url(self) -> str:
+        """Retourne l'URL de base `/v1beta` pour Google AI Studio ou un proxy (ex. Cloudflare AI Gateway)."""
+        base = (
+            self.gemini_base_url or "https://generativelanguage.googleapis.com/v1beta"
+        ).rstrip("/")
+        if base.endswith(("/v1beta", "/v1")):
+            return base
+        return f"{base}/v1beta"
 
     # ── Stockage Fichiers ──
     upload_dir: str = "./uploads"

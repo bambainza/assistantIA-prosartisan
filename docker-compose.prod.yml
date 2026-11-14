@@ -55,7 +55,12 @@ services:
       - REDIS_PASSWORD=${REDIS_PASSWORD}
       - QDRANT_HOST=qdrant
       - QDRANT_PORT=6333
-      - MISTRAL_API_KEY=${MISTRAL_API_KEY}
+      - MISTRAL_API_KEY=${MISTRAL_API_KEY:-}
+      - GEMINI_API_KEY=${GEMINI_API_KEY:-}
+      - GEMINI_BASE_URL=${GEMINI_BASE_URL:-https://generativelanguage.googleapis.com/v1beta}
+      - GEMINI_MODEL=${GEMINI_MODEL:-gemini-3.8-flash}
+      - LLM_PROVIDER=${LLM_PROVIDER:-auto}
+      - LLM_FAILOVER_ENABLED=${LLM_FAILOVER_ENABLED:-true}
       - GOOGLE_CLIENT_ID=${GOOGLE_CLIENT_ID}
     volumes:
       # Photos de chantier et PDF téléversés : sans volume, perdus à chaque redéploiement.

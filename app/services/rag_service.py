@@ -14,9 +14,13 @@ jamais offrir moins de garanties que l'autre.
 from __future__ import annotations
 
 import asyncio
+import copy
 import json
 import logging
 import os
+import re
+import time
+import unicodedata
 from collections.abc import AsyncIterator
 from dataclasses import dataclass, field
 from typing import Any
@@ -34,6 +38,12 @@ from qdrant_client.http.models import (
 from app.config import settings
 from app.services.cache_service import cache_service
 from app.services.calculator_service import calculator_service
+from app.services.llm_provider_service import (
+    PROVIDER_GEMINI,
+    PROVIDER_MISTRAL,
+    LLMToolCall,
+    llm_provider_service,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -142,8 +152,13 @@ class RAGService:
 
     @staticmethod
     def _is_mock_mode() -> bool:
-        """Mode mock (dev/tests) : aucune clé Mistral valide configurée."""
-        return settings.mistral_api_key.startswith("sk-placeholder")
+        """Mode mock (dev/tests) : ni Mistral ni Gemini n'ont de clé API valide configurée."""
+        return not llm_provider_service.is_any_provider_configured()
+
+    @staticmethod
+    def _is_embedding_mock_mode() -> bool:
+        """Mode mock pour les embeddings (mistral-embed)."""
+        return not llm_provider_service.is_provider_configured(PROVIDER_MISTRAL)
 
     async def ensure_collection(self) -> None:
         """Crée la collection Qdrant si elle n'existe pas encore (idempotent).
@@ -200,7 +215,7 @@ class RAGService:
         for start in range(0, len(missing), EMBEDDING_BATCH_SIZE):
             batch_idx = missing[start : start + EMBEDDING_BATCH_SIZE]
             batch_texts = [texts[i] for i in batch_idx]
-            if self._is_mock_mode():
+            if self._is_embedding_mock_mode():
                 vectors = [[0.0] * settings.qdrant_vector_size for _ in batch_texts]
             else:
                 response = await self.mistral_client.embeddings.create_async(
@@ -339,7 +354,7 @@ class RAGService:
 
             inactive_docs = await self.get_inactive_document_names()
 
-            return [
+            hits = [
                 {
                     "content": hit.payload.get("text", "") if hit.payload else "",
                     "metadata": hit.payload or {},
@@ -351,10 +366,106 @@ class RAGService:
                 if hit.score >= settings.rag_min_score
                 and (hit.payload or {}).get("document_name") not in inactive_docs
             ]
+
+            if not hits and self._is_embedding_mock_mode() and not self._is_mock_mode():
+                hits = await self._lexical_search_qdrant(
+                    query=query,
+                    query_filter=query_filter,
+                    inactive_docs=inactive_docs,
+                    top_k=top_k,
+                )
+
+            return hits
         except Exception as exc:
             raise RechercheIndisponibleError(
                 f"Recherche documentaire impossible ({type(exc).__name__}: {exc})"
             ) from exc
+
+    @staticmethod
+    def _tokenize_search_text(text: str) -> set[str]:
+        """Normalise et découpe un texte en mots-clés significatifs (>= 3 lettres, sans accents)."""
+        stop_words = {
+            "les",
+            "des",
+            "une",
+            "pour",
+            "dans",
+            "sur",
+            "avec",
+            "par",
+            "est",
+            "son",
+            "ses",
+            "aux",
+            "quel",
+            "quelle",
+            "quels",
+            "quelles",
+            "comment",
+            "cote",
+            "ivoire",
+            "mon",
+            "ton",
+            "nos",
+            "vos",
+            "que",
+            "qui",
+            "quoi",
+        }
+        normalized = (
+            unicodedata.normalize("NFKD", text.lower())
+            .encode("ascii", "ignore")
+            .decode("ascii")
+        )
+        words = re.findall(r"[a-z0-9]{3,}", normalized)
+        return {w for w in words if w not in stop_words}
+
+    async def _lexical_search_qdrant(
+        self,
+        *,
+        query: str,
+        query_filter: Filter | None,
+        inactive_docs: set[str],
+        top_k: int,
+    ) -> list[dict[str, Any]]:
+        """Recherche lexicale de secours dans Qdrant lorsque seul Gemini est configuré (sans clé `mistral-embed`)."""
+        query_tokens = self._tokenize_search_text(query)
+        if not query_tokens:
+            return []
+
+        points, _ = await self.qdrant_client.scroll(
+            collection_name=settings.qdrant_collection,
+            scroll_filter=query_filter,
+            limit=500,
+            with_payload=True,
+            with_vectors=False,
+        )
+
+        scored: list[dict[str, Any]] = []
+        for pt in points:
+            payload = pt.payload or {}
+            doc_name = payload.get("document_name")
+            if doc_name in inactive_docs:
+                continue
+            text = str(payload.get("text", ""))
+            if not text:
+                continue
+            doc_tokens = self._tokenize_search_text(text)
+            overlap = query_tokens & doc_tokens
+            if not overlap:
+                continue
+            score = len(overlap) / max(1, len(query_tokens))
+            if score >= settings.rag_min_score:
+                scored.append(
+                    {
+                        "content": text,
+                        "metadata": payload,
+                        "score": round(score, 4),
+                    }
+                )
+
+        scored.sort(key=lambda item: float(item["score"]), reverse=True)
+        return scored[:top_k]
 
     # ── Préparation commune ──
 
@@ -514,29 +625,19 @@ class RAGService:
                 }
             )
 
-    # ── Réponse complète ──
+    # ── Réponse complète (Mistral & Gemini avec bascule automatique) ──
 
-    async def generate_response(
+    async def _complete_with_mistral(
         self,
-        question: str,
-        metier_id: int | None = None,
-        image_url: str | None = None,
-        history: list[dict[str, str]] | None = None,
-    ) -> dict[str, Any]:
-        """Génère une réponse multimodale (texte + vision si image fournie)."""
-        prep = await self._prepare(question, metier_id, image_url, history)
-        if prep.immediate is not None:
-            return {"reponse": prep.immediate, "sources": prep.sources}
-
-        if self._is_mock_mode():
-            answer = _mock_reply(metier_id)
-            await self._cache_if_needed(prep, question, metier_id, answer)
-            return {"reponse": answer, "sources": prep.sources}
-
+        model: str,
+        messages: list[dict[str, Any]],
+        tools: list[dict[str, Any]] | None,
+    ) -> str:
+        """Exécute la complétion non-streamée via Mistral (avec tour d'outils éventuel)."""
         completion = await self.mistral_client.chat.complete_async(
-            model=prep.model,
-            messages=prep.messages,
-            tools=prep.tools,
+            model=model,
+            messages=messages,
+            tools=tools,
             temperature=settings.llm_temperature,
         )
         choice = completion.choices[0]
@@ -553,22 +654,107 @@ class RAGService:
                 )
                 for i, tc in enumerate(raw_tool_calls)
             ]
-            self._append_tool_turn(
-                prep.messages, tool_calls, choice.message.content or ""
-            )
+            self._append_tool_turn(messages, tool_calls, choice.message.content or "")
             completion2 = await self.mistral_client.chat.complete_async(
-                model=prep.model,
-                messages=prep.messages,
+                model=model,
+                messages=messages,
                 temperature=settings.llm_temperature,
             )
-            answer = completion2.choices[0].message.content or ""
-        else:
-            answer = choice.message.content or ""
+            return completion2.choices[0].message.content or ""
 
-        await self._cache_if_needed(prep, question, metier_id, answer)
-        return {"reponse": answer, "sources": prep.sources}
+        return choice.message.content or ""
 
-    # ── Streaming ──
+    async def _complete_with_gemini(
+        self,
+        messages: list[dict[str, Any]],
+        tools: list[dict[str, Any]] | None,
+        is_vision: bool,
+    ) -> str:
+        """Exécute la complétion non-streamée via Google Gemini Interactions API."""
+        result = await llm_provider_service.complete_gemini(
+            messages=messages,
+            tools=tools,
+            is_vision=is_vision,
+        )
+        if result.tool_calls:
+            tool_calls = [
+                _ToolCall(
+                    id=tc.id,
+                    name=tc.name,
+                    arguments=tc.arguments,
+                )
+                for tc in result.tool_calls
+            ]
+            self._append_tool_turn(messages, tool_calls, result.content)
+            result2 = await llm_provider_service.complete_gemini(
+                messages=messages,
+                tools=None,
+                is_vision=is_vision,
+            )
+            return result2.content
+
+        return result.content
+
+    async def generate_response(
+        self,
+        question: str,
+        metier_id: int | None = None,
+        image_url: str | None = None,
+        history: list[dict[str, str]] | None = None,
+    ) -> dict[str, Any]:
+        """Génère une réponse multimodale (texte + vision) avec bascule Mistral <-> Gemini."""
+        prep = await self._prepare(question, metier_id, image_url, history)
+        if prep.immediate is not None:
+            return {"reponse": prep.immediate, "sources": prep.sources}
+
+        if self._is_mock_mode():
+            answer = _mock_reply(metier_id)
+            await self._cache_if_needed(prep, question, metier_id, answer)
+            return {"reponse": answer, "sources": prep.sources}
+
+        candidates = await llm_provider_service.get_candidate_providers()
+        if not candidates:
+            candidates = [PROVIDER_MISTRAL]
+
+        last_exc: Exception | None = None
+        for idx, provider in enumerate(candidates):
+            messages_copy = copy.deepcopy(prep.messages)
+            t0 = time.perf_counter()
+            try:
+                if provider == PROVIDER_GEMINI:
+                    answer = await self._complete_with_gemini(
+                        messages=messages_copy,
+                        tools=prep.tools,
+                        is_vision=bool(image_url),
+                    )
+                else:
+                    answer = await self._complete_with_mistral(
+                        model=prep.model,
+                        messages=messages_copy,
+                        tools=prep.tools,
+                    )
+                latency_ms = (time.perf_counter() - t0) * 1000.0
+                await llm_provider_service.record_success(provider, latency_ms)
+                await self._cache_if_needed(prep, question, metier_id, answer)
+                return {"reponse": answer, "sources": prep.sources}
+            except Exception as exc:
+                last_exc = exc
+                await llm_provider_service.record_failure(provider, exc)
+                if idx + 1 < len(candidates):
+                    logger.warning(
+                        "Échec du fournisseur LLM '%s' (%s) — bascule automatique vers '%s'.",
+                        provider,
+                        exc,
+                        candidates[idx + 1],
+                    )
+                    continue
+                raise
+
+        if last_exc is not None:
+            raise last_exc
+        raise RuntimeError("Aucun fournisseur LLM disponible.")
+
+    # ── Streaming (Mistral & Gemini avec bascule automatique) ──
 
     async def generate_response_stream(
         self,
@@ -580,9 +766,8 @@ class RAGService:
         """Prépare la réponse puis retourne les sources et le générateur du flux.
 
         Mêmes garanties que `generate_response` : métier suspendu, cache,
-        repli zéro hallucination et calculateurs (les appels d'outil sont
-        reconstitués depuis le flux, exécutés, puis la réponse finale est
-        streamée). La réponse complète est mise en cache en fin de flux.
+        repli zéro hallucination, calculateurs et bascule automatique entre
+        Mistral et Gemini. La réponse complète est mise en cache en fin de flux.
         """
         prep = await self._prepare(question, metier_id, image_url, history)
 
@@ -604,23 +789,69 @@ class RAGService:
                 await self._cache_if_needed(prep, question, metier_id, answer)
                 return
 
-            parts: list[str] = []
-            tool_calls: list[_ToolCall] = []
-            async for chunk in self._stream_completion(
-                prep.model, prep.messages, prep.tools, tool_calls
-            ):
-                parts.append(chunk)
-                yield chunk
+            candidates = await llm_provider_service.get_candidate_providers()
+            if not candidates:
+                candidates = [PROVIDER_MISTRAL]
 
-            if tool_calls:
-                self._append_tool_turn(prep.messages, tool_calls, "".join(parts))
-                async for chunk in self._stream_completion(
-                    prep.model, prep.messages, None, []
-                ):
-                    parts.append(chunk)
-                    yield chunk
+            for idx, provider in enumerate(candidates):
+                messages_copy = copy.deepcopy(prep.messages)
+                parts: list[str] = []
+                tool_calls: list[_ToolCall] = []
+                t0 = time.perf_counter()
+                try:
+                    stream_gen = (
+                        self._stream_completion_gemini(
+                            messages_copy,
+                            prep.tools,
+                            tool_calls,
+                            is_vision=bool(image_url),
+                        )
+                        if provider == PROVIDER_GEMINI
+                        else self._stream_completion(
+                            prep.model, messages_copy, prep.tools, tool_calls
+                        )
+                    )
+                    async for chunk in stream_gen:
+                        parts.append(chunk)
+                        yield chunk
 
-            await self._cache_if_needed(prep, question, metier_id, "".join(parts))
+                    if tool_calls:
+                        self._append_tool_turn(
+                            messages_copy, tool_calls, "".join(parts)
+                        )
+                        stream_gen2 = (
+                            self._stream_completion_gemini(
+                                messages_copy,
+                                None,
+                                [],
+                                is_vision=bool(image_url),
+                            )
+                            if provider == PROVIDER_GEMINI
+                            else self._stream_completion(
+                                prep.model, messages_copy, None, []
+                            )
+                        )
+                        async for chunk in stream_gen2:
+                            parts.append(chunk)
+                            yield chunk
+
+                    latency_ms = (time.perf_counter() - t0) * 1000.0
+                    await llm_provider_service.record_success(provider, latency_ms)
+                    await self._cache_if_needed(
+                        prep, question, metier_id, "".join(parts)
+                    )
+                    return
+                except Exception as exc:
+                    await llm_provider_service.record_failure(provider, exc)
+                    if idx + 1 < len(candidates) and not parts:
+                        logger.warning(
+                            "Échec streaming LLM '%s' (%s) — bascule automatique vers '%s'.",
+                            provider,
+                            exc,
+                            candidates[idx + 1],
+                        )
+                        continue
+                    raise
 
         return prep.sources, _generator()
 
@@ -631,11 +862,7 @@ class RAGService:
         tools: list[dict[str, Any]] | None,
         tool_calls_out: list[_ToolCall],
     ) -> AsyncIterator[str]:
-        """Streame le texte d'une complétion et collecte ses éventuels appels d'outil.
-
-        Les fragments d'appel d'outil arrivent dans `delta.tool_calls` ; ils
-        sont regroupés par `index` (arguments concaténés) dans `tool_calls_out`.
-        """
+        """Streame le texte d'une complétion Mistral et collecte ses éventuels appels d'outil."""
         kwargs: dict[str, Any] = {
             "model": model,
             "messages": messages,
@@ -668,6 +895,28 @@ class RAGService:
                 yield content
 
         tool_calls_out.extend(pending[i] for i in sorted(pending))
+
+    async def _stream_completion_gemini(
+        self,
+        messages: list[dict[str, Any]],
+        tools: list[dict[str, Any]] | None,
+        tool_calls_out: list[_ToolCall],
+        is_vision: bool = False,
+    ) -> AsyncIterator[str]:
+        """Streame le texte d'une complétion Google Gemini et collecte ses éventuels appels d'outil."""
+        gemini_tools_out: list[LLMToolCall] = []
+        async for chunk in llm_provider_service.stream_gemini(
+            messages=messages,
+            tools=tools,
+            tool_calls_out=gemini_tools_out,
+            is_vision=is_vision,
+        ):
+            yield chunk
+
+        for tc in gemini_tools_out:
+            tool_calls_out.append(
+                _ToolCall(id=tc.id, name=tc.name, arguments=tc.arguments)
+            )
 
 
 rag_service = RAGService()

@@ -24,6 +24,8 @@ from app.schemas.parametres import (
     ActualiteCategorieCreateRequest,
     ActualiteCategorieOut,
     ActualiteCategorieUpdateRequest,
+    LLMRoutingConfigOut,
+    LLMRoutingUpdateRequest,
     MetierCreateRequest,
     MetierOut,
     MetierUpdateRequest,
@@ -33,6 +35,7 @@ from app.schemas.parametres import (
     SousMetierUpdateRequest,
 )
 from app.services.audit_service import audit_service
+from app.services.llm_provider_service import llm_provider_service
 from app.services.parametres_service import parametres_service
 from app.services.rag_service import rag_service
 
@@ -441,3 +444,59 @@ async def toggle_payment_method(
     await db.commit()
     await db.refresh(method)
     return method
+
+
+# ── Fournisseurs IA / LLM (Mistral AI & Google Gemini) ───────────────────
+@router.get("/llm-providers", response_model=LLMRoutingConfigOut)
+async def get_llm_providers(
+    admin_id: uuid.UUID = Depends(require_permission("parametres.read")),
+) -> Any:
+    """Retourne l'état de disponibilité, le score de stabilité et le mode de bascule Mistral / Gemini."""
+    return await llm_provider_service.get_dashboard_summary()
+
+
+@router.put("/llm-providers", response_model=LLMRoutingConfigOut)
+async def update_llm_providers(
+    payload: LLMRoutingUpdateRequest,
+    request: Request,
+    admin_id: uuid.UUID = Depends(require_permission("parametres.write")),
+    db: AsyncSession = Depends(get_db),
+) -> Any:
+    """Met à jour la stratégie de routage IA (`auto`, `mistral`, `gemini`) et l'option de failover."""
+    mode, failover = await llm_provider_service.set_routing_config(
+        mode=payload.mode,
+        failover_enabled=payload.failover_enabled,
+    )
+    await audit_service.log_action(
+        db,
+        actor_id=admin_id,
+        action="parametres.llm_provider.update",
+        resource_type="llm_provider",
+        resource_id=mode,
+        after={"mode": mode, "failover_enabled": failover},
+        request=request,
+    )
+    await db.commit()
+    return await llm_provider_service.get_dashboard_summary()
+
+
+@router.post("/llm-providers/reset-health", response_model=LLMRoutingConfigOut)
+async def reset_llm_providers_health(
+    request: Request,
+    provider: str | None = None,
+    admin_id: uuid.UUID = Depends(require_permission("parametres.write")),
+    db: AsyncSession = Depends(get_db),
+) -> Any:
+    """Réinitialise le coupe-circuit et les compteurs d'échecs des fournisseurs IA."""
+    await llm_provider_service.reset_health(provider)
+    await audit_service.log_action(
+        db,
+        actor_id=admin_id,
+        action="parametres.llm_provider.reset_health",
+        resource_type="llm_provider",
+        resource_id=(provider or "all").lower(),
+        after={"reset": (provider or "all").lower()},
+        request=request,
+    )
+    await db.commit()
+    return await llm_provider_service.get_dashboard_summary()

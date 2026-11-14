@@ -101,7 +101,7 @@ Les photos de chantier sont stockées dans `UPLOAD_DIR/chat_images/` (volume per
 
 **Ingestion documentaire admin** : l'upload exige les quatre métadonnées sémantiques (`metier_id`, `secteur_id`, `type_document`, `niveau_expertise`) et contrôle le métier et le secteur dans le référentiel. Le fichier est écrit sans écrasement dans un dossier isolé par tâche, puis ingéré en arrière-plan. La demande et son résultat sont audités avec un `job_id`; un fichier en échec est supprimé.
 
-**Données du back-office** : les listes vides restent vides et ne sont jamais remplacées par des artisans, documents ou statistiques de démonstration. Les routes documentaires renvoient `503` lorsque Qdrant est indisponible. Les journaux d'audit enregistrent l'IP cliente résolue selon `TRUSTED_PROXY_HOPS`.
+**Données du back-office & Bascule IA (Mistral / Gemini)** : les listes vides restent vides et ne sont jamais remplacées par des artisans, documents ou statistiques de démonstration. Les routes documentaires renvoient `503` lorsque Qdrant est indisponible. Les journaux d'audit enregistrent l'IP cliente résolue selon `TRUSTED_PROXY_HOPS`. L'onglet Paramètres du back-office (`/api/admin/parametres/llm-providers`) permet de superviser la stabilité de **Mistral AI** et **Google Gemini** (`gemini-3.8-flash`) et de basculer entre le mode `auto` (sélection automatique de la ressource la plus stable et disponible avec coupe-circuit) ou un fournisseur prioritaire (`mistral` / `gemini`).
 
 ## 📝 Documentation de référence
 

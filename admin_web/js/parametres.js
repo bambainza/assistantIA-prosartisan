@@ -10,13 +10,15 @@
 let parametresMetiersCache = null;
 let parametresCategoriesCache = null;
 let parametresPaymentMethodsCache = null;
+let parametresLLMProvidersCache = null;
 
 async function loadParametresTab() {
     try {
-        const [metiersRes, categoriesRes, paymentMethodsRes] = await Promise.all([
+        const [metiersRes, categoriesRes, paymentMethodsRes, llmProvidersRes] = await Promise.all([
             adminFetch('/api/admin/parametres/metiers'),
             adminFetch('/api/admin/parametres/actualite-categories'),
             adminFetch('/api/admin/parametres/payment-methods'),
+            adminFetch('/api/admin/parametres/llm-providers'),
         ]);
 
         if (metiersRes.ok) {
@@ -46,6 +48,14 @@ async function loadParametresTab() {
         } else if (paymentMethodsRes.status === 403) {
             const pmt = document.getElementById('payment-methods-tbody');
             if (pmt) pmt.innerHTML = '<tr><td colspan="4" class="text-muted">Votre rôle ne donne pas accès au module Paramètres.</td></tr>';
+        }
+
+        if (llmProvidersRes.ok) {
+            parametresLLMProvidersCache = await llmProvidersRes.json();
+            renderLLMProvidersPanel(parametresLLMProvidersCache);
+        } else if (llmProvidersRes.status === 403) {
+            const llmt = document.getElementById('llm-providers-tbody');
+            if (llmt) llmt.innerHTML = '<tr><td colspan="5" class="text-muted">Votre rôle ne donne pas accès au module Paramètres.</td></tr>';
         }
     } catch (err) {
         console.error('Erreur chargement onglet Paramètres:', err);
@@ -463,6 +473,143 @@ window.togglePaymentMethodActive = async function(code) {
     } catch (e) {
         alert('Erreur réseau');
         await window.loadPaymentMethodsAdmin();
+    }
+};
+
+// --- Fournisseurs IA / LLM (Mistral AI & Google Gemini) ---
+function renderLLMProvidersPanel(summary) {
+    if (!summary) return;
+    const modeSelect = document.getElementById('llm-routing-mode-select');
+    const failoverSwitch = document.getElementById('llm-failover-switch');
+    const activeBadge = document.getElementById('llm-active-provider-badge');
+    const tbody = document.getElementById('llm-providers-tbody');
+
+    if (modeSelect && summary.mode) {
+        modeSelect.value = summary.mode;
+    }
+    if (failoverSwitch && typeof summary.failover_enabled === 'boolean') {
+        failoverSwitch.checked = summary.failover_enabled;
+    }
+    if (activeBadge) {
+        activeBadge.textContent = summary.active_provider || 'MOCK';
+    }
+    if (!tbody) return;
+
+    const providers = summary.providers || [];
+    if (providers.length === 0) {
+        tbody.innerHTML = '<tr><td colspan="5" class="text-muted">Aucun fournisseur IA configuré.</td></tr>';
+        return;
+    }
+
+    const statusBadge = function(p) {
+        if (p.status === 'healthy') {
+            return '<span class="badge bg-success-subtle text-success">Opérationnel</span>';
+        }
+        if (p.status === 'degraded') {
+            return `<span class="badge bg-warning-subtle text-warning">Dégradé (${p.consecutive_failures} échec(s))</span>`;
+        }
+        if (p.status === 'cooldown') {
+            return `<span class="badge bg-danger-subtle text-danger">Coupe-circuit (${p.cooldown_remaining_seconds}s)</span>`;
+        }
+        return '<span class="badge bg-secondary-subtle text-secondary">Clé non configurée</span>';
+    };
+
+    tbody.innerHTML = providers.map(p => {
+        const isCurrentPrimary = (summary.active_provider === p.code);
+        const latencyStr = (p.last_latency_ms != null) ? `${Math.round(p.last_latency_ms)} ms` : '—';
+        return `
+            <tr>
+                <td>
+                    <div class="fw-semibold">
+                        ${escapeHtml(p.label)}
+                        ${isCurrentPrimary ? '<span class="badge bg-primary ms-1">Actif</span>' : ''}
+                    </div>
+                    <div class="text-muted small font-monospace">${escapeHtml(p.code)}</div>
+                </td>
+                <td class="small font-monospace">${escapeHtml(p.model)}</td>
+                <td>${statusBadge(p)}</td>
+                <td>
+                    <div class="fw-semibold">${p.configured ? `${p.stability_score}%` : '—'}</div>
+                    <div class="text-muted small">Latence : ${latencyStr}</div>
+                </td>
+                <td class="text-nowrap">
+                    <button type="button" class="btn btn-sm ${summary.mode === p.provider ? 'btn-primary' : 'btn-outline-primary'}" onclick="switchLLMProviderMode('${escapeHtml(p.provider)}')" title="Privilégier ${escapeHtml(p.label)}">
+                        ${summary.mode === p.provider ? 'Prioritaire' : 'Privilégier'}
+                    </button>
+                </td>
+            </tr>
+        `;
+    }).join('');
+}
+
+window.updateLLMRoutingConfig = async function() {
+    const modeSelect = document.getElementById('llm-routing-mode-select');
+    const failoverSwitch = document.getElementById('llm-failover-switch');
+    const feedback = document.getElementById('llm-routing-feedback');
+    if (!modeSelect) return;
+
+    const payload = {
+        mode: modeSelect.value,
+        failover_enabled: failoverSwitch ? failoverSwitch.checked : true,
+    };
+
+    try {
+        const res = await adminFetch('/api/admin/parametres/llm-providers', {
+            method: 'PUT',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(payload),
+        });
+        const data = await res.json().catch(() => ({}));
+        if (res.ok) {
+            parametresLLMProvidersCache = data;
+            renderLLMProvidersPanel(data);
+            if (feedback) {
+                feedback.className = 'small mb-2 text-success';
+                feedback.textContent = `Stratégie IA mise à jour (${data.mode.toUpperCase()} — Ressource active : ${data.active_provider}).`;
+            }
+        } else if (feedback) {
+            feedback.className = 'small mb-2 text-danger';
+            feedback.textContent = data.detail || 'Échec de la mise à jour du moteur IA.';
+        }
+    } catch (e) {
+        if (feedback) {
+            feedback.className = 'small mb-2 text-danger';
+            feedback.textContent = 'Erreur réseau.';
+        }
+    }
+};
+
+window.switchLLMProviderMode = async function(providerMode) {
+    const modeSelect = document.getElementById('llm-routing-mode-select');
+    if (modeSelect) {
+        modeSelect.value = providerMode;
+    }
+    await window.updateLLMRoutingConfig();
+};
+
+window.resetLLMProvidersHealth = async function() {
+    const feedback = document.getElementById('llm-routing-feedback');
+    try {
+        const res = await adminFetch('/api/admin/parametres/llm-providers/reset-health', {
+            method: 'POST',
+        });
+        const data = await res.json().catch(() => ({}));
+        if (res.ok) {
+            parametresLLMProvidersCache = data;
+            renderLLMProvidersPanel(data);
+            if (feedback) {
+                feedback.className = 'small mb-2 text-success';
+                feedback.textContent = 'Compteurs de santé et coupe-circuit réinitialisés.';
+            }
+        } else if (feedback) {
+            feedback.className = 'small mb-2 text-danger';
+            feedback.textContent = data.detail || 'Échec de la réinitialisation.';
+        }
+    } catch (e) {
+        if (feedback) {
+            feedback.className = 'small mb-2 text-danger';
+            feedback.textContent = 'Erreur réseau.';
+        }
     }
 };
 

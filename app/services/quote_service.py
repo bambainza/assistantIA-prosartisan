@@ -11,6 +11,7 @@ from __future__ import annotations
 import json
 import logging
 import re
+import time
 from datetime import UTC, datetime, timedelta
 from typing import Any
 
@@ -22,6 +23,11 @@ from app.config import settings
 from app.models.quote import Quote
 from app.models.user import User
 from app.schemas.quote import QuoteExtractResponse, QuoteItem
+from app.services.llm_provider_service import (
+    PROVIDER_GEMINI,
+    PROVIDER_MISTRAL,
+    llm_provider_service,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -114,10 +120,7 @@ class QuoteService:
         metier_id: int | None = None,
     ) -> QuoteExtractResponse:
         """Extrait les lignes de devis et tarifs indicatifs depuis une note vocale ou écrite."""
-        if (
-            settings.mistral_api_key.startswith("sk-placeholder")
-            or settings.mistral_api_key == "sk-placeholder"
-        ):
+        if not llm_provider_service.is_any_provider_configured():
             # Mode Mock déterministe pour tests locaux
             return self._mock_extract(
                 description_brute=description_brute,
@@ -145,53 +148,71 @@ class QuoteService:
             "}"
         )
 
-        try:
-            completion = await self.mistral_client.chat.complete_async(
-                model=settings.llm_model,
-                messages=[
-                    {"role": "system", "content": system_prompt},
-                    {
-                        "role": "user",
-                        "content": f"Description des travaux de l'artisan : {description_brute}",
-                    },
-                ],
-                temperature=0.1,
-            )
-            raw_text = completion.choices[0].message.content or "{}"
-            # Nettoyer d'éventuels backticks markdown
-            cleaned_json = re.sub(r"^```(?:json)?\s*|\s*```$", "", raw_text.strip())
-            data = json.loads(cleaned_json)
+        messages = [
+            {"role": "system", "content": system_prompt},
+            {
+                "role": "user",
+                "content": f"Description des travaux de l'artisan : {description_brute}",
+            },
+        ]
 
-            items = [
-                QuoteItem(
-                    description=it.get("description", "Prestation"),
-                    quantite=float(it.get("quantite", 1.0)),
-                    unite=str(it.get("unite", "unité")),
-                    prix_unitaire=int(it.get("prix_unitaire", 0)),
-                    total=int(
-                        float(it.get("quantite", 1.0)) * int(it.get("prix_unitaire", 0))
-                    ),
-                    type_item=str(it.get("type_item", "FOURNITURE")),
+        candidates = await llm_provider_service.get_candidate_providers()
+        if not candidates:
+            candidates = [PROVIDER_MISTRAL]
+
+        for provider in candidates:
+            t0 = time.perf_counter()
+            try:
+                if provider == PROVIDER_GEMINI:
+                    res = await llm_provider_service.complete_gemini(messages=messages)
+                    raw_text = res.content or "{}"
+                else:
+                    completion = await self.mistral_client.chat.complete_async(
+                        model=settings.llm_model,
+                        messages=messages,
+                        temperature=0.1,
+                    )
+                    raw_text = completion.choices[0].message.content or "{}"
+
+                cleaned_json = re.sub(r"^```(?:json)?\s*|\s*```$", "", raw_text.strip())
+                data = json.loads(cleaned_json)
+                latency_ms = (time.perf_counter() - t0) * 1000.0
+                await llm_provider_service.record_success(provider, latency_ms)
+
+                items = [
+                    QuoteItem(
+                        description=it.get("description", "Prestation"),
+                        quantite=float(it.get("quantite", 1.0)),
+                        unite=str(it.get("unite", "unité")),
+                        prix_unitaire=int(it.get("prix_unitaire", 0)),
+                        total=int(
+                            float(it.get("quantite", 1.0))
+                            * int(it.get("prix_unitaire", 0))
+                        ),
+                        type_item=str(it.get("type_item", "FOURNITURE")),
+                    )
+                    for it in data.get("items", [])
+                ]
+
+                return QuoteExtractResponse(
+                    titre=data.get("titre", "Travaux d'artisanat"),
+                    client_nom=client_nom
+                    or data.get("client_nom", "Client Particulier"),
+                    client_telephone=client_telephone or data.get("client_telephone"),
+                    client_adresse=data.get("client_adresse"),
+                    items=items,
+                    delai_estime_jours=data.get("delai_estime_jours", 2),
+                    recommandations=data.get("recommandations", []),
                 )
-                for it in data.get("items", [])
-            ]
+            except Exception as err:
+                await llm_provider_service.record_failure(provider, err)
+                logger.warning("Erreur extraction LLM devis (%s) : %s", provider, err)
 
-            return QuoteExtractResponse(
-                titre=data.get("titre", "Travaux d'artisanat"),
-                client_nom=client_nom or data.get("client_nom", "Client Particulier"),
-                client_telephone=client_telephone or data.get("client_telephone"),
-                client_adresse=data.get("client_adresse"),
-                items=items,
-                delai_estime_jours=data.get("delai_estime_jours", 2),
-                recommandations=data.get("recommandations", []),
-            )
-        except Exception as err:
-            logger.warning("Erreur extraction LLM devis : %s -> fallback mock", err)
-            return self._mock_extract(
-                description_brute=description_brute,
-                client_nom=client_nom,
-                client_telephone=client_telephone,
-            )
+        return self._mock_extract(
+            description_brute=description_brute,
+            client_nom=client_nom,
+            client_telephone=client_telephone,
+        )
 
     @staticmethod
     def _mock_extract(

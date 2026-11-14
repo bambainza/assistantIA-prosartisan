@@ -12,12 +12,18 @@ import base64
 import logging
 import os
 import re
+import time
 
 from fastapi import HTTPException, status
 from mistralai.client import Mistral
 from mistralai.client.models import File
 
 from app.config import settings
+from app.services.llm_provider_service import (
+    PROVIDER_GEMINI,
+    PROVIDER_MISTRAL,
+    llm_provider_service,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -64,8 +70,8 @@ class AudioService:
         filename: str = "audio.wav",
         prompt: str | None = None,
     ) -> str:
-        """Transcrit un flux audio binaire en texte via Mistral Voxtral (STT)."""
-        self.validate_audio_file(filename)
+        """Transcrit un flux audio binaire en texte via Mistral Voxtral ou Google Gemini (STT)."""
+        ext = self.validate_audio_file(filename)
 
         if not file_bytes:
             raise HTTPException(
@@ -74,36 +80,60 @@ class AudioService:
             )
 
         # Mode mock en environnement de développement ou test sans clé réelle
-        if (
-            settings.mistral_api_key.startswith("sk-placeholder")
-            or settings.mistral_api_key == "sk-placeholder"
-        ):
+        if not llm_provider_service.is_any_provider_configured():
             return (
                 "Bonjour l'expert, j'ai une fissure importante sur un mur porteur "
                 "en parpaing sur mon chantier. Quel dosage de mortier dois-je appliquer ?"
             )
 
-        try:
-            transcription = (
-                await self.mistral_client.audio.transcriptions.complete_async(
-                    model=settings.stt_model,
-                    file=File(file_name=filename, content=file_bytes),
-                    # Voxtral n'a pas de paramètre "prompt" libre comme Whisper :
-                    # le vocabulaire attendu se fournit en indices contextuels —
-                    # chaque élément doit être un seul mot, sans espace ni virgule
-                    # (rejeté en 400 sinon), d'où l'éclatement en mots individuels.
-                    context_bias=(prompt or _DEFAULT_VOCABULAIRE_CHANTIER)
-                    .replace(",", " ")
-                    .split(),
+        candidates = await llm_provider_service.get_candidate_providers()
+        if not candidates:
+            candidates = [PROVIDER_MISTRAL]
+
+        last_err: Exception | None = None
+        for idx, provider in enumerate(candidates):
+            t0 = time.perf_counter()
+            try:
+                if provider == PROVIDER_GEMINI:
+                    text = await llm_provider_service.transcribe_audio_gemini(
+                        file_bytes=file_bytes,
+                        ext=ext,
+                        prompt=prompt or _DEFAULT_VOCABULAIRE_CHANTIER,
+                    )
+                else:
+                    transcription = (
+                        await self.mistral_client.audio.transcriptions.complete_async(
+                            model=settings.stt_model,
+                            file=File(file_name=filename, content=file_bytes),
+                            context_bias=(prompt or _DEFAULT_VOCABULAIRE_CHANTIER)
+                            .replace(",", " ")
+                            .split(),
+                        )
+                    )
+                    text = transcription.text.strip()
+
+                latency_ms = (time.perf_counter() - t0) * 1000.0
+                await llm_provider_service.record_success(provider, latency_ms)
+                return text
+            except Exception as e:
+                last_err = e
+                await llm_provider_service.record_failure(provider, e)
+                if idx + 1 < len(candidates):
+                    logger.warning(
+                        "Échec transcription audio '%s' (%s) — bascule vers '%s'.",
+                        provider,
+                        e,
+                        candidates[idx + 1],
+                    )
+                    continue
+                logger.error(
+                    "Erreur lors de la transcription audio (%s) : %s", provider, e
                 )
-            )
-            return transcription.text.strip()
-        except Exception as e:
-            logger.error("Erreur lors de la transcription audio Voxtral : %s", e)
-            raise HTTPException(
-                status_code=status.HTTP_502_BAD_GATEWAY,
-                detail=f"Échec de la transcription audio : {e!s}",
-            )
+
+        raise HTTPException(
+            status_code=status.HTTP_502_BAD_GATEWAY,
+            detail=f"Échec de la transcription audio : {last_err!s}",
+        )
 
     async def synthesize_speech(
         self,
