@@ -266,13 +266,14 @@ class NetworkClient {
     return completer.future;
   }
 
-  Future<Map<String, dynamic>> login(String email, String password) async {
+  Future<Map<String, dynamic>> login(String email, String password, {String? totpCode}) async {
     try {
       final response = await _dio.post(
         '$_baseUrl/api/auth/login',
         data: {
           'email': email,
           'password': password,
+          if (totpCode != null && totpCode.isNotEmpty) 'totp_code': totpCode,
         },
       );
 

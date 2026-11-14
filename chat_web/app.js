@@ -1502,7 +1502,7 @@ async function submitLogin() {
         const response = await fetch('/api/auth/web/login', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ email, password })
+            body: JSON.stringify({ email, password, totp_code: document.getElementById("login-totp-input").value.trim() || null })
         });
 
         if (response.ok) {
@@ -1562,13 +1562,20 @@ async function handleGoogleCredentialResponse(googleResponse) {
         const res = await fetch('/api/auth/web/google', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ credential: googleResponse.credential })
+            body: JSON.stringify({ credential: googleResponse.credential, totp_code: document.getElementById("login-totp-input").value.trim() || null })
         });
         if (res.ok) {
             const data = await res.json();
             loginUser(data);
         } else {
             const err = await res.json();
+            if (res.status === 401 && !document.getElementById('login-totp-input').value) {
+                const code = window.prompt("Saisissez votre code d'authentification à 6 chiffres.");
+                if (code && /^\d{6}$/.test(code.trim())) {
+                    document.getElementById('login-totp-input').value = code.trim();
+                    return handleGoogleCredentialResponse(googleResponse);
+                }
+            }
             showToast(`Connexion Google échouée: ${err.detail || "Erreur"}`);
         }
     } catch (e) {
@@ -1588,6 +1595,7 @@ async function simulateGoogleOAuth() {
 
 // Execute session login
 function loginUser(data) {
+    document.getElementById('login-totp-input').value = '';
     state.isLoggedIn = true;
     state.user = data.user;
     

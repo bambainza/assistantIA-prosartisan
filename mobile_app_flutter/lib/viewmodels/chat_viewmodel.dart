@@ -212,12 +212,12 @@ class ChatViewModel extends ChangeNotifier {
     notifyListeners();
   }
 
-  Future<void> login(String email, String password) async {
+  Future<void> login(String email, String password, {String? totpCode}) async {
     _isAuthLoading = true;
     _authError = null;
     notifyListeners();
 
-    final result = await client.login(email, password);
+    final result = await client.login(email, password, totpCode: totpCode);
     _isAuthLoading = false;
 
     if (result['success']) {

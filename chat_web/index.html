@@ -243,6 +243,7 @@
                     <div class="modal-form-group">
                         <input type="email" id="login-email-input" placeholder="Adresse e-mail" aria-label="Adresse e-mail" required>
                         <input type="password" id="login-password-input" placeholder="Mot de passe" aria-label="Mot de passe" required>
+                        <input type="text" id="login-totp-input" placeholder="Code à 6 chiffres (si activé)" aria-label="Code à deux facteurs" inputmode="numeric" autocomplete="one-time-code" maxlength="6">
                         <button class="btn btn-primary btn-block btn-lg" onclick="submitLogin()">Se connecter</button>
                     </div>
                     <p class="auth-switch-text">

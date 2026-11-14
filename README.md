@@ -117,3 +117,17 @@ exemples d'environnement et les procédures concernées ne correspondent pas au 
 
 Copyright © 2026 ProsArtisan. Tous droits réservés.
 Voir [LICENSE.txt](LICENSE.txt).
+
+
+### Sessions, budgets audio et disponibilité
+
+Le TOTP administrateur est requis pour les connexions locales et Google (`totp_code`). Les refresh tokens sont consommés atomiquement ; les jetons anciens sans `jti` nécessitent une nouvelle connexion. En production, une panne Redis bloque les opérations sensibles avec `503`.
+
+Les budgets audio journaliers sont séparés des questions : `AUDIO_STT_REQUESTS_PER_DAY=20` et `AUDIO_TTS_CHARS_PER_DAY=20000`, y compris pour les Pass. Ils sont réservés avant les appels HTTP/WebSocket, avec `429` à épuisement et restitution en cas d'échec fournisseur.
+
+`/api/health` est une sonde de vie ; `/api/ready` est la sonde SQL/Redis/Qdrant utilisée par Docker et la livraison (`503` si indisponible). Le Compose de production transmet la paire VAPID, à générer ensemble, et les paramètres CinetPay. La CI précède la publication et le webhook reçoit l'image par digest ainsi que le SHA attendu ; voir `docs/DEPLOYMENT.md` pour son contrat.
+
+Tests Redis réels : sélectionner le backend via `REDIS_HOST`, `REDIS_PORT`, `REDIS_PASSWORD`, puis définir `RUN_SHARED_BACKEND_TESTS=1` avant `pytest tests/ -v`. Sous Windows, si le dossier temporaire système est inaccessible, ajouter `--basetemp=scratch/pytest-validation-<identifiant-unique>`.
+
+
+Les scripts `.sh` sont conservés en LF via `.gitattributes`. Le build Docker normalise aussi `docker-entrypoint.sh` avant de le rendre exécutable : un shebang CRLF provoquerait `exec ./docker-entrypoint.sh: no such file or directory` sous Linux. Après ce correctif, reconstruire avec `docker compose -f docker-compose.prod.yml up -d --build --force-recreate app`.

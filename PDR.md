@@ -186,3 +186,23 @@ Avant **chaque commit** puis avant **chaque push**, toute implémentation ou mod
 4. `.env.example`, les fichiers de déploiement et le `README.md` lorsqu'une variable, une commande ou une procédure d'exploitation change.
 
 Le contrôle documentaire constitue une étape bloquante de la livraison : aucun `git commit` ni `git push` ne doit être exécuté avant d'avoir vérifié et, si nécessaire, actualisé chacun de ces fichiers. Même lorsqu'aucun contenu métier ne change, les fichiers doivent être relus avant le commit et le push ; le compte rendu doit alors confirmer explicitement qu'ils sont toujours à jour. Une implémentation est **incomplète** tant que cette vérification n'a pas été effectuée.
+
+
+## Durcissement des sessions et de l'exploitation — 14 novembre 2026
+
+Les connexions Google (`POST /api/auth/google` et `/api/auth/web/google`) acceptent `totp_code`. Un administrateur avec TOTP actif reçoit `401` si le code est absent ou invalide, sans jeton ni liaison de compte. Le formulaire web et la connexion locale Flutter permettent sa saisie ; Flutter ne propose actuellement pas de connexion Google native.
+
+La rotation des refresh tokens est atomique entre workers : un seul renouvellement réussit pour un `jti`. Les anciens jetons sans `jti` sont refusés et nécessitent une nouvelle connexion. Redis indisponible produit `503`, de même que la limitation de débit en production ; les erreurs WebSocket restent explicites et ne ferment pas la session.
+
+Les appels audio ont des budgets journaliers indépendants du quota des questions : 20 transcriptions et 20 000 caractères TTS par défaut, configurables par `AUDIO_STT_REQUESTS_PER_DAY` et `AUDIO_TTS_CHARS_PER_DAY`. Ils s'appliquent également aux Pass, au HTTP et au WebSocket ; l'identité vient du JWT ou de l'IP cliente résolue. Une demande excédentaire retourne `429` avant facturation. Une panne fournisseur restitue le budget réservé, sans toucher aux crédits de questions des endpoints audio autonomes. Le WebSocket conserve son quota de question et le restitue si la transcription échoue.
+
+La préparation RAG vérifie la disponibilité des activations avant de lire une réponse en cache. Une panne SQL ne vaut jamais « aucun document désactivé » et ne remplit pas le cache d'activation.
+
+`GET /health` et `/api/health` vérifient uniquement la vie du processus. `GET /api/ready` vérifie SQL (`SELECT 1`), Redis (`PING`) et l'existence de la collection Qdrant, avec un délai global de 4 secondes. La réponse publique ne contient ni exception ni version de base ; succès `200` avec `revision`, sinon `503`. Les sondes Docker et Render utilisent `/api/ready` ; Cloud Run l'utilise au démarrage et conserve `/api/health` pour la vie du processus.
+
+Le workflow CD appelle le workflow CI réutilisable avant publication. L'image contient `BUILD_SHA`, le webhook reçoit `{image: "registre/image@sha256:…", revision: "commit"}`, et la vérification finale contrôle la disponibilité ainsi que la révision attendue. Le récepteur du webhook doit déployer le digest fourni. Les manifests transmettent VAPID et les identifiants CinetPay.
+
+Validation : tests de régression sur TOTP Google, liaison de compte, rejeu concurrent, jetons sans `jti`, pannes Redis/SQL/Qdrant et budgets audio. `RUN_SHARED_BACKEND_TESTS=1` active les contrats Redis réels (deux clients concurrents), activés en CI. Les migrations sont vérifiées sur une base PostgreSQL isolée, sans modification ORM dans ce lot.
+
+
+Les scripts `.sh` sont conservés en LF via `.gitattributes`. Le build Docker normalise aussi `docker-entrypoint.sh` avant de le rendre exécutable : un shebang CRLF provoquerait `exec ./docker-entrypoint.sh: no such file or directory` sous Linux. Après ce correctif, reconstruire avec `docker compose -f docker-compose.prod.yml up -d --build --force-recreate app`.

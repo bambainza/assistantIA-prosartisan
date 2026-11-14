@@ -19,3 +19,15 @@ Ce fichier est chargé automatiquement par Antigravity IDE pour régir le compor
 - **Modèles ORM** : toute évolution s'accompagne d'une migration Alembic, et tout nouveau modèle est importé dans `app/models/__init__.py` (requis par les scripts `app/scripts/`, qui ne chargent pas `app.main`) ; horodatages stockés en UTC naïf (`UTCNaiveDateTime`, jamais d'écriture avec fuseau dans une colonne `DateTime` explicite).
 - **Validation** : Garantir le succès à 100% de la suite de tests `pytest`.
 - **Documentation contrôlée avant chaque commit et push** : Pour toute implémentation ou modification, même mineure, relire et mettre à jour systématiquement `PDR.md`, `AGENTS.md`, `CLAUDE.md` et ce fichier avant chaque `git commit`, puis vérifier à nouveau leur cohérence avant chaque `git push`. Mettre aussi à jour `.env.example`, `README.md` et les manifests de déploiement lorsqu'ils sont concernés. Il est interdit de committer ou pousser avant la fin de ce contrôle. Si aucune modification documentaire supplémentaire n'est nécessaire, confirmer explicitement dans le compte rendu que la relecture a été effectuée et que les fichiers restent à jour.
+
+## Fiabilité des sessions et des dépendances (2026-11-14)
+
+- Le TOTP des administrateurs s'applique aux connexions locales et Google, avant toute émission de jeton et avant toute liaison de compte Google. Les clients transmettent `totp_code` lorsqu'il est activé.
+- La rotation d'un refresh token exige un `jti` et une consommation atomique Redis (`SET NX EX`). Deux appels concurrents ne doivent jamais réussir ensemble ; une panne du backend partagé produit `503`.
+- En production, une panne du compteur de débit bloque les routes sensibles avec `503`. Le WebSocket envoie une erreur explicite et reste disponible pour les messages suivants.
+- Les budgets audio sont indépendants des crédits de questions : `AUDIO_STT_REQUESTS_PER_DAY` (20 transcriptions par défaut) et `AUDIO_TTS_CHARS_PER_DAY` (20 000 caractères par défaut), par identité et jour UTC. La réservation atomique précède chaque appel facturé HTTP/WebSocket ; un échec restitue la réservation sur sa clé d'origine. Les Pass ne contournent pas ces budgets de coûts.
+- Une panne de lecture des activations métier/document est une indisponibilité explicite ; elle ne doit ni produire un ensemble vide ni permettre de servir une réponse RAG en cache.
+- `/health` et `/api/health` sont des sondes de vie. `/api/ready` vérifie SQL, Redis et la collection Qdrant et répond `503` en cas d'échec, sans détail interne. Docker et les contrôles de livraison utilisent la disponibilité ; la sonde de vie Cloud Run reste indépendante.
+- La publication et le déploiement dépendent de la CI complète du même commit. Le webhook reçoit l'image par digest et la révision ; le contrôle final exige cette révision via `/api/ready` (`BUILD_SHA` intégré à l'image).
+
+- Les scripts shell exécutés dans les conteneurs Linux utilisent LF (`*.sh text eol=lf` dans `.gitattributes`) ; le build normalise également le script de démarrage avant exécution.

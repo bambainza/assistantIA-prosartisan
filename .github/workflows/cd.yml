@@ -14,8 +14,18 @@ env:
   REGISTRY: ghcr.io
   IMAGE_NAME: ${{ github.repository }}
 
+concurrency:
+  group: production-${{ github.ref }}
+  cancel-in-progress: false
+
 jobs:
+  validate:
+    uses: ./.github/workflows/ci.yml
+
   build-and-push-image:
+    needs: [validate]
+    outputs:
+      digest: ${{ steps.build.outputs.digest }}
     name: Build & Push Docker Image
     runs-on: ubuntu-latest
 
@@ -44,10 +54,13 @@ jobs:
             type=sha,format=short
 
       - name: Build and push Docker image
+        id: build
         uses: docker/build-push-action@v7
         with:
           context: .
           file: ./Dockerfile
+          build-args: |
+            BUILD_SHA=${{ github.sha }}
           push: true
           tags: ${{ steps.meta.outputs.tags }}
           labels: ${{ steps.meta.outputs.labels }}
@@ -64,36 +77,39 @@ jobs:
       - name: Checkout repository
         uses: actions/checkout@v5
 
+      - name: Validate production target
+        env:
+          DEPLOY_WEBHOOK_URL: ${{ secrets.DEPLOY_WEBHOOK_URL }}
+          PROD_URL: ${{ secrets.PROD_URL }}
+        run: |
+          if [ -z "$DEPLOY_WEBHOOK_URL" ] || [ -z "$PROD_URL" ]; then
+            echo "::error::DEPLOY_WEBHOOK_URL et PROD_URL sont requis pour déployer et vérifier la révision."
+            exit 1
+          fi
+
       - name: Trigger Webhook / Cloud Run Deploy
         env:
           DEPLOY_WEBHOOK_URL: ${{ secrets.DEPLOY_WEBHOOK_URL }}
+          IMAGE_DIGEST: ${{ needs.build-and-push-image.outputs.digest }}
+          EXPECTED_SHA: ${{ github.sha }}
         run: |
-          if [ -n "$DEPLOY_WEBHOOK_URL" ]; then
-            echo "Déclenchement du webhook de déploiement sécurisé..."
-            # --fail : un webhook qui répond 4xx/5xx fait échouer le job au lieu
-            # de laisser croire à un déploiement réussi.
-            curl -sS --fail-with-body -X POST "${DEPLOY_WEBHOOK_URL}"
-            echo "✅ Déploiement déclenché." >> "$GITHUB_STEP_SUMMARY"
-          else
-            # Annotation visible sur la page du run : l'image est publiée mais
-            # rien n'est déployé (job vert malgré tout, faute de cible).
-            echo "::warning title=Aucun déploiement::DEPLOY_WEBHOOK_URL non configuré : image publiée sur GHCR mais aucune cible de déploiement déclenchée."
-            echo "⚠️ **Aucun déploiement** : secret \`DEPLOY_WEBHOOK_URL\` absent, seule l'image Docker a été publiée." >> "$GITHUB_STEP_SUMMARY"
-          fi
+          python - <<'PY' > deploy-payload.json
+          import json, os
+          image = f"{os.environ['REGISTRY']}/{os.environ['IMAGE_NAME']}".lower()
+          print(json.dumps({"image": f"{image}@{os.environ['IMAGE_DIGEST']}", "revision": os.environ['EXPECTED_SHA']}))
+          PY
+          curl -sS --fail-with-body --max-time 30 -X POST -H 'Content-Type: application/json' --data-binary @deploy-payload.json "${DEPLOY_WEBHOOK_URL}"
+          echo "Déploiement déclenché pour la révision ${EXPECTED_SHA}." >> "$GITHUB_STEP_SUMMARY"
 
       - name: Production Health Check
         env:
           PROD_URL: ${{ secrets.PROD_URL }}
+          EXPECTED_SHA: ${{ github.sha }}
         run: |
-          if [ -z "$PROD_URL" ]; then
-            echo "::warning title=Vérification de santé ignorée::PROD_URL non configuré : l'état de la production n'a pas été vérifié."
-            echo "⚠️ **Vérification de santé ignorée** : secret \`PROD_URL\` absent." >> "$GITHUB_STEP_SUMMARY"
-            exit 0
-          fi
-          echo "Vérification de l'état de santé en production sur ${PROD_URL}/api/health..."
+          echo "Vérification de l'état de santé en production sur ${PROD_URL}/api/ready..."
           for i in {1..12}; do
-            STATUS=$(curl -s -o /dev/null -w "%{http_code}" "${PROD_URL}/api/health" || true)
-            if [ "$STATUS" = "200" ]; then
+            STATUS=$(curl -s --max-time 10 -o ready.json -w "%{http_code}" "${PROD_URL}/api/ready" || true)
+            if [ "$STATUS" = "200" ] && python -c 'import json, os, sys; d=json.load(open("ready.json")); sys.exit(0 if d.get("status")=="ok" and d.get("revision")==os.environ["EXPECTED_SHA"] else 1)'; then
               echo "✅ Le service de production répond avec succès (HTTP 200) !"
               exit 0
             fi

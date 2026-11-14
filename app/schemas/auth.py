@@ -105,6 +105,7 @@ class GoogleAuthRequest(BaseModel):
     """Corps de requête pour l'authentification Google OAuth 2.0."""
 
     credential: str  # Google ID Token (JWT from Google Sign-In)
+    totp_code: str | None = Field(default=None, max_length=6)
 
 
 # ── Authentification à deux facteurs (TOTP) ──

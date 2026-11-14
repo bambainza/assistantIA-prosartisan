@@ -114,7 +114,7 @@ Le projet est configuré avec 2 workflows GitHub Actions dans `.github/workflows
   - Déclenché lors d'un `push` sur la branche `main` ou de la publication d'un tag `v*`.
   - Construit et publie l'image multi-architecture vers `ghcr.io`.
   - Déclenche le webhook de déploiement sécurisé (secret `DEPLOY_WEBHOOK_URL` ; une réponse HTTP en erreur fait échouer le job).
-  - Valide automatiquement la disponibilité de l'application via le healthcheck `/api/health` (secret `PROD_URL`).
+  - Valide automatiquement la disponibilité de l'application via le sonde de disponibilité `/api/ready` (secret `PROD_URL`).
   - Sans ces secrets, le job reste vert mais affiche un avertissement (« Aucun déploiement » / « Vérification de santé ignorée ») et le signale dans le résumé du run : seule l'image est publiée.
 
 Au démarrage, le conteneur applique `alembic upgrade head` (désactivable avec `RUN_MIGRATIONS=false`) ; **un échec de migration arrête le conteneur** au lieu de servir l'API sur un schéma en retard — consulter ses logs en cas de redémarrages en boucle.
@@ -124,3 +124,23 @@ Au démarrage, le conteneur applique `alembic upgrade head` (désactivable avec 
 - **Réconciliation des paiements** (toutes les 10-15 min, cron / Cloud Scheduler) : `python -m app.scripts.reconcile_payments` — rattrape les notifications opérateur perdues.
 - **Reprise des photos Base64** (une fois) : `python -m app.scripts.migrate_chat_images --dry-run`, puis sans `--dry-run`.
 - **Purge de l'ancien historique anonyme partagé** (une fois, irréversible) : `python -m app.scripts.purge_anonymous_history --dry-run`, puis sans `--dry-run`.
+
+
+## Sessions et sondes de disponibilité
+
+Générer la paire `VAPID_PRIVATE_KEY`/`VAPID_PUBLIC_KEY` ensemble avec la commande de `.env.example`. Le Compose de production les transmet explicitement. Sur Render, renseigner ces valeurs ainsi que CORS et Qdrant ; sur Cloud Run, créer les références de secrets VAPID/CinetPay et remplacer `YOUR_PUBLIC_DOMAIN`. Les variables CinetPay sont indépendantes de Wave et Orange Money.
+
+Les limites `AUDIO_STT_REQUESTS_PER_DAY` (20) et `AUDIO_TTS_CHARS_PER_DAY` (20 000) bornent les coûts par identité, même pour les Pass. Ajuster ces valeurs selon les coûts observés. Redis est indispensable à ces budgets, à la rotation des sessions et à la limitation de débit en production.
+
+`GET /api/ready` doit répondre `200` seulement lorsque SQL, Redis et la collection Qdrant répondent (délai global 4 s). La vie du processus reste contrôlée par `/api/health` ; une panne externe ne doit pas provoquer une boucle de redémarrages Cloud Run. Les erreurs détaillées restent dans les journaux serveur.
+
+## Contrat du webhook de livraison
+
+Le CD exécute le workflow CI complet pour le commit livré avant de publier l'image. Le webhook reçoit un POST JSON avec `image` (référence immuable `registre/image@sha256:…`) et `revision` (SHA Git complet). Son récepteur doit sélectionner ce digest et déclencher le déploiement ; un récepteur qui ignore le JSON doit être adapté avant activation de ce workflow. `BUILD_SHA` est intégré à l'image et doit rester inchangé à l'exécution. La validation finale exige HTTP 200 sur `/api/ready` et la révision attendue ; une ancienne instance saine ne suffit pas.
+
+Les anciens refresh tokens sans `jti` sont refusés après mise à jour : les utilisateurs concernés se reconnectent. Aucune migration ORM supplémentaire n'est nécessaire pour ce lot. Avant livraison, vérifier `alembic upgrade head`, `alembic check`, les tests Python avec `RUN_SHARED_BACKEND_TESTS=1`, Ruff et les tests/analyse Flutter.
+
+Le job de déploiement exige `DEPLOY_WEBHOOK_URL` et `PROD_URL` avant de déclencher le webhook ; une cible absente fait échouer le job.
+
+
+Les scripts `.sh` sont conservés en LF via `.gitattributes`. Le build Docker normalise aussi `docker-entrypoint.sh` avant de le rendre exécutable : un shebang CRLF provoquerait `exec ./docker-entrypoint.sh: no such file or directory` sous Linux. Après ce correctif, reconstruire avec `docker compose -f docker-compose.prod.yml up -d --build --force-recreate app`.

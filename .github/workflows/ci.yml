@@ -1,6 +1,7 @@
 name: CI — ProsArtisan
 
 on:
+  workflow_call:
   push:
     branches: ["main", "develop"]
   pull_request:
@@ -117,6 +118,7 @@ jobs:
           QDRANT_HOST: localhost
           QDRANT_PORT: 6333
           APP_ENV: testing
+          RUN_SHARED_BACKEND_TESTS: "1"
         run: pytest tests/ -v --cov=app
 
   flutter-tests:

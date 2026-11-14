@@ -2,7 +2,7 @@
 
 from urllib.parse import quote_plus
 
-from pydantic import model_validator
+from pydantic import Field, model_validator
 from pydantic_settings import BaseSettings
 
 # Valeurs de secret livrées par défaut : interdites en production.
@@ -23,11 +23,14 @@ class Settings(BaseSettings):
     """Paramètres chargés depuis les variables d'environnement ou le fichier .env."""
 
     # ── Application ──
+    build_sha: str = "development"
     app_env: str = "development"
     app_debug: bool = True
     app_secret_key: str = "changeme"
     cors_allowed_origins: str = "*"
     rate_limit_requests_per_minute: int = 60
+    audio_stt_requests_per_day: int = Field(default=20, ge=1)
+    audio_tts_chars_per_day: int = Field(default=20000, ge=1)
     # Nombre de reverse proxies de confiance devant l'API (Caddy, Render,
     # Cloud Run...). 0 = connexion directe : l'IP TCP est utilisée telle quelle.
     # N > 0 : l'IP client est la N-ième entrée en partant de la droite de

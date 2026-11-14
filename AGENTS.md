@@ -74,3 +74,16 @@ Ce document définit les normes d'ingénierie, les conventions de code et les ga
 - **Règles agents/IDE** : lorsqu'une règle d'ingénierie, de sécurité, de qualité ou de livraison évolue, synchroniser obligatoirement `AGENTS.md`, `CLAUDE.md` et `.agents/rules/project_rules.md`. Aucun de ces fichiers ne doit contredire les autres.
 - **Exploitation** : mettre à jour `.env.example`, `README.md` et les manifests de déploiement concernés dès qu'une variable d'environnement, une dépendance, une commande ou une procédure opérationnelle change.
 - **Traçabilité du contrôle** : si la relecture conclut qu'aucune modification documentaire supplémentaire n'est nécessaire, le signaler explicitement dans le compte rendu avant le commit et confirmer à nouveau la cohérence avant le push. Cette confirmation ne dispense jamais de la relecture systématique.
+
+
+## Fiabilité des sessions et des dépendances (2026-11-14)
+
+- Le TOTP des administrateurs s'applique aux connexions locales et Google, avant toute émission de jeton et avant toute liaison de compte Google. Les clients transmettent `totp_code` lorsqu'il est activé.
+- La rotation d'un refresh token exige un `jti` et une consommation atomique Redis (`SET NX EX`). Deux appels concurrents ne doivent jamais réussir ensemble ; une panne du backend partagé produit `503`.
+- En production, une panne du compteur de débit bloque les routes sensibles avec `503`. Le WebSocket envoie une erreur explicite et reste disponible pour les messages suivants.
+- Les budgets audio sont indépendants des crédits de questions : `AUDIO_STT_REQUESTS_PER_DAY` (20 transcriptions par défaut) et `AUDIO_TTS_CHARS_PER_DAY` (20 000 caractères par défaut), par identité et jour UTC. La réservation atomique précède chaque appel facturé HTTP/WebSocket ; un échec restitue la réservation sur sa clé d'origine. Les Pass ne contournent pas ces budgets de coûts.
+- Une panne de lecture des activations métier/document est une indisponibilité explicite ; elle ne doit ni produire un ensemble vide ni permettre de servir une réponse RAG en cache.
+- `/health` et `/api/health` sont des sondes de vie. `/api/ready` vérifie SQL, Redis et la collection Qdrant et répond `503` en cas d'échec, sans détail interne. Docker et les contrôles de livraison utilisent la disponibilité ; la sonde de vie Cloud Run reste indépendante.
+- La publication et le déploiement dépendent de la CI complète du même commit. Le webhook reçoit l'image par digest et la révision ; le contrôle final exige cette révision via `/api/ready` (`BUILD_SHA` intégré à l'image).
+
+- Les scripts shell exécutés dans les conteneurs Linux utilisent LF (`*.sh text eol=lf` dans `.gitattributes`) ; le build normalise également le script de démarrage avant exécution.

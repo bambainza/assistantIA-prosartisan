@@ -18,6 +18,11 @@ from app.config import settings
 
 logger = logging.getLogger(__name__)
 
+
+class SharedBackendUnavailableError(RuntimeError):
+    """Un état de sécurité partagé ne peut pas être lu ou écrit."""
+
+
 # Délai avant une nouvelle tentative de connexion après un échec Redis : sans
 # réessai, une indisponibilité passagère au démarrage bloquerait le worker sur
 # le cache local (non partagé) jusqu'à son redémarrage.
@@ -99,9 +104,28 @@ class CacheService:
             "prosartisan:quota:",
         )
         if settings.is_production and key.startswith(security_prefixes):
-            raise RuntimeError(
+            raise SharedBackendUnavailableError(
                 "Redis est indisponible : le stockage de sécurité partagé est requis."
             )
+
+    async def set_if_absent(self, key: str, value: str, ttl_seconds: int) -> bool:
+        """Réserve une clé atomiquement, sans repli après une écriture ambiguë."""
+        client = await self._get_redis()
+        if client is not None:
+            try:
+                return bool(await client.set(key, value, nx=True, ex=ttl_seconds))
+            except Exception as exc:
+                raise SharedBackendUnavailableError(
+                    "Réservation Redis indisponible."
+                ) from exc
+        self._require_shared_backend(key)
+        # Aucun await entre lecture et écriture : atomique dans la boucle locale
+        # de développement ; ce repli est interdit en production.
+        self._clean_expired_memory_cache()
+        if key in self._memory_cache:
+            return False
+        self._memory_cache[key] = (time.time() + ttl_seconds, value)
+        return True
 
     async def get(self, key: str) -> str | None:
         """Récupère une valeur textuelle depuis Redis ou le cache mémoire."""
@@ -122,6 +146,38 @@ class CacheService:
                 return val
             self._memory_cache.pop(key, None)
         return None
+
+    async def reserve_budget(
+        self, key: str, amount: int, limit: int, ttl_seconds: int
+    ) -> bool:
+        """Réserve un budget borné sans incrémenter les demandes refusées."""
+        client = await self._get_redis()
+        if client is not None:
+            try:
+                return bool(
+                    await client.eval(
+                        "local n=tonumber(redis.call('GET',KEYS[1]) or '0'); "
+                        "if n+tonumber(ARGV[1])>tonumber(ARGV[2]) then return 0 end; "
+                        "redis.call('INCRBY',KEYS[1],ARGV[1]); "
+                        "redis.call('EXPIRE',KEYS[1],ARGV[3]); return 1",
+                        1,
+                        key,
+                        amount,
+                        limit,
+                        ttl_seconds,
+                    )
+                )
+            except Exception as exc:
+                raise SharedBackendUnavailableError(
+                    "Budget Redis indisponible."
+                ) from exc
+        self._require_shared_backend(key)
+        self._clean_expired_memory_cache()
+        current = int(self._memory_cache.get(key, (0, "0"))[1])
+        if current + amount > limit:
+            return False
+        self._memory_cache[key] = (time.time() + ttl_seconds, str(current + amount))
+        return True
 
     async def increment(self, key: str, ttl_seconds: int, amount: int = 1) -> int:
         """Incrémente (``amount`` < 0 : décrémente) un compteur avec expiration.

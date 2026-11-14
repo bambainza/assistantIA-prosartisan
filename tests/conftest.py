@@ -1,5 +1,6 @@
 """Fixtures partagées pour pytest."""
 
+from typing import Any
 from unittest.mock import AsyncMock, MagicMock
 
 import pytest
@@ -73,6 +74,23 @@ def _isoler_services_externes(monkeypatch):
 
     monkeypatch.setattr(settings, "mistral_api_key", "sk-placeholder-test")
     monkeypatch.setattr(settings, "gemini_api_key", "AIza-placeholder-test")
+
+
+@pytest.fixture(autouse=True)
+def _isoler_lecture_activations(monkeypatch: pytest.MonkeyPatch) -> Any:
+    """Le corpus de test est actif, sans dépendre d'une base locale préexistante.
+
+    Les tests de panne remplacent cette fabrique par une session en échec.
+    Les routes conservent leurs propres dépendances get_db et mocks explicites.
+    """
+    from app.db import session as session_module
+
+    session = MagicMock()
+    session.execute = AsyncMock(return_value=MagicMock(all=list))
+    context = MagicMock()
+    context.__aenter__ = AsyncMock(return_value=session)
+    context.__aexit__ = AsyncMock(return_value=False)
+    monkeypatch.setattr(session_module, "async_session", lambda: context)
 
 
 @pytest.fixture(autouse=True)

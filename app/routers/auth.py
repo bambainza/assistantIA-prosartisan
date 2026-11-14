@@ -20,12 +20,12 @@ from app.middleware.auth import (
     CSRF_COOKIE,
     WEB_ACCESS_COOKIE,
     WEB_REFRESH_COOKIE,
+    consume_refresh_token,
     create_access_token,
     create_refresh_token,
     decode_token,
     get_current_user_id,
     hash_password,
-    is_refresh_token_revoked,
     revoke_refresh_token,
     verify_password,
 )
@@ -198,6 +198,27 @@ async def register(
     return new_user
 
 
+async def _verify_admin_totp(user: User, code: str | None) -> None:
+    """Applique le même second facteur à tous les modes de connexion."""
+    if user.is_admin and user.totp_enabled:
+        if not code:
+            await cache_service.increment(
+                _LOGIN_FAILED_COUNTER_KEY, _SECURITY_COUNTER_TTL_SECONDS
+            )
+            raise HTTPException(
+                status_code=status.HTTP_401_UNAUTHORIZED,
+                detail="Code d'authentification à deux facteurs requis.",
+            )
+        if not totp_service.verify_code(user.totp_secret or "", code):
+            await cache_service.increment(
+                _LOGIN_FAILED_COUNTER_KEY, _SECURITY_COUNTER_TTL_SECONDS
+            )
+            raise HTTPException(
+                status_code=status.HTTP_401_UNAUTHORIZED,
+                detail="Code d'authentification à deux facteurs invalide.",
+            )
+
+
 @router.post("/login", response_model=TokenResponse)
 async def login(
     payload: LoginRequest,
@@ -225,23 +246,7 @@ async def login(
             detail="Identifiants incorrects.",
         )
 
-    if user.is_admin and user.totp_enabled:
-        if not payload.totp_code:
-            await cache_service.increment(
-                _LOGIN_FAILED_COUNTER_KEY, _SECURITY_COUNTER_TTL_SECONDS
-            )
-            raise HTTPException(
-                status_code=status.HTTP_401_UNAUTHORIZED,
-                detail="Code d'authentification à deux facteurs requis.",
-            )
-        if not totp_service.verify_code(user.totp_secret or "", payload.totp_code):
-            await cache_service.increment(
-                _LOGIN_FAILED_COUNTER_KEY, _SECURITY_COUNTER_TTL_SECONDS
-            )
-            raise HTTPException(
-                status_code=status.HTTP_401_UNAUTHORIZED,
-                detail="Code d'authentification à deux facteurs invalide.",
-            )
+    await _verify_admin_totp(user, payload.totp_code)
 
     access_token = create_access_token(data={"sub": str(user.id)})
     refresh_token = create_refresh_token(data={"sub": str(user.id)})
@@ -315,6 +320,7 @@ async def google_auth(
         user = res_email.scalar_one_or_none()
 
         if user:
+            await _verify_admin_totp(user, payload.totp_code)
             # Lier le compte Google
             user.google_id = google_id
             user.avatar_url = picture
@@ -339,6 +345,8 @@ async def google_auth(
             db.add(quota)
             await db.commit()
             await db.refresh(user)
+
+    await _verify_admin_totp(user, payload.totp_code)
 
     access_token = create_access_token(data={"sub": str(user.id)})
     refresh_token = create_refresh_token(data={"sub": str(user.id)})
@@ -383,12 +391,6 @@ async def refresh(
             detail="Token de rafraîchissement requis.",
         )
 
-    if await is_refresh_token_revoked(decoded):
-        raise HTTPException(
-            status_code=status.HTTP_401_UNAUTHORIZED,
-            detail="Token de rafraîchissement révoqué (déconnexion effectuée).",
-        )
-
     user_id_str = decoded.get("sub")
     try:
         user_id = uuid.UUID(user_id_str) if user_id_str else None
@@ -414,7 +416,11 @@ async def refresh(
     # Rotation : l'ancien refresh token est révoqué dès qu'il a servi une fois,
     # même s'il n'était pas encore expiré (usage unique — limite le rejeu en
     # cas de vol du token).
-    await revoke_refresh_token(decoded)
+    if not await consume_refresh_token(decoded):
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Token de rafraîchissement révoqué ou sans identifiant unique.",
+        )
 
     access_token = create_access_token(data={"sub": str(user.id)})
     refresh_token = create_refresh_token(data={"sub": str(user.id)})

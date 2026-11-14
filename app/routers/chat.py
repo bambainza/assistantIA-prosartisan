@@ -50,8 +50,9 @@ from app.schemas.chat import (
     WebSocketMessage,
 )
 from app.schemas.quota import QuotaEpuiseResponse
+from app.services.audio_budget_service import audio_budget
 from app.services.audio_service import audio_service
-from app.services.cache_service import cache_service
+from app.services.cache_service import SharedBackendUnavailableError, cache_service
 from app.services.calculator_service import calculator_service
 from app.services.chat_history_service import chat_history_service
 from app.services.media_service import PreparedImage, media_service
@@ -88,6 +89,7 @@ class TranscribeResponse(BaseModel):
 
 @router.post("/chat/transcribe", response_model=TranscribeResponse)
 async def transcribe_audio_endpoint(
+    request: Request,
     file: UploadFile = File(...),
     current_user_id: uuid.UUID | None = Depends(get_optional_user_id),
 ) -> TranscribeResponse:
@@ -99,9 +101,21 @@ async def transcribe_audio_endpoint(
             detail="Note vocale trop volumineuse (10 Mo maximum).",
         )
     filename = file.filename or "audio.wav"
-    text = await audio_service.transcribe_audio(
-        file_bytes=audio_bytes, filename=filename
-    )
+    audio_service.validate_audio_file(filename)
+    if not audio_bytes:
+        raise HTTPException(status_code=400, detail="Le fichier audio fourni est vide.")
+    async with audio_budget("stt", current_user_id, get_client_ip(request)):
+        try:
+            text = await audio_service.transcribe_audio(
+                file_bytes=audio_bytes, filename=filename
+            )
+        except HTTPException:
+            raise
+        except Exception as exc:
+            logger.exception("Transcription indisponible.")
+            raise HTTPException(
+                status_code=503, detail=ASSISTANT_INDISPONIBLE_MESSAGE
+            ) from exc
     return TranscribeResponse(text=text)
 
 
@@ -112,13 +126,27 @@ class SynthesizeRequest(BaseModel):
 
 @router.post("/chat/synthesize")
 async def synthesize_speech_endpoint(
+    request: Request,
     payload: SynthesizeRequest,
     current_user_id: uuid.UUID | None = Depends(get_optional_user_id),
 ) -> Response:
     """Génère la lecture vocale (TTS) d'un texte et renvoie le flux audio MP3."""
-    audio_bytes = await audio_service.synthesize_speech(
-        text=payload.text, voice=payload.voice
-    )
+    if not payload.text.strip():
+        raise HTTPException(status_code=400, detail="Texte vide.")
+    async with audio_budget(
+        "tts", current_user_id, get_client_ip(request), amount=len(payload.text)
+    ):
+        try:
+            audio_bytes = await audio_service.synthesize_speech(
+                text=payload.text, voice=payload.voice
+            )
+        except HTTPException:
+            raise
+        except Exception as exc:
+            logger.exception("Synthèse vocale indisponible.")
+            raise HTTPException(
+                status_code=503, detail=ASSISTANT_INDISPONIBLE_MESSAGE
+            ) from exc
     return Response(content=audio_bytes, media_type="audio/mpeg")
 
 
@@ -546,7 +574,12 @@ async def chat_websocket_endpoint(
                 continue
 
             # 2. Débit puis quota (le middleware HTTP ne voit pas les WebSockets).
-            if await is_rate_limited(client_ip):
+            try:
+                limited = await is_rate_limited(client_ip)
+            except SharedBackendUnavailableError:
+                await _ws_send(websocket, type="error", message=_SERVICE_INDISPONIBLE)
+                continue
+            if limited:
                 await _ws_send(websocket, type="error", message=RATE_LIMIT_MESSAGE)
                 continue
             try:
@@ -568,10 +601,11 @@ async def chat_websocket_endpoint(
             question_text = turn.question.strip()
             if turn.audio_b64 is not None:
                 try:
-                    transcription = await audio_service.transcribe_audio(
-                        file_bytes=base64.b64decode(turn.audio_b64),
-                        filename=f"voice.{turn.audio_ext}",
-                    )
+                    async with audio_budget("stt", user_id, client_ip):
+                        transcription = await audio_service.transcribe_audio(
+                            file_bytes=base64.b64decode(turn.audio_b64),
+                            filename=f"voice.{turn.audio_ext}",
+                        )
                 except Exception as exc:
                     await quota_service.restituer_quota(
                         db=db, user_id=user_id, client_ip=client_ip
@@ -646,9 +680,12 @@ async def chat_websocket_endpoint(
             # 5. Lecture vocale pour le mode mains-libres.
             if turn.voice_output and answer_text:
                 try:
-                    tts_bytes = await audio_service.synthesize_speech(
-                        text=answer_text[:500]
-                    )
+                    async with audio_budget(
+                        "tts", user_id, client_ip, amount=len(answer_text[:500])
+                    ):
+                        tts_bytes = await audio_service.synthesize_speech(
+                            text=answer_text[:500]
+                        )
                     await _ws_send(
                         websocket,
                         type="audio_response",
@@ -658,6 +695,9 @@ async def chat_websocket_endpoint(
                     )
                 except Exception:
                     logger.exception("Échec de la synthèse vocale WebSocket.")
+                    await _ws_send(
+                        websocket, type="error", message="Lecture vocale indisponible."
+                    )
                 await _ws_send(websocket, type="voice_turn_completed")
     except WebSocketDisconnect:
         pass

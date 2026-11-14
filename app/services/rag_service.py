@@ -90,6 +90,10 @@ class RechercheIndisponibleError(RuntimeError):
     """
 
 
+class ActivationIndisponibleError(RechercheIndisponibleError):
+    """Les droits d'utilisation du corpus ne peuvent pas être vérifiés."""
+
+
 def load_system_prompt() -> str:
     """Charge le modèle de prompt système."""
     if os.path.exists(PROMPT_PATH):
@@ -266,8 +270,10 @@ class RAGService:
                     )
                     res = await session.execute(stmt)
                     return {row[0] for row in res.all()}
-            except Exception:
-                return set()
+            except Exception as exc:
+                raise ActivationIndisponibleError(
+                    "Vérification des activations indisponible."
+                ) from exc
 
         return await self._cached_set(_INACTIVE_DOCS_KEY, _load)
 
@@ -285,8 +291,10 @@ class RAGService:
                     stmt = select(Metier.id).where(Metier.is_active == False)
                     res = await session.execute(stmt)
                     return {int(row[0]) for row in res.all()}
-            except Exception:
-                return set()
+            except Exception as exc:
+                raise ActivationIndisponibleError(
+                    "Vérification des activations indisponible."
+                ) from exc
 
         return await self._cached_set(_INACTIVE_METIERS_KEY, _load)
 
@@ -376,6 +384,8 @@ class RAGService:
                 )
 
             return hits
+        except ActivationIndisponibleError:
+            raise
         except Exception as exc:
             raise RechercheIndisponibleError(
                 f"Recherche documentaire impossible ({type(exc).__name__}: {exc})"
@@ -516,6 +526,8 @@ class RAGService:
         image_url: str | None,
         history: list[dict[str, str]] | None,
     ) -> _Preparation:
+        # Vérifier les droits avant de servir une ancienne réponse en cache.
+        await self.get_inactive_document_names()
         if metier_id is not None and not await self.is_metier_active(metier_id):
             return _Preparation(sources=[], immediate=METIER_SUSPENDU_MESSAGE)
 
@@ -537,7 +549,7 @@ class RAGService:
             # Mode réel : la panne remonte au routeur (503 + question rendue).
             # Répondre « pas d'information » serait faux, et le mettre en cache
             # figerait cette fausse réponse pendant 24 h.
-            if not self._is_mock_mode():
+            if isinstance(exc, ActivationIndisponibleError) or not self._is_mock_mode():
                 raise
             # Mode mock (dev/tests sans Qdrant) : repli servi, jamais mis en cache.
             logger.warning("%s — repli servi sans mise en cache (mode mock).", exc)
