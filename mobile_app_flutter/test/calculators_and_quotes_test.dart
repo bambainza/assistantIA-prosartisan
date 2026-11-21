@@ -58,6 +58,28 @@ void main() {
       expect(deserialized.description, item.description);
       expect(deserialized.total, 90000.0);
     });
+
+    test('Ligne sans prix de référence signalée à compléter', () {
+      final item = QuoteItem.fromJson({
+        'description': 'Main d\'œuvre maçon',
+        'quantite': 3,
+        'unite': 'jour',
+        'prix_unitaire': 0,
+        'prix_source': 'a_saisir',
+      });
+      expect(item.prixSource, 'a_saisir');
+      expect(item.prixACompleter, isTrue);
+
+      item.prixUnitaire = 15000;
+      expect(item.prixACompleter, isFalse);
+
+      final grille = QuoteItem.fromJson({
+        'description': 'Ciment CPJ 42.5',
+        'prix_unitaire': 5200,
+        'prix_source': 'grille',
+      });
+      expect(grille.prixACompleter, isFalse);
+    });
   });
 
   group('Widgets UI Rendering Tests', () {
@@ -93,7 +115,7 @@ void main() {
 
       expect(find.text("📄 Devis & Factures Express"), findsOneWidget);
       expect(find.text("✨ Saisie rapide / Notes de chantier"), findsOneWidget);
-      expect(find.text("Analyser & Chiffrer automatiquement"), findsOneWidget);
+      expect(find.text("Analyser & pré-remplir le devis"), findsOneWidget);
       expect(find.text("Total HT :"), findsOneWidget);
       expect(find.text("Total TTC :"), findsOneWidget);
       expect(find.text("WhatsApp"), findsOneWidget);

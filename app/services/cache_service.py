@@ -246,9 +246,18 @@ class CacheService:
     def _hash_text(text: str) -> str:
         return hashlib.sha256(text.strip().lower().encode("utf-8")).hexdigest()
 
-    async def get_cached_embedding(self, text: str) -> list[float] | None:
-        """Récupère un embedding vectoriel précalculé."""
-        key = f"prosartisan:emb:{self._hash_text(text)}"
+    @classmethod
+    def _embedding_key(cls, text: str, espace: str) -> str:
+        # `espace` identifie le modèle, la dimension et l'usage (question ou
+        # document) : un vecteur d'un autre modèle ne doit jamais être relu.
+        prefixe = f"prosartisan:emb:{espace}:" if espace else "prosartisan:emb:"
+        return prefixe + cls._hash_text(text)
+
+    async def get_cached_embedding(
+        self, text: str, espace: str = ""
+    ) -> list[float] | None:
+        """Récupère un embedding vectoriel précalculé pour un modèle donné."""
+        key = self._embedding_key(text, espace)
         cached = await self.get(key)
         if cached:
             try:
@@ -258,10 +267,14 @@ class CacheService:
         return None
 
     async def cache_embedding(
-        self, text: str, embedding: list[float], ttl_seconds: int = 604800
+        self,
+        text: str,
+        embedding: list[float],
+        ttl_seconds: int = 604800,
+        espace: str = "",
     ) -> None:
         """Met en cache un embedding vectoriel (TTL par défaut 7 jours)."""
-        key = f"prosartisan:emb:{self._hash_text(text)}"
+        key = self._embedding_key(text, espace)
         await self.set(key, json.dumps(embedding), ttl_seconds=ttl_seconds)
 
     @classmethod

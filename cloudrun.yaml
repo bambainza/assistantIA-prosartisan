@@ -63,6 +63,14 @@ spec:
                 secretKeyRef:
                   name: prosartisan-secrets
                   key: mistral-api-key
+            # Gemini : LLM prioritaire et vecteurs de la recherche documentaire.
+            - name: GEMINI_API_KEY
+              valueFrom:
+                secretKeyRef:
+                  name: prosartisan-secrets
+                  key: gemini-api-key
+            - name: EMBEDDING_PROVIDER
+              value: "gemini"
             - name: CORS_ALLOWED_ORIGINS
               value: "https://YOUR_PUBLIC_DOMAIN"
             - name: VAPID_PRIVATE_KEY

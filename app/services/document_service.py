@@ -33,7 +33,7 @@ class DocumentService:
         """
         try:
             result = await rag_service.qdrant_client.delete(
-                collection_name=settings.qdrant_collection,
+                collection_name=settings.collection_vectorielle,
                 points_selector=Filter(
                     must=[
                         FieldCondition(

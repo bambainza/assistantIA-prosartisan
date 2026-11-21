@@ -268,7 +268,7 @@ async def get_ingestion_stats(
             port=settings.qdrant_port,
         )
         info = await qdrant_client.get_collection(
-            collection_name=settings.qdrant_collection
+            collection_name=settings.collection_vectorielle
         )
         total_chunks = info.points_count
     except Exception as exc:
@@ -279,7 +279,7 @@ async def get_ingestion_stats(
         ) from exc
 
     return {
-        "collection": settings.qdrant_collection,
+        "collection": settings.collection_vectorielle,
         "metiers_coverts": [],
         "total_chunks": total_chunks,
     }
@@ -309,7 +309,7 @@ async def get_documents_list(
 
         # Récupérer les 1000 premiers points pour extraire les noms de fichiers uniques
         scroll_results = await qdrant_client.scroll(
-            collection_name=settings.qdrant_collection,
+            collection_name=settings.collection_vectorielle,
             limit=1000,
             with_payload=True,
             with_vectors=False,

@@ -7,6 +7,13 @@ from datetime import datetime
 
 from pydantic import BaseModel, ConfigDict, Field
 
+# Origine du prix unitaire d'une ligne de devis.
+PRIX_GRILLE = "grille"  # grille de prix de référence (back-office)
+PRIX_A_SAISIR = "a_saisir"  # aucun prix de référence : à saisir par l'artisan
+PRIX_ARTISAN = "artisan"  # prix écrit par l'artisan dans sa description
+# Taille maximale d'une description envoyée à l'IA (coût borné, AGENTS.md §2).
+MAX_DESCRIPTION_DEVIS = 4000
+
 
 class QuoteItem(BaseModel):
     """Ligne de devis (fourniture, main d'œuvre, forfait)."""
@@ -25,6 +32,17 @@ class QuoteItem(BaseModel):
     )
     type_item: str = Field(
         default="FOURNITURE", description="FOURNITURE, MAIN_D_OEUVRE, FORFAIT"
+    )
+    prix_source: str | None = Field(
+        default=None,
+        description="Origine du prix : 'grille' (référence), 'a_saisir' (vide), 'artisan'",
+    )
+    prix_reference_id: int | None = Field(
+        default=None, description="Prix de référence appliqué, le cas échéant"
+    )
+    quantite_source: str | None = Field(
+        default=None,
+        description="Origine de la quantité : 'calculateur' (certifiée) ou 'ia' (à vérifier)",
     )
 
 
@@ -139,6 +157,7 @@ class QuoteExtractRequest(BaseModel):
     description_brute: str = Field(
         ...,
         min_length=5,
+        max_length=MAX_DESCRIPTION_DEVIS,
         description="Transcription vocale ou note écrite de chantier (ex: 'Changement de 3 disjoncteurs, 40m de câble 2.5 et 6 prises pour Koffi')",
     )
     client_nom: str | None = Field(default=None, description="Nom du client si connu")
@@ -146,6 +165,11 @@ class QuoteExtractRequest(BaseModel):
         default=None, description="Téléphone du client"
     )
     metier_id: int | None = Field(default=None, description="Métier de l'artisan")
+    commune: str | None = Field(
+        default=None,
+        max_length=100,
+        description="Commune du chantier (choix des prix de référence locaux)",
+    )
 
 
 class QuoteExtractResponse(BaseModel):
@@ -158,3 +182,10 @@ class QuoteExtractResponse(BaseModel):
     items: list[QuoteItem]
     delai_estime_jours: int | None
     recommandations: list[str] = Field(default_factory=list)
+    lignes_sans_prix: int = Field(
+        default=0, description="Lignes sans prix de référence, à compléter"
+    )
+    mode_demonstration: bool = Field(
+        default=False, description="Vrai si aucune IA n'est configurée (dev/tests)"
+    )
+    avertissements: list[str] = Field(default_factory=list)

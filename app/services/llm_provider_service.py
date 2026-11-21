@@ -26,7 +26,7 @@ from typing import Any
 
 import httpx
 
-from app.config import settings
+from app.config import cle_api_ia_valide, settings
 from app.services.cache_service import cache_service
 
 logger = logging.getLogger(__name__)
@@ -40,6 +40,8 @@ _CONFIG_MODE_KEY = "prosartisan:llm:config:mode"
 _CONFIG_FAILOVER_KEY = "prosartisan:llm:config:failover"
 _CONFIG_TTL_SECONDS = 30 * 86400  # 30 jours
 _HEALTH_TTL_SECONDS = 24 * 3600  # 24 heures
+# Limite de l'API Gemini `batchEmbedContents` (textes par requête).
+GEMINI_EMBED_BATCH_MAX = 100
 
 _DEPRECATED_GEMINI_PREFIXES: tuple[str, ...] = (
     "gemini-1.5",
@@ -63,6 +65,10 @@ _AUDIO_MIME_TYPES: dict[str, str] = {
     "wav": "audio/wav",
     "webm": "audio/webm",
 }
+
+
+class FournisseursIAIndisponiblesError(RuntimeError):
+    """Aucun fournisseur IA (Mistral, Gemini) n'a pu produire de réponse."""
 
 
 @dataclass
@@ -335,21 +341,7 @@ class LLMProviderService:
     @staticmethod
     def _is_valid_api_key(raw_key: str | None) -> bool:
         """Retourne True uniquement si la clé API n'est ni vide ni un placeholder d'exemple."""
-        key = (raw_key or "").strip()
-        if not key:
-            return False
-        lower = key.lower()
-        placeholder_prefixes = (
-            "sk-placeholder",
-            "aiza-placeholder",
-            "your-",
-            "your_",
-            "votre_",
-            "votre-",
-            "placeholder",
-            "changeme",
-        )
-        return not lower.startswith(placeholder_prefixes) and "placeholder" not in lower
+        return cle_api_ia_valide(raw_key)
 
     @classmethod
     def is_provider_configured(cls, provider: str) -> bool:
@@ -663,6 +655,117 @@ class LLMProviderService:
             "candidate_order": [c.upper() for c in candidates],
             "providers": providers,
         }
+
+    # ── Complétion texte simple avec bascule (devis, reformulation) ──
+
+    async def complete_text_with_failover(
+        self,
+        *,
+        messages: list[dict[str, Any]],
+        mistral_client: Any,
+        temperature: float = 0.1,
+    ) -> str:
+        """Complétion texte sans outil, en suivant l'ordre de bascule configuré.
+
+        Chaque succès ou échec alimente le coupe-circuit partagé. Si aucun
+        fournisseur n'est configuré ou si tous échouent, lève
+        `FournisseursIAIndisponiblesError` : l'appelant ne doit jamais
+        substituer un contenu factice à la réponse attendue.
+        """
+        candidates = await self.get_candidate_providers()
+        if not candidates:
+            raise FournisseursIAIndisponiblesError(
+                "Aucun fournisseur IA configuré ou disponible."
+            )
+
+        last_exc: Exception | None = None
+        for provider in candidates:
+            t0 = time.perf_counter()
+            try:
+                if provider == PROVIDER_GEMINI:
+                    result = await self.complete_gemini(messages=messages)
+                    text = result.content or ""
+                else:
+                    completion = await mistral_client.chat.complete_async(
+                        model=settings.llm_model,
+                        messages=messages,
+                        temperature=temperature,
+                    )
+                    text = completion.choices[0].message.content or ""
+                await self.record_success(provider, (time.perf_counter() - t0) * 1000.0)
+                return text
+            except Exception as exc:
+                last_exc = exc
+                await self.record_failure(provider, exc)
+                logger.warning("Échec de complétion texte (%s) : %s", provider, exc)
+
+        raise FournisseursIAIndisponiblesError(
+            "Tous les fournisseurs IA ont échoué."
+        ) from last_exc
+
+    # ── Vecteurs Gemini (recherche documentaire) ──
+
+    async def embed_gemini(
+        self, texts: list[str], *, task_type: str
+    ) -> list[list[float]]:
+        """Vecteurs Gemini d'une liste de textes (`batchEmbedContents`, ≤ 100 textes).
+
+        `task_type` vaut `RETRIEVAL_DOCUMENT` (indexation) ou `RETRIEVAL_QUERY`
+        (question) : `gemini-embedding-001` encode différemment les deux pour
+        améliorer la recherche. Les modèles `gemini-embedding-2*` n'acceptent
+        pas ce paramètre, qui n'est alors pas transmis. Toute réponse
+        incomplète ou de mauvaise dimension lève une erreur : jamais de vecteur
+        partiel ou factice.
+        """
+        if not texts:
+            return []
+        if len(texts) > GEMINI_EMBED_BATCH_MAX:
+            raise ValueError(
+                f"Au plus {GEMINI_EMBED_BATCH_MAX} textes par appel de vecteurs Gemini."
+            )
+        modele = settings.gemini_embedding_model
+        dimensions = settings.gemini_embedding_dimensions
+        accepte_task_type = not modele.startswith("gemini-embedding-2")
+
+        requetes: list[dict[str, Any]] = []
+        for texte in texts:
+            requete: dict[str, Any] = {
+                "model": f"models/{modele}",
+                "content": {"parts": [{"text": texte}]},
+                "outputDimensionality": dimensions,
+            }
+            if accepte_task_type:
+                requete["taskType"] = task_type
+            requetes.append(requete)
+
+        url = (
+            f"{settings.gemini_api_base_url.rstrip('/')}/models/{modele}"
+            ":batchEmbedContents"
+        )
+        async with httpx.AsyncClient(
+            timeout=settings.gemini_timeout_seconds,
+            transport=self._http_transport,
+        ) as client:
+            response = await client.post(
+                url,
+                headers={
+                    "x-goog-api-key": settings.gemini_api_key,
+                    "Content-Type": "application/json",
+                },
+                json={"requests": requetes},
+            )
+        if response.status_code >= 400:
+            raise RuntimeError(
+                f"Gemini embeddings HTTP {response.status_code}: {response.text[:300]}"
+            )
+
+        embeddings = response.json().get("embeddings") or []
+        vecteurs = [list(map(float, e.get("values") or [])) for e in embeddings]
+        if len(vecteurs) != len(texts) or any(len(v) != dimensions for v in vecteurs):
+            raise RuntimeError(
+                "Réponse de vecteurs Gemini incomplète ou de dimension inattendue."
+            )
+        return vecteurs
 
     # ── Exécution Gemini via l'API Interactions (/v1beta/interactions) ──
 

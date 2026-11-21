@@ -15,6 +15,8 @@ _CONFIG_PROD_FORTE = {
     "db_password": "un-mot-de-passe-postgres-solide",
     "cors_allowed_origins": "https://app.prosartisan.ci",
     "vapid_private_key": "propre-cle-vapid-generee-pour-la-production-xx",
+    "mistral_api_key": "cle-mistral-de-production-valide",
+    "gemini_api_key": "AIza-placeholder",
 }
 
 
@@ -44,6 +46,48 @@ def test_prod_rejette_la_cle_vapid_de_dev() -> None:
     config = {**_CONFIG_PROD_FORTE, "vapid_private_key": ""}
     with pytest.raises(ValidationError, match="VAPID_PRIVATE_KEY"):
         Settings(_env_file=None, **config)
+
+
+def test_prod_rejette_l_absence_de_cle_ia() -> None:
+    """Sans clé IA, la production servirait des réponses et devis factices."""
+    config = {
+        **_CONFIG_PROD_FORTE,
+        "mistral_api_key": "sk-placeholder",
+        "gemini_api_key": "AIza-placeholder",
+    }
+    with pytest.raises(ValidationError, match="MISTRAL_API_KEY ou GEMINI_API_KEY"):
+        Settings(_env_file=None, **config)
+
+
+def test_prod_rejette_une_cle_ia_d_exemple() -> None:
+    config = {
+        **_CONFIG_PROD_FORTE,
+        "mistral_api_key": "votre_cle_mistral",
+        "gemini_api_key": "",
+    }
+    with pytest.raises(ValidationError, match="MISTRAL_API_KEY ou GEMINI_API_KEY"):
+        Settings(_env_file=None, **config)
+
+
+def test_prod_accepte_gemini_seul() -> None:
+    config = {
+        **_CONFIG_PROD_FORTE,
+        "mistral_api_key": "sk-placeholder",
+        "gemini_api_key": "AIzaSy-cle-gemini-de-production",
+    }
+    assert Settings(_env_file=None, **config).is_production is True
+
+
+def test_gemini_prioritaire_par_defaut() -> None:
+    settings = Settings(_env_file=None, app_env="development")
+    assert settings.llm_provider == "gemini"
+
+
+def test_seuil_rag_par_defaut_n_est_plus_permissif() -> None:
+    """0.15 laissait passer presque tout extrait (similarités mistral-embed élevées)."""
+    settings = Settings(_env_file=None, app_env="development")
+    assert settings.rag_min_score >= 0.5
+    assert settings.rag_lexical_min_score >= 0.5
 
 
 def test_prod_accepte_une_configuration_complete() -> None:

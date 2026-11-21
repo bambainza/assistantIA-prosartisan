@@ -35,7 +35,7 @@ async def _check_dependencies(db: AsyncSession) -> None:
     if redis is None or not await redis.ping():
         raise RuntimeError("Redis indisponible")
     await rag_service.qdrant_client.get_collection(
-        collection_name=settings.qdrant_collection
+        collection_name=settings.collection_vectorielle
     )
 
 

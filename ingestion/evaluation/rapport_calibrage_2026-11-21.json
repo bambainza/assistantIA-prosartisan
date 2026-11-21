@@ -1,0 +1,758 @@
+{
+  "recommandation": {
+    "seuil": 0.67,
+    "taux_faux_positifs": 0.0444,
+    "taux_couvertes_servies": 1.0,
+    "couvertes_servies_par_langue": {
+      "fr": 1.0,
+      "nouchi": 1.0
+    },
+    "nb_couvertes": 61,
+    "nb_hors_corpus": 45
+  },
+  "avec_reformulation": false,
+  "scores": [
+    {
+      "question": "Quel volume minimal pour une fosse septique de maison de 4 pièces ?",
+      "attendu": "couvert",
+      "langue": "fr",
+      "document": "guide_assainissement_fosse_septique_ci.md",
+      "score": 0.7622
+    },
+    {
+      "question": "Comment assurer l'étanchéité intérieure d'une fosse septique en agglos ?",
+      "attendu": "couvert",
+      "langue": "fr",
+      "document": "guide_assainissement_fosse_septique_ci.md",
+      "score": 0.7314
+    },
+    {
+      "question": "Comment faire le recuit de l'or ou de l'argent avant de le travailler ?",
+      "attendu": "couvert",
+      "langue": "fr",
+      "document": "guide_bijouterie_orfevrerie_atelier.md",
+      "score": 0.7724
+    },
+    {
+      "question": "Quelles étapes pour la fonte à la cire perdue d'un bijou ?",
+      "attendu": "couvert",
+      "langue": "fr",
+      "document": "guide_bijouterie_orfevrerie_atelier.md",
+      "score": 0.7709
+    },
+    {
+      "question": "Combien de sel mettre par kilo de farine pour le pain ?",
+      "attendu": "couvert",
+      "langue": "fr",
+      "document": "guide_boulangerie_patisserie_artisanale.md",
+      "score": 0.7375
+    },
+    {
+      "question": "Comment maîtriser la pâte à pain quand il fait très chaud ?",
+      "attendu": "couvert",
+      "langue": "fr",
+      "document": "guide_boulangerie_patisserie_artisanale.md",
+      "score": 0.8086
+    },
+    {
+      "question": "Comment broder l'encolure d'un boubou ?",
+      "attendu": "couvert",
+      "langue": "fr",
+      "document": "guide_broderie_finitions_atelier.md",
+      "score": 0.7679
+    },
+    {
+      "question": "Quel enrobage minimal des fers à béton en zone lagunaire ?",
+      "attendu": "couvert",
+      "langue": "fr",
+      "document": "guide_btp_ferraillage_coffrage_ci.md",
+      "score": 0.782
+    },
+    {
+      "question": "Quel bois utiliser pour le coffrage et comment le traiter avec un décoffrant ?",
+      "attendu": "couvert",
+      "langue": "fr",
+      "document": "guide_btp_ferraillage_coffrage_ci.md",
+      "score": 0.7832
+    },
+    {
+      "question": "Comment contrôler la planéité d'une chape avant de poser le carrelage ?",
+      "attendu": "couvert",
+      "langue": "fr",
+      "document": "guide_carrelage_revetement_dtu52.md",
+      "score": 0.7755
+    },
+    {
+      "question": "Colle à carrelage ou mortier de scellement : que choisir pour un sol ?",
+      "attendu": "couvert",
+      "langue": "fr",
+      "document": "guide_carrelage_revetement_dtu52.md",
+      "score": 0.7541
+    },
+    {
+      "question": "Quelle puissance de split pour une chambre de 12 m² ?",
+      "attendu": "couvert",
+      "langue": "fr",
+      "document": "guide_climatisation_froid_installation_entretien.md",
+      "score": 0.774
+    },
+    {
+      "question": "Où placer l'unité extérieure d'un climatiseur ?",
+      "attendu": "couvert",
+      "langue": "fr",
+      "document": "guide_climatisation_froid_installation_entretien.md",
+      "score": 0.7591
+    },
+    {
+      "question": "Quelles matières vertes et brunes mettre dans un compost ?",
+      "attendu": "couvert",
+      "langue": "fr",
+      "document": "guide_compostage_fertilisation_organique.md",
+      "score": 0.7603
+    },
+    {
+      "question": "Entre quelles températures les microbes se multiplient-ils dans les aliments ?",
+      "attendu": "couvert",
+      "langue": "fr",
+      "document": "guide_conservation_aliments_chaine_froid.md",
+      "score": 0.7784
+    },
+    {
+      "question": "Comment transporter la viande et le poisson sans casser la chaîne du froid ?",
+      "attendu": "couvert",
+      "langue": "fr",
+      "document": "guide_conservation_aliments_chaine_froid.md",
+      "score": 0.7205
+    },
+    {
+      "question": "Quelles marges de couture prévoir sur un patron ?",
+      "attendu": "couvert",
+      "langue": "fr",
+      "document": "guide_couture_patronage_retouches.md",
+      "score": 0.7847
+    },
+    {
+      "question": "Comment démanteler un vieil ordinateur sans danger ?",
+      "attendu": "couvert",
+      "langue": "fr",
+      "document": "guide_dechets_electroniques_deee.md",
+      "score": 0.7391
+    },
+    {
+      "question": "Mon disjoncteur saute tout le temps, comment trouver la panne ?",
+      "attendu": "couvert",
+      "langue": "fr",
+      "document": "guide_depannage_electrique_domestique_securite.md",
+      "score": 0.7882
+    },
+    {
+      "question": "Une prise n'a plus de courant, quelles vérifications faire ?",
+      "attendu": "couvert",
+      "langue": "fr",
+      "document": "guide_depannage_electrique_domestique_securite.md",
+      "score": 0.8031
+    },
+    {
+      "question": "Comment décharger le condensateur d'un micro-ondes avant réparation ?",
+      "attendu": "couvert",
+      "langue": "fr",
+      "document": "guide_depannage_tv_electromenager_onduleurs.md",
+      "score": 0.7603
+    },
+    {
+      "question": "Comment dépanner l'alimentation à découpage d'un téléviseur ?",
+      "attendu": "couvert",
+      "langue": "fr",
+      "document": "guide_depannage_tv_electromenager_onduleurs.md",
+      "score": 0.7808
+    },
+    {
+      "question": "À partir de quelle largeur une fissure de mur devient grave ?",
+      "attendu": "couvert",
+      "langue": "fr",
+      "document": "guide_diagnostic_fissures_pathologies_batiment.md",
+      "score": 0.7637
+    },
+    {
+      "question": "Que signifie une fissure horizontale en pied de mur ?",
+      "attendu": "couvert",
+      "langue": "fr",
+      "document": "guide_diagnostic_fissures_pathologies_batiment.md",
+      "score": 0.7908
+    },
+    {
+      "question": "Comment lire les codes défauts avec une valise OBD-II ?",
+      "attendu": "couvert",
+      "langue": "fr",
+      "document": "guide_diagnostic_pannes_electroniques_auto.md",
+      "score": 0.7405
+    },
+    {
+      "question": "Semelle filante ou puits court : quelle fondation choisir sur un sol argileux ?",
+      "attendu": "couvert",
+      "langue": "fr",
+      "document": "guide_fondations_terrassement_geotechnique_ci.md",
+      "score": 0.7403
+    },
+    {
+      "question": "Comment désinfecter les tondeuses et ciseaux dans un salon de coiffure ?",
+      "attendu": "couvert",
+      "langue": "fr",
+      "document": "guide_hygiene_desinfection_salon.md",
+      "score": 0.8021
+    },
+    {
+      "question": "Comment estimer le besoin en énergie avant d'installer des panneaux solaires ?",
+      "attendu": "couvert",
+      "langue": "fr",
+      "document": "guide_installation_solaire_photovoltaique_ci.md",
+      "score": 0.7771
+    },
+    {
+      "question": "Que faire quand ma machine à coudre saute des points ?",
+      "attendu": "couvert",
+      "langue": "fr",
+      "document": "guide_machines_coudre_reglage_entretien.md",
+      "score": 0.8096
+    },
+    {
+      "question": "Quel dosage de ciment pour un béton de poteau ?",
+      "attendu": "couvert",
+      "langue": "fr",
+      "document": "guide_maconnerie_dtu_20_1_ci.md",
+      "score": 0.7672
+    },
+    {
+      "question": "Quels agglos utiliser pour un mur porteur extérieur ?",
+      "attendu": "couvert",
+      "langue": "fr",
+      "document": "guide_maconnerie_dtu_20_1_ci.md",
+      "score": 0.7685
+    },
+    {
+      "question": "Comment installer un kit d'irrigation goutte à goutte au jardin ?",
+      "attendu": "couvert",
+      "langue": "fr",
+      "document": "guide_maraichage_irrigation_goutte_a_goutte.md",
+      "score": 0.7683
+    },
+    {
+      "question": "Comment faire une couture sellier au point noué sur du cuir ?",
+      "attendu": "couvert",
+      "langue": "fr",
+      "document": "guide_maroquinerie_cuir_artisanat.md",
+      "score": 0.7769
+    },
+    {
+      "question": "Pourquoi un moteur diesel surchauffe-t-il ?",
+      "attendu": "couvert",
+      "langue": "fr",
+      "document": "guide_mecanique_auto_diesel_essence.md",
+      "score": 0.7475
+    },
+    {
+      "question": "Quelle viscosité d'huile moteur sous 40 degrés ?",
+      "attendu": "couvert",
+      "langue": "fr",
+      "document": "guide_mecanique_auto_diesel_essence.md",
+      "score": 0.7384
+    },
+    {
+      "question": "Comment régler le carburateur d'une moto par temps chaud et poussiéreux ?",
+      "attendu": "couvert",
+      "langue": "fr",
+      "document": "guide_mecanique_motos_tricycles_ci.md",
+      "score": 0.8026
+    },
+    {
+      "question": "Quelles essences de bois tropical pour une charpente ?",
+      "attendu": "couvert",
+      "langue": "fr",
+      "document": "guide_menuiserie_charpente_bois_tropical.md",
+      "score": 0.7631
+    },
+    {
+      "question": "Comment protéger le bois contre les termites ?",
+      "attendu": "couvert",
+      "langue": "fr",
+      "document": "guide_menuiserie_charpente_bois_tropical.md",
+      "score": 0.7281
+    },
+    {
+      "question": "Comment traiter le salpêtre et l'humidité qui remonte dans un mur avant peinture ?",
+      "attendu": "couvert",
+      "langue": "fr",
+      "document": "guide_peinture_etancheite_tropicale.md",
+      "score": 0.7639
+    },
+    {
+      "question": "Quel diamètre de tuyau PVC pour l'évacuation d'un WC ?",
+      "attendu": "couvert",
+      "langue": "fr",
+      "document": "guide_plomberie_sanitaire_dtu60_1.md",
+      "score": 0.7849
+    },
+    {
+      "question": "Quelle pente pour une canalisation d'évacuation ?",
+      "attendu": "couvert",
+      "langue": "fr",
+      "document": "guide_plomberie_sanitaire_dtu60_1.md",
+      "score": 0.7996
+    },
+    {
+      "question": "Comment fabriquer des pavés avec du plastique recyclé ?",
+      "attendu": "couvert",
+      "langue": "fr",
+      "document": "guide_recyclage_plastique_pave.md",
+      "score": 0.777
+    },
+    {
+      "question": "Que vérifier devant le client avant d'ouvrir un smartphone ?",
+      "attendu": "couvert",
+      "langue": "fr",
+      "document": "guide_reparation_smartphones_ecrans_batteries.md",
+      "score": 0.8057
+    },
+    {
+      "question": "Comment préparer le garba en respectant l'hygiène ?",
+      "attendu": "couvert",
+      "langue": "fr",
+      "document": "guide_restauration_maquis_hygiene_ci.md",
+      "score": 0.762
+    },
+    {
+      "question": "Quel bois choisir pour débuter en sculpture ?",
+      "attendu": "couvert",
+      "langue": "fr",
+      "document": "guide_sculpture_bois_finitions.md",
+      "score": 0.788
+    },
+    {
+      "question": "Quels EPI pour des travaux en hauteur sur un toit ?",
+      "attendu": "couvert",
+      "langue": "fr",
+      "document": "guide_securite_chantier_epi_prevention_btp.md",
+      "score": 0.7354
+    },
+    {
+      "question": "Quel diamètre de fil d'étain pour souder des composants électroniques ?",
+      "attendu": "couvert",
+      "langue": "fr",
+      "document": "guide_soudure_electronique_esd.md",
+      "score": 0.756
+    },
+    {
+      "question": "Faut-il décatir le wax avant de le couper ?",
+      "attendu": "couvert",
+      "langue": "fr",
+      "document": "guide_tissus_pagne_wax_teinture.md",
+      "score": 0.7835
+    },
+    {
+      "question": "Comment préparer la tôle nue avant peinture de carrosserie ?",
+      "attendu": "couvert",
+      "langue": "fr",
+      "document": "guide_tolerie_peinture_auto_carrosserie.md",
+      "score": 0.8145
+    },
+    {
+      "question": "Combien de temps garder des tresses sans abîmer les cheveux ?",
+      "attendu": "couvert",
+      "langue": "fr",
+      "document": "guide_tresses_extensions_protection.md",
+      "score": 0.7962
+    },
+    {
+      "question": "Quelle section de câble pour un circuit de prises ?",
+      "attendu": "couvert",
+      "langue": "fr",
+      "document": "normes_electricite_nfc15100_ci.md",
+      "score": 0.7477
+    },
+    {
+      "question": "Faut-il un différentiel 30 mA dans une maison ?",
+      "attendu": "couvert",
+      "langue": "fr",
+      "document": "normes_electricite_nfc15100_ci.md",
+      "score": 0.7522
+    },
+    {
+      "question": "Comment câbler un va-et-vient pour une lampe ?",
+      "attendu": "couvert",
+      "langue": "fr",
+      "document": "normes_electricite_nfc15100_ci.md",
+      "score": 0.7845
+    },
+    {
+      "question": "Mon vieux père, donne-moi le bon dosage de ciment pour couler poteau sans que ça se gâte.",
+      "attendu": "couvert",
+      "langue": "nouchi",
+      "document": "guide_maconnerie_dtu_20_1_ci.md",
+      "score": 0.7285
+    },
+    {
+      "question": "Le courant fait coupe-décaler sur mon disjoncteur dès que j'allume le moteur, c'est quoi ?",
+      "attendu": "couvert",
+      "langue": "nouchi",
+      "document": "guide_depannage_electrique_domestique_securite.md",
+      "score": 0.7215
+    },
+    {
+      "question": "Ma moto Jakarta cale à chaud quand je mets gaz, comment je règle carbu ?",
+      "attendu": "couvert",
+      "langue": "nouchi",
+      "document": "guide_mecanique_motos_tricycles_ci.md",
+      "score": 0.7497
+    },
+    {
+      "question": "Mon split-là ne glace plus la chambre, il faut faire quoi pour l'entretien ?",
+      "attendu": "couvert",
+      "langue": "nouchi",
+      "document": "guide_climatisation_froid_installation_entretien.md",
+      "score": 0.737
+    },
+    {
+      "question": "Pour garba, comment on garde thon et attiéké propres pour les clients ?",
+      "attendu": "couvert",
+      "langue": "nouchi",
+      "document": "guide_restauration_maquis_hygiene_ci.md",
+      "score": 0.8109
+    },
+    {
+      "question": "Mur a fendu grand-grand en bas, c'est dangereux pour la maison ?",
+      "attendu": "couvert",
+      "langue": "nouchi",
+      "document": "guide_diagnostic_fissures_pathologies_batiment.md",
+      "score": 0.7205
+    },
+    {
+      "question": "Comment choisir une pompe immergée pour un forage de 60 m ?",
+      "attendu": "hors_corpus",
+      "langue": "fr",
+      "document": null,
+      "score": 0.6357
+    },
+    {
+      "question": "Comment entretenir le filtre à sable d'une piscine ?",
+      "attendu": "hors_corpus",
+      "langue": "fr",
+      "document": null,
+      "score": 0.6176
+    },
+    {
+      "question": "Comment rebobiner le moteur d'un ventilateur ?",
+      "attendu": "hors_corpus",
+      "langue": "fr",
+      "document": null,
+      "score": 0.6242
+    },
+    {
+      "question": "Quelle est la procédure pour installer un ascenseur hydraulique ?",
+      "attendu": "hors_corpus",
+      "langue": "fr",
+      "document": null,
+      "score": 0.6223
+    },
+    {
+      "question": "Comment poser un faux plafond en staff ?",
+      "attendu": "hors_corpus",
+      "langue": "fr",
+      "document": null,
+      "score": 0.6054
+    },
+    {
+      "question": "Comment implanter un bâtiment avec un théodolite ?",
+      "attendu": "hors_corpus",
+      "langue": "fr",
+      "document": null,
+      "score": 0.5878
+    },
+    {
+      "question": "Comment entretenir un groupe électrogène de 100 kVA ?",
+      "attendu": "hors_corpus",
+      "langue": "fr",
+      "document": null,
+      "score": 0.6686
+    },
+    {
+      "question": "Quelle est la recette du kédjénou de poulet ?",
+      "attendu": "hors_corpus",
+      "langue": "fr",
+      "document": null,
+      "score": 0.6175
+    },
+    {
+      "question": "Comment préparer du jus de gnamakoudji pour la vente ?",
+      "attendu": "couvert",
+      "langue": "fr",
+      "document": "guide_restauration_maquis_hygiene_ci.md",
+      "score": 0.7358
+    },
+    {
+      "question": "Comment fumer le poisson au four chorkor ?",
+      "attendu": "couvert",
+      "langue": "fr",
+      "document": "guide_restauration_maquis_hygiene_ci.md",
+      "score": 0.7835
+    },
+    {
+      "question": "Comment monter une vulcanisation et réparer une chambre à air ?",
+      "attendu": "hors_corpus",
+      "langue": "fr",
+      "document": null,
+      "score": 0.6236
+    },
+    {
+      "question": "Comment régler la géométrie du train avant d'une voiture ?",
+      "attendu": "hors_corpus",
+      "langue": "fr",
+      "document": null,
+      "score": 0.6075
+    },
+    {
+      "question": "Comment entretenir le circuit hydraulique d'une pelleteuse ?",
+      "attendu": "hors_corpus",
+      "langue": "fr",
+      "document": null,
+      "score": 0.6282
+    },
+    {
+      "question": "Comment tisser un panier en rotin ?",
+      "attendu": "hors_corpus",
+      "langue": "fr",
+      "document": null,
+      "score": 0.6063
+    },
+    {
+      "question": "Comment teindre des cheveux en blond platine ?",
+      "attendu": "hors_corpus",
+      "langue": "fr",
+      "document": null,
+      "score": 0.57
+    },
+    {
+      "question": "Comment faire une manucure semi-permanente ?",
+      "attendu": "hors_corpus",
+      "langue": "fr",
+      "document": null,
+      "score": 0.6014
+    },
+    {
+      "question": "Comment élever des tilapias en bassin ?",
+      "attendu": "hors_corpus",
+      "langue": "fr",
+      "document": null,
+      "score": 0.601
+    },
+    {
+      "question": "Quelle race de vache laitière choisir en Côte d'Ivoire ?",
+      "attendu": "hors_corpus",
+      "langue": "fr",
+      "document": null,
+      "score": 0.6011
+    },
+    {
+      "question": "Comment greffer un manguier ?",
+      "attendu": "hors_corpus",
+      "langue": "fr",
+      "document": null,
+      "score": 0.5906
+    },
+    {
+      "question": "Comment programmer un automate industriel Siemens ?",
+      "attendu": "hors_corpus",
+      "langue": "fr",
+      "document": null,
+      "score": 0.5572
+    },
+    {
+      "question": "Comment configurer un routeur Wi-Fi pour un cybercafé ?",
+      "attendu": "hors_corpus",
+      "langue": "fr",
+      "document": null,
+      "score": 0.5628
+    },
+    {
+      "question": "Comment créer un site internet pour mon atelier ?",
+      "attendu": "hors_corpus",
+      "langue": "fr",
+      "document": null,
+      "score": 0.6219
+    },
+    {
+      "question": "Comment déclarer mon entreprise au CEPICI ?",
+      "attendu": "hors_corpus",
+      "langue": "fr",
+      "document": null,
+      "score": 0.6101
+    },
+    {
+      "question": "Quel est le taux de la TVA sur les travaux de bâtiment ?",
+      "attendu": "hors_corpus",
+      "langue": "fr",
+      "document": null,
+      "score": 0.5637
+    },
+    {
+      "question": "Comment obtenir un prêt pour acheter une bétonnière ?",
+      "attendu": "hors_corpus",
+      "langue": "fr",
+      "document": null,
+      "score": 0.6244
+    },
+    {
+      "question": "Combien coûte un sac de ciment à Bouaké aujourd'hui ?",
+      "attendu": "hors_corpus",
+      "langue": "fr",
+      "document": null,
+      "score": 0.6454
+    },
+    {
+      "question": "Comment calculer mes cotisations CNPS d'apprenti ?",
+      "attendu": "hors_corpus",
+      "langue": "fr",
+      "document": null,
+      "score": 0.5664
+    },
+    {
+      "question": "Comment rédiger un contrat de sous-traitance ?",
+      "attendu": "hors_corpus",
+      "langue": "fr",
+      "document": null,
+      "score": 0.5786
+    },
+    {
+      "question": "Qui a gagné la Coupe d'Afrique des nations 2024 ?",
+      "attendu": "hors_corpus",
+      "langue": "fr",
+      "document": null,
+      "score": 0.5247
+    },
+    {
+      "question": "Quel temps fera-t-il à Abidjan demain ?",
+      "attendu": "hors_corpus",
+      "langue": "fr",
+      "document": null,
+      "score": 0.6094
+    },
+    {
+      "question": "Comment soigner le paludisme d'un enfant ?",
+      "attendu": "hors_corpus",
+      "langue": "fr",
+      "document": null,
+      "score": 0.5756
+    },
+    {
+      "question": "Comment réparer une montre mécanique ?",
+      "attendu": "hors_corpus",
+      "langue": "fr",
+      "document": null,
+      "score": 0.6188
+    },
+    {
+      "question": "Comment accorder une guitare ?",
+      "attendu": "hors_corpus",
+      "langue": "fr",
+      "document": null,
+      "score": 0.5787
+    },
+    {
+      "question": "Comment fabriquer du savon artisanal au beurre de karité ?",
+      "attendu": "hors_corpus",
+      "langue": "fr",
+      "document": null,
+      "score": 0.6108
+    },
+    {
+      "question": "Comment faire de la poterie en terre cuite ?",
+      "attendu": "hors_corpus",
+      "langue": "fr",
+      "document": null,
+      "score": 0.6119
+    },
+    {
+      "question": "Comment souder de l'aluminium au TIG ?",
+      "attendu": "hors_corpus",
+      "langue": "fr",
+      "document": null,
+      "score": 0.6224
+    },
+    {
+      "question": "Comment réparer une fuite sur un circuit de gaz de cuisine ?",
+      "attendu": "hors_corpus",
+      "langue": "fr",
+      "document": null,
+      "score": 0.6585
+    },
+    {
+      "question": "Comment installer une caméra de surveillance IP ?",
+      "attendu": "hors_corpus",
+      "langue": "fr",
+      "document": null,
+      "score": 0.5639
+    },
+    {
+      "question": "Comment réparer la boîte de vitesses automatique d'une Toyota ?",
+      "attendu": "hors_corpus",
+      "langue": "fr",
+      "document": null,
+      "score": 0.6336
+    },
+    {
+      "question": "Comment poser du parquet flottant ?",
+      "attendu": "hors_corpus",
+      "langue": "fr",
+      "document": null,
+      "score": 0.5845
+    },
+    {
+      "question": "Comment réparer un frigo qui fait du bruit la nuit ?",
+      "attendu": "hors_corpus",
+      "langue": "fr",
+      "document": null,
+      "score": 0.6762
+    },
+    {
+      "question": "Comment monter une ruche et récolter du miel ?",
+      "attendu": "hors_corpus",
+      "langue": "fr",
+      "document": null,
+      "score": 0.6022
+    },
+    {
+      "question": "Comment faire une vidange de boîte de pont arrière de camion ?",
+      "attendu": "hors_corpus",
+      "langue": "fr",
+      "document": null,
+      "score": 0.6948
+    },
+    {
+      "question": "Mon vieux, comment on fait pour gagner beaucoup de followers sur TikTok ?",
+      "attendu": "hors_corpus",
+      "langue": "nouchi",
+      "document": null,
+      "score": 0.5252
+    },
+    {
+      "question": "Dja, c'est quel numéro pour gagner au PMU demain ?",
+      "attendu": "hors_corpus",
+      "langue": "nouchi",
+      "document": null,
+      "score": 0.5655
+    },
+    {
+      "question": "Comment on fait pour avoir visa pour la France rapidement ?",
+      "attendu": "hors_corpus",
+      "langue": "nouchi",
+      "document": null,
+      "score": 0.5338
+    },
+    {
+      "question": "Mon gars, comment on monte boutique de transfert d'argent ?",
+      "attendu": "hors_corpus",
+      "langue": "nouchi",
+      "document": null,
+      "score": 0.5874
+    }
+  ]
+}

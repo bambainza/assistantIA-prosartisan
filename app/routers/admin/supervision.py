@@ -19,6 +19,7 @@ from app.db.session import get_db
 from app.middleware.auth import require_permission
 from app.models.quote import Quote
 from app.services.cache_service import cache_service
+from app.services.calculator_service import calculator_service
 
 router = APIRouter()
 
@@ -94,21 +95,20 @@ async def admin_get_calculators_stats(
 
     Permet de suivre les moteurs de calcul les plus sollicités sur le terrain.
     """
-    tools = [
-        "calculer_dosage_beton_mortier",
-        "calculer_section_cable_nfc15100",
-        "calculer_pente_evacuation_dtu60",
-        "calculer_surface_carrelage_colle",
-        "calculer_bilan_thermique_climatisation",
-    ]
+    # Mêmes noms que ceux comptés par `/api/chat/calculate` (clé
+    # `prosartisan:calculator:<outil>:count`) ; l'alias du cahier des charges
+    # `calculer_materiaux_btp` est rattaché au dosage béton.
+    tools = [t["function"]["name"] for t in calculator_service.get_tool_definitions()]
+    alias = {"calculer_materiaux_btp": "calculer_dosage_beton"}
 
-    stats: dict[str, int] = {}
-    total_calls = 0
-    for tool in tools:
-        count_str = await cache_service.get(f"prosartisan:calculator:{tool}:count")
-        count = int(count_str) if count_str and count_str.isdigit() else 0
-        stats[tool] = count
-        total_calls += count
+    async def _compteur(nom: str) -> int:
+        valeur = await cache_service.get(f"prosartisan:calculator:{nom}:count")
+        return int(valeur) if valeur and str(valeur).isdigit() else 0
+
+    stats: dict[str, int] = {tool: await _compteur(tool) for tool in tools}
+    for nom_alias, cible in alias.items():
+        stats[cible] += await _compteur(nom_alias)
+    total_calls = sum(stats.values())
 
     return {
         "total_calculator_calls": total_calls,

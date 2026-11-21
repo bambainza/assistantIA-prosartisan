@@ -10,8 +10,8 @@ from __future__ import annotations
 
 import json
 import logging
+import math
 import re
-import time
 from datetime import UTC, datetime, timedelta
 from typing import Any
 
@@ -22,14 +22,82 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.config import settings
 from app.models.quote import Quote
 from app.models.user import User
-from app.schemas.quote import QuoteExtractResponse, QuoteItem
+from app.schemas.prix_reference import TYPES_ITEM
+from app.schemas.quote import (
+    PRIX_A_SAISIR,
+    PRIX_ARTISAN,
+    PRIX_GRILLE,
+    QuoteExtractResponse,
+    QuoteItem,
+)
+from app.services.calculator_service import calculator_service
 from app.services.llm_provider_service import (
-    PROVIDER_GEMINI,
-    PROVIDER_MISTRAL,
+    FournisseursIAIndisponiblesError,
     llm_provider_service,
 )
+from app.services.prix_reference_service import choisir_prix, prix_reference_service
 
 logger = logging.getLogger(__name__)
+
+# Calculateurs dont le résultat se traduit en lignes de fournitures.
+CALCULS_DEVIS: frozenset[str] = frozenset(
+    {
+        "calculer_dosage_beton",
+        "calculer_materiaux_btp",
+        "calculer_agglos_mur",
+        "calculer_carrelage_et_colle",
+    }
+)
+
+EXTRACTION_PROMPT = (
+    "Tu es l'assistant de préparation de devis de ProsArtisan pour les artisans "
+    "de Côte d'Ivoire. À partir de la description des travaux (français ou "
+    "nouchi de chantier), tu extrais un titre, le client s'il est mentionné, la "
+    "commune du chantier, et les lignes du devis.\n"
+    "RÈGLES STRICTES :\n"
+    "1. N'invente JAMAIS de prix : les prix viennent de la grille de référence "
+    "de ProsArtisan. Seule exception : si l'artisan a lui-même écrit le prix "
+    "unitaire d'une ligne dans sa description, recopie ce nombre exact dans "
+    '"prix_cite" ; sinon "prix_cite" vaut null.\n'
+    "2. Quand la description donne des dimensions de béton, de mortier, de mur "
+    "en agglos ou de carrelage, n'énumère pas ces matériaux toi-même : ajoute un "
+    'calcul dans "calculs" avec les dimensions données. Outils autorisés :\n'
+    "   - calculer_dosage_beton : volume_m3 OU longueur_m, largeur_m, "
+    "epaisseur_m ; type_ouvrage parmi beton_proprete, fondation_semelle, "
+    "poteau_poutre_dalle, mortier_pose_parpaing, mortier_enduit_chape ; "
+    'classe_ciment "CPJ 42.5" ou "CPJ 32.5".\n'
+    "   - calculer_agglos_mur : longueur_m, hauteur_m, surface_ouvertures_m2, "
+    "epaisseur_agglo_cm (10, 15 ou 20).\n"
+    "   - calculer_carrelage_et_colle : surface_m2, format_carreau_cm, type_pose "
+    "(droite, diagonale, chevron).\n"
+    "   N'invente aucune dimension : sans dimension, pas de calcul.\n"
+    '3. Les autres fournitures et la main d\'œuvre vont dans "items", avec la '
+    "quantité indiquée par l'artisan (1 si elle n'est pas précisée).\n"
+    "4. type_item vaut FOURNITURE, MAIN_D_OEUVRE ou FORFAIT.\n"
+    "Réponds UNIQUEMENT par un objet JSON strict de cette forme :\n"
+    "{\n"
+    '  "titre": "Titre des travaux",\n'
+    '  "client_nom": "Nom du client ou Client Particulier",\n'
+    '  "client_telephone": null,\n'
+    '  "client_adresse": "Commune du chantier ou null",\n'
+    '  "delai_estime_jours": 3,\n'
+    '  "items": [\n'
+    '     {"description": "Disjoncteur divisionnaire 20A", "quantite": 3, "unite": "unité", "type_item": "FOURNITURE", "prix_cite": null},\n'
+    '     {"description": "Pose et raccordement", "quantite": 1, "unite": "forfait", "type_item": "MAIN_D_OEUVRE", "prix_cite": 25000}\n'
+    "  ],\n"
+    '  "calculs": [\n'
+    '     {"outil": "calculer_agglos_mur", "arguments": {"longueur_m": 10, "hauteur_m": 2.5, "epaisseur_agglo_cm": 15}}\n'
+    "  ],\n"
+    '  "recommandations": []\n'
+    "}"
+)
+
+
+class DevisIndisponibleError(RuntimeError):
+    """L'analyse IA du devis est impossible : la route répond 503.
+
+    Jamais de devis factice à la place (prix inventés présentés comme réels).
+    """
 
 
 class QuoteService:
@@ -50,32 +118,25 @@ class QuoteService:
         computed_items: list[dict[str, Any]] = []
 
         for item in items:
-            if isinstance(item, QuoteItem):
-                desc = item.description
-                qty = float(item.quantite)
-                unit = item.unite
-                pu = int(item.prix_unitaire)
-                t_item = item.type_item
-            else:
-                desc = str(item.get("description", ""))
-                qty = float(item.get("quantite", 1.0))
-                unit = str(item.get("unite", "unité"))
-                pu = int(item.get("prix_unitaire", 0))
-                t_item = str(item.get("type_item", "FOURNITURE"))
-
+            data = item.model_dump() if isinstance(item, QuoteItem) else dict(item)
+            qty = float(data.get("quantite", 1.0))
+            pu = int(data.get("prix_unitaire", 0))
             line_total = round(qty * pu)
             total_ht += line_total
 
-            computed_items.append(
-                {
-                    "description": desc,
-                    "quantite": qty,
-                    "unite": unit,
-                    "prix_unitaire": pu,
-                    "total": line_total,
-                    "type_item": t_item,
-                }
-            )
+            computed = {
+                "description": str(data.get("description", "")),
+                "quantite": qty,
+                "unite": str(data.get("unite", "unité")),
+                "prix_unitaire": pu,
+                "total": line_total,
+                "type_item": str(data.get("type_item", "FOURNITURE")),
+            }
+            # Traçabilité de l'origine du prix et de la quantité, si connue.
+            for cle in ("prix_source", "prix_reference_id", "quantite_source"):
+                if data.get(cle) is not None:
+                    computed[cle] = data[cle]
+            computed_items.append(computed)
 
         # Application de la remise commerciale
         montant_remise = round(total_ht * (remise_pct / 100.0))
@@ -118,293 +179,360 @@ class QuoteService:
         client_nom: str | None = None,
         client_telephone: str | None = None,
         metier_id: int | None = None,
+        commune: str | None = None,
+        db: AsyncSession | None = None,
     ) -> QuoteExtractResponse:
-        """Extrait les lignes de devis et tarifs indicatifs depuis une note vocale ou écrite."""
+        """Pré-remplit un devis depuis une note vocale ou écrite de l'artisan.
+
+        Le LLM n'extrait que les désignations, les quantités et, quand des
+        dimensions sont données, les calculs à confier aux calculateurs
+        certifiés. Les prix viennent exclusivement de la grille de référence
+        (`prix_references`) ; à défaut, la ligne reste à 0 F, à compléter par
+        l'artisan. Si aucun fournisseur IA ne répond, lève
+        `DevisIndisponibleError` (503) : jamais de devis factice.
+        """
+        mode_demonstration = False
         if not llm_provider_service.is_any_provider_configured():
-            # Mode Mock déterministe pour tests locaux
-            return self._mock_extract(
-                description_brute=description_brute,
-                client_nom=client_nom,
-                client_telephone=client_telephone,
-            )
-
-        system_prompt = (
-            "Tu es l'assistant de chiffrage et devis pour artisans de ProsArtisan en Côte d'Ivoire. "
-            "À partir de la description des travaux fournie par l'artisan (en français ou en nouchi de chantier), "
-            "tu dois extraire un titre clair, identifier le client si mentionné, et découper les travaux "
-            "en lignes de devis réalistes avec fournitures et main d'œuvre aux prix du marché d'Abidjan en F CFA (XOF).\n"
-            "Réponds UNIQUEMENT sous forme d'un objet JSON strict respectant ce schéma :\n"
-            "{\n"
-            '  "titre": "Titre des travaux",\n'
-            '  "client_nom": "Nom du client ou Client Particulier",\n'
-            '  "client_telephone": "Téléphone si mentionné ou null",\n'
-            '  "client_adresse": "Commune/lieu si mentionné ou null",\n'
-            '  "delai_estime_jours": 3,\n'
-            '  "items": [\n'
-            '     {"description": "Désignation", "quantite": 2, "unite": "sac", "prix_unitaire": 5000, "type_item": "FOURNITURE"},\n'
-            '     {"description": "Pose et raccordement", "quantite": 1, "unite": "forfait", "prix_unitaire": 25000, "type_item": "MAIN_D_OEUVRE"}\n'
-            "  ],\n"
-            '  "recommandations": ["Avertissement technique ou conseil sécurité"]\n'
-            "}"
-        )
-
-        messages = [
-            {"role": "system", "content": system_prompt},
-            {
-                "role": "user",
-                "content": f"Description des travaux de l'artisan : {description_brute}",
-            },
-        ]
-
-        candidates = await llm_provider_service.get_candidate_providers()
-        if not candidates:
-            candidates = [PROVIDER_MISTRAL]
-
-        for provider in candidates:
-            t0 = time.perf_counter()
-            try:
-                if provider == PROVIDER_GEMINI:
-                    res = await llm_provider_service.complete_gemini(messages=messages)
-                    raw_text = res.content or "{}"
-                else:
-                    completion = await self.mistral_client.chat.complete_async(
-                        model=settings.llm_model,
-                        messages=messages,
-                        temperature=0.1,
-                    )
-                    raw_text = completion.choices[0].message.content or "{}"
-
-                cleaned_json = re.sub(r"^```(?:json)?\s*|\s*```$", "", raw_text.strip())
-                data = json.loads(cleaned_json)
-                latency_ms = (time.perf_counter() - t0) * 1000.0
-                await llm_provider_service.record_success(provider, latency_ms)
-
-                items = [
-                    QuoteItem(
-                        description=it.get("description", "Prestation"),
-                        quantite=float(it.get("quantite", 1.0)),
-                        unite=str(it.get("unite", "unité")),
-                        prix_unitaire=int(it.get("prix_unitaire", 0)),
-                        total=int(
-                            float(it.get("quantite", 1.0))
-                            * int(it.get("prix_unitaire", 0))
-                        ),
-                        type_item=str(it.get("type_item", "FOURNITURE")),
-                    )
-                    for it in data.get("items", [])
-                ]
-
-                return QuoteExtractResponse(
-                    titre=data.get("titre", "Travaux d'artisanat"),
-                    client_nom=client_nom
-                    or data.get("client_nom", "Client Particulier"),
-                    client_telephone=client_telephone or data.get("client_telephone"),
-                    client_adresse=data.get("client_adresse"),
-                    items=items,
-                    delai_estime_jours=data.get("delai_estime_jours", 2),
-                    recommandations=data.get("recommandations", []),
+            if settings.is_production:
+                # Inaccessible si le contrôle de démarrage est respecté.
+                raise DevisIndisponibleError(
+                    "Aucun fournisseur IA n'est configuré pour l'analyse des devis."
                 )
-            except Exception as err:
-                await llm_provider_service.record_failure(provider, err)
-                logger.warning("Erreur extraction LLM devis (%s) : %s", provider, err)
+            brut = self._mock_extraction(description_brute)
+            mode_demonstration = True
+        else:
+            messages = [
+                {"role": "system", "content": EXTRACTION_PROMPT},
+                {
+                    "role": "user",
+                    "content": f"Description des travaux de l'artisan : {description_brute}",
+                },
+            ]
+            try:
+                raw_text = await llm_provider_service.complete_text_with_failover(
+                    messages=messages,
+                    mistral_client=self.mistral_client,
+                    temperature=0.1,
+                )
+            except FournisseursIAIndisponiblesError as exc:
+                raise DevisIndisponibleError(
+                    "Analyse IA du devis momentanément indisponible."
+                ) from exc
+            brut = self._parse_llm_json(raw_text)
 
-        return self._mock_extract(
+        grille = (
+            await prix_reference_service.grille_pour_devis(db, metier_id)
+            if db is not None
+            else []
+        )
+        return self._construire_proposition(
+            brut,
             description_brute=description_brute,
+            grille=grille,
             client_nom=client_nom,
             client_telephone=client_telephone,
+            commune=commune,
+            mode_demonstration=mode_demonstration,
         )
 
     @staticmethod
-    def _mock_extract(
-        description_brute: str,
-        client_nom: str | None = None,
-        client_telephone: str | None = None,
-    ) -> QuoteExtractResponse:
-        """Fallback déterministe pour tests locaux et mode hors-ligne."""
-        items: list[QuoteItem] = []
-        desc_lower = description_brute.lower()
+    def _parse_llm_json(raw_text: str) -> dict[str, Any]:
+        cleaned = re.sub(r"^```(?:json)?\s*|\s*```$", "", (raw_text or "").strip())
+        try:
+            data = json.loads(cleaned)
+        except (TypeError, ValueError) as exc:
+            logger.warning("Réponse IA du devis non exploitable : %s", exc)
+            raise DevisIndisponibleError(
+                "La réponse de l'IA n'a pas pu être interprétée."
+            ) from exc
+        if not isinstance(data, dict):
+            raise DevisIndisponibleError(
+                "La réponse de l'IA n'a pas pu être interprétée."
+            )
+        return data
 
-        # Électricité
-        if (
-            "disjoncteur" in desc_lower
-            or "câble" in desc_lower
-            or "prise" in desc_lower
-            or "courant" in desc_lower
-        ):
-            titre = "Travaux d'installation et mise en sécurité électrique"
+    @staticmethod
+    def _prix_cite_verifie(valeur: Any, description: str) -> int | None:
+        """Prix recopié par l'IA, accepté seulement s'il figure dans la description.
+
+        Les séparateurs de milliers (espace, point, espace insécable) sont
+        ignorés : « 75 000 F » ou « 75.000 » valident un prix de 75000.
+        """
+        if valeur is None or isinstance(valeur, bool):
+            return None
+        try:
+            nombre = float(valeur)
+        except (TypeError, ValueError):
+            return None
+        if not math.isfinite(nombre) or nombre <= 0 or nombre != int(nombre):
+            return None
+        prix = int(nombre)
+        compact = re.sub(r"(?<=\d)[\s.  ](?=\d{3}(?!\d))", "", description)
+        return prix if str(prix) in re.findall(r"\d+", compact) else None
+
+    @staticmethod
+    def _quantite_valide(valeur: Any) -> float | None:
+        try:
+            quantite = float(valeur)
+        except (TypeError, ValueError):
+            return None
+        if not math.isfinite(quantite) or quantite <= 0:
+            return None
+        return round(quantite, 3)
+
+    @classmethod
+    def _lignes_depuis_calcul(
+        cls, outil: str, arguments: dict[str, Any]
+    ) -> list[dict[str, Any]]:
+        """Exécute un calculateur certifié et traduit son résultat en lignes de devis."""
+        resultat = calculator_service.execute_tool(outil, arguments)
+        res = resultat.get("resultats", {})
+        lignes: list[tuple[str, Any, str]] = []
+
+        if outil in {"calculer_dosage_beton", "calculer_materiaux_btp"}:
+            lignes = [
+                (
+                    f"Ciment {resultat.get('classe_ciment', 'CPJ 42.5')} (sac de 50 kg)",
+                    res.get("sacs_ciment_50kg"),
+                    "sac",
+                ),
+                ("Sable", res.get("sable_m3"), "m3"),
+                ("Gravier", res.get("gravier_m3"), "m3"),
+            ]
+        elif outil == "calculer_agglos_mur":
+            lignes = [
+                (
+                    f"Agglo creux {resultat.get('epaisseur_agglo_cm', 15)} cm (40x20)",
+                    res.get("agglos_unites"),
+                    "unite",
+                ),
+                ("Ciment CPJ 42.5 (sac de 50 kg)", res.get("sacs_ciment_50kg"), "sac"),
+                ("Sable", res.get("sable_m3"), "m3"),
+            ]
+        elif outil == "calculer_carrelage_et_colle":
+            colle = resultat.get("mortier_colle", {})
+            joint = resultat.get("mortier_joint", {})
+            lignes = [
+                (
+                    f"Carreaux {arguments.get('format_carreau_cm', '')}".strip(),
+                    resultat.get("surface_a_commander_m2"),
+                    "m2",
+                ),
+                ("Mortier colle (sac de 25 kg)", colle.get("sacs_25kg"), "sac"),
+                ("Joint carrelage (sac de 5 kg)", joint.get("sacs_5kg"), "sac"),
+            ]
+
+        return [
+            {
+                "description": designation,
+                "quantite": quantite,
+                "unite": unite,
+                "type_item": "FOURNITURE",
+                "quantite_source": "calculateur",
+            }
+            for designation, valeur, unite in lignes
+            if (quantite := cls._quantite_valide(valeur)) is not None
+        ]
+
+    def _construire_proposition(
+        self,
+        brut: dict[str, Any],
+        *,
+        description_brute: str,
+        grille: list[Any],
+        client_nom: str | None,
+        client_telephone: str | None,
+        commune: str | None,
+        mode_demonstration: bool,
+    ) -> QuoteExtractResponse:
+        avertissements: list[str] = []
+        lignes: list[dict[str, Any]] = []
+
+        # 1. Lignes calculées par les calculateurs certifiés (quantités sûres).
+        calculees: dict[tuple[str, str], dict[str, Any]] = {}
+        for calcul in brut.get("calculs") or []:
+            if not isinstance(calcul, dict):
+                continue
+            outil = str(calcul.get("outil", ""))
+            arguments = calcul.get("arguments") or {}
+            if outil not in CALCULS_DEVIS or not isinstance(arguments, dict):
+                avertissements.append(
+                    f"Calcul « {outil or '?'} » ignoré : outil non pris en charge pour un devis."
+                )
+                continue
+            try:
+                for ligne in self._lignes_depuis_calcul(outil, arguments):
+                    cle = (ligne["description"].lower(), ligne["unite"])
+                    if cle in calculees:
+                        calculees[cle]["quantite"] = round(
+                            calculees[cle]["quantite"] + ligne["quantite"], 3
+                        )
+                    else:
+                        calculees[cle] = ligne
+            except ValueError as exc:
+                avertissements.append(f"Calcul « {outil} » impossible : {exc}")
+        lignes.extend(calculees.values())
+
+        # 2. Lignes énumérées par l'IA (quantités à vérifier par l'artisan).
+        lignes_ignorees = 0
+        for it in brut.get("items") or []:
+            if not isinstance(it, dict):
+                continue
+            description = str(it.get("description") or "").strip()[:200]
+            quantite = self._quantite_valide(it.get("quantite", 1.0))
+            if not description or quantite is None:
+                lignes_ignorees += 1
+                continue
+            type_item = str(it.get("type_item") or "FOURNITURE").strip().upper()
+            lignes.append(
+                {
+                    "description": description,
+                    "quantite": quantite,
+                    "unite": str(it.get("unite") or "unité").strip()[:30] or "unité",
+                    "type_item": type_item if type_item in TYPES_ITEM else "FOURNITURE",
+                    "quantite_source": "ia",
+                    "prix_cite": self._prix_cite_verifie(
+                        it.get("prix_cite"), description_brute
+                    ),
+                }
+            )
+        if lignes_ignorees:
+            avertissements.append(
+                f"{lignes_ignorees} ligne(s) proposée(s) par l'IA ignorée(s) : désignation ou quantité invalide."
+            )
+
+        # 3. Prix : dicté par l'artisan (vérifié), sinon grille de référence,
+        #    sinon à saisir. Jamais un prix proposé par l'IA.
+        commune_chantier = commune or brut.get("client_adresse")
+        items: list[QuoteItem] = []
+        sans_prix = 0
+        for ligne in lignes:
+            prix = choisir_prix(
+                ligne["description"], ligne["unite"], commune_chantier, grille
+            )
+            if ligne.get("prix_cite") is not None:
+                prix_unitaire, source, ref_id = ligne["prix_cite"], PRIX_ARTISAN, None
+            elif prix is None:
+                sans_prix += 1
+                prix_unitaire, source, ref_id = 0, PRIX_A_SAISIR, None
+            else:
+                prix_unitaire, source, ref_id = (
+                    prix.prix_unitaire,
+                    PRIX_GRILLE,
+                    prix.prix_reference_id,
+                )
             items.append(
                 QuoteItem(
-                    description="Disjoncteurs divisionnaires 16A/20A",
-                    quantite=3.0,
-                    unite="unité",
-                    prix_unitaire=6000,
-                    total=18000,
-                    type_item="FOURNITURE",
+                    description=ligne["description"],
+                    quantite=ligne["quantite"],
+                    unite=ligne["unite"],
+                    prix_unitaire=prix_unitaire,
+                    total=round(ligne["quantite"] * prix_unitaire),
+                    type_item=ligne["type_item"],
+                    prix_source=source,
+                    prix_reference_id=ref_id,
+                    quantite_source=ligne["quantite_source"],
                 )
             )
-            items.append(
-                QuoteItem(
-                    description="Câble cuivre rigide 2.5 mm² (couronne 50m)",
-                    quantite=1.0,
-                    unite="rouleau",
-                    prix_unitaire=28000,
-                    total=28000,
-                    type_item="FOURNITURE",
-                )
+
+        if sans_prix:
+            avertissements.append(
+                f"{sans_prix} ligne(s) sans prix de référence : prix à saisir par l'artisan."
             )
-            items.append(
-                QuoteItem(
-                    description="Prises de courant 2P+T encastrées",
-                    quantite=6.0,
-                    unite="unité",
-                    prix_unitaire=2500,
-                    total=15000,
-                    type_item="FOURNITURE",
-                )
+        if any(it.quantite_source == "ia" for it in items):
+            avertissements.append(
+                "Les quantités proposées par l'IA sont à vérifier avant envoi au client."
             )
-            items.append(
-                QuoteItem(
-                    description="Main d'œuvre, tirage de lignes et raccordement tableau",
-                    quantite=1.0,
-                    unite="forfait",
-                    prix_unitaire=35000,
-                    total=35000,
-                    type_item="MAIN_D_OEUVRE",
-                )
+        if mode_demonstration:
+            avertissements.insert(
+                0,
+                "Mode démonstration : aucune IA n'est configurée, les lignes sont des exemples génériques.",
             )
-        # Maçonnerie
-        elif (
-            "ciment" in desc_lower
-            or "béton" in desc_lower
-            or "mur" in desc_lower
-            or "parpaing" in desc_lower
-            or "poteau" in desc_lower
-        ):
-            titre = "Travaux de maçonnerie et coulage béton"
-            items.append(
-                QuoteItem(
-                    description="Ciment CPJ 42.5 (sacs de 50 kg)",
-                    quantite=10.0,
-                    unite="sac",
-                    prix_unitaire=5000,
-                    total=50000,
-                    type_item="FOURNITURE",
-                )
-            )
-            items.append(
-                QuoteItem(
-                    description="Sable de lagune propre (chargement)",
-                    quantite=1.0,
-                    unite="voyage",
-                    prix_unitaire=35000,
-                    total=35000,
-                    type_item="FOURNITURE",
-                )
-            )
-            items.append(
-                QuoteItem(
-                    description="Gravier concassé 15/25",
-                    quantite=1.0,
-                    unite="voyage",
-                    prix_unitaire=45000,
-                    total=45000,
-                    type_item="FOURNITURE",
-                )
-            )
-            items.append(
-                QuoteItem(
-                    description="Main d'œuvre maçonnerie et coffrage",
-                    quantite=3.0,
-                    unite="jour",
-                    prix_unitaire=15000,
-                    total=45000,
-                    type_item="MAIN_D_OEUVRE",
-                )
-            )
-        # Plomberie / Sanitaire
-        elif (
-            "tuyau" in desc_lower
-            or "fuite" in desc_lower
-            or "wc" in desc_lower
-            or "douche" in desc_lower
-            or "robinet" in desc_lower
-        ):
-            titre = "Travaux de plomberie sanitaire et évacuation"
-            items.append(
-                QuoteItem(
-                    description="Tuyaux PVC évacuation DN 50 et DN 100",
-                    quantite=4.0,
-                    unite="barre 4m",
-                    prix_unitaire=6500,
-                    total=26000,
-                    type_item="FOURNITURE",
-                )
-            )
-            items.append(
-                QuoteItem(
-                    description="Vannes d'arrêt et raccords laiton 1/2",
-                    quantite=4.0,
-                    unite="unité",
-                    prix_unitaire=4500,
-                    total=18000,
-                    type_item="FOURNITURE",
-                )
-            )
-            items.append(
-                QuoteItem(
-                    description="Colle PVC, téflon et colliers de fixation",
-                    quantite=1.0,
-                    unite="forfait",
-                    prix_unitaire=8000,
-                    total=8000,
-                    type_item="FOURNITURE",
-                )
-            )
-            items.append(
-                QuoteItem(
-                    description="Main d'œuvre remplacement tuyauterie et tests pression",
-                    quantite=1.0,
-                    unite="forfait",
-                    prix_unitaire=30000,
-                    total=30000,
-                    type_item="MAIN_D_OEUVRE",
-                )
-            )
-        else:
-            titre = "Prestations de travaux et fournitures"
-            items.append(
-                QuoteItem(
-                    description="Fournitures de chantier et quincaillerie",
-                    quantite=1.0,
-                    unite="forfait",
-                    prix_unitaire=25000,
-                    total=25000,
-                    type_item="FOURNITURE",
-                )
-            )
-            items.append(
-                QuoteItem(
-                    description="Main d'œuvre d'exécution",
-                    quantite=1.0,
-                    unite="forfait",
-                    prix_unitaire=30000,
-                    total=30000,
-                    type_item="MAIN_D_OEUVRE",
-                )
-            )
+
+        recommandations = [
+            str(r).strip()[:300]
+            for r in (brut.get("recommandations") or [])
+            if isinstance(r, str) and r.strip()
+        ][:5]
+
+        try:
+            delai = int(brut.get("delai_estime_jours") or 0) or None
+        except (TypeError, ValueError):
+            delai = None
 
         return QuoteExtractResponse(
-            titre=titre,
-            client_nom=client_nom or "Client Particulier",
-            client_telephone=client_telephone,
-            client_adresse="Abidjan",
+            titre=str(brut.get("titre") or "Travaux d'artisanat")[:200],
+            client_nom=client_nom
+            or str(brut.get("client_nom") or "Client Particulier")[:150],
+            client_telephone=client_telephone or brut.get("client_telephone"),
+            client_adresse=brut.get("client_adresse"),
             items=items,
-            delai_estime_jours=3,
-            recommandations=[
-                "Prévoir le versement d'un acompte de 30% à 50% avant approvisionnement des matériaux.",
-                "Faire valider l'emplacement des réseaux avant percement.",
-            ],
+            delai_estime_jours=delai if delai and delai > 0 else None,
+            recommandations=recommandations,
+            lignes_sans_prix=sans_prix,
+            mode_demonstration=mode_demonstration,
+            avertissements=avertissements,
         )
+
+    @staticmethod
+    def _mock_extraction(description_brute: str) -> dict[str, Any]:
+        """Extraction de démonstration (dev/tests sans clé IA), sans aucun prix.
+
+        Mêmes champs que la réponse attendue du LLM ; les prix sont ensuite
+        cherchés dans la grille comme en mode réel.
+        """
+        desc_lower = description_brute.lower()
+
+        if any(m in desc_lower for m in ("disjoncteur", "câble", "prise", "courant")):
+            titre = "Travaux d'installation et mise en sécurité électrique"
+            items = [
+                ("Disjoncteur divisionnaire 20A", 3.0, "unité", "FOURNITURE"),
+                ("Câble cuivre rigide 2.5 mm²", 40.0, "ml", "FOURNITURE"),
+                ("Prise de courant 2P+T encastrée", 6.0, "unité", "FOURNITURE"),
+                (
+                    "Main d'œuvre tirage de lignes et raccordement tableau",
+                    1.0,
+                    "forfait",
+                    "MAIN_D_OEUVRE",
+                ),
+            ]
+        elif any(
+            m in desc_lower for m in ("ciment", "béton", "mur", "parpaing", "poteau")
+        ):
+            titre = "Travaux de maçonnerie et coulage béton"
+            items = [
+                ("Ciment CPJ 42.5 (sac de 50 kg)", 10.0, "sac", "FOURNITURE"),
+                ("Sable de lagune", 1.0, "m3", "FOURNITURE"),
+                ("Main d'œuvre maçonnerie et coffrage", 3.0, "jour", "MAIN_D_OEUVRE"),
+            ]
+        elif any(
+            m in desc_lower for m in ("tuyau", "fuite", "wc", "douche", "robinet")
+        ):
+            titre = "Travaux de plomberie sanitaire et évacuation"
+            items = [
+                ("Tube PVC évacuation DN 100", 2.0, "barre", "FOURNITURE"),
+                ("Robinet d'arrêt laiton 1/2", 2.0, "unité", "FOURNITURE"),
+                ("Main d'œuvre plomberie", 1.0, "forfait", "MAIN_D_OEUVRE"),
+            ]
+        else:
+            titre = "Prestations de travaux et fournitures"
+            items = [
+                ("Fournitures de chantier", 1.0, "forfait", "FOURNITURE"),
+                ("Main d'œuvre d'exécution", 1.0, "forfait", "MAIN_D_OEUVRE"),
+            ]
+
+        return {
+            "titre": titre,
+            "client_nom": "Client Particulier",
+            "client_adresse": None,
+            "delai_estime_jours": 3,
+            "items": [
+                {"description": d, "quantite": q, "unite": u, "type_item": t}
+                for d, q, u, t in items
+            ],
+            "calculs": [],
+            "recommandations": [],
+        }
 
     @staticmethod
     def generate_whatsapp_text(

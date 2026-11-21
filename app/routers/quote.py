@@ -23,7 +23,7 @@ from app.schemas.quote import (
     QuoteStatusUpdate,
     QuoteUpdate,
 )
-from app.services.quote_service import quote_service
+from app.services.quote_service import DevisIndisponibleError, quote_service
 
 router = APIRouter(prefix="/api/quotes", tags=["Devis & Facturation Artisan"])
 
@@ -96,14 +96,31 @@ def _to_quote_response(quote: Quote, artisan: User | None = None) -> QuoteRespon
 async def extract_quote_endpoint(
     payload: QuoteExtractRequest,
     user_id: uuid.UUID = Depends(get_current_user_id),
+    db: AsyncSession = Depends(get_db),
 ) -> QuoteExtractResponse:
-    """Analyse une formulation vocale ou un texte d'artisan et génère les postes chiffrés."""
-    return await quote_service.extract_quote_from_text(
-        description_brute=payload.description_brute,
-        client_nom=payload.client_nom,
-        client_telephone=payload.client_telephone,
-        metier_id=payload.metier_id,
-    )
+    """Analyse une note d'artisan et pré-remplit les lignes du devis.
+
+    Quantités : calculateurs certifiés quand des dimensions sont données,
+    sinon proposées par l'IA (à vérifier). Prix : grille de référence
+    uniquement, sinon à saisir. IA indisponible → 503, jamais de faux devis.
+    """
+    try:
+        return await quote_service.extract_quote_from_text(
+            description_brute=payload.description_brute,
+            client_nom=payload.client_nom,
+            client_telephone=payload.client_telephone,
+            metier_id=payload.metier_id,
+            commune=payload.commune,
+            db=db,
+        )
+    except DevisIndisponibleError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail=(
+                "L'analyse automatique du devis est momentanément indisponible. "
+                "Réessayez dans quelques instants ou saisissez les lignes vous-même."
+            ),
+        ) from exc
 
 
 @router.post(

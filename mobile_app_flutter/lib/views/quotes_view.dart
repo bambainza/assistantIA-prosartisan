@@ -8,12 +8,18 @@ class QuoteItem {
   String unite;
   double prixUnitaire;
 
+  /// Origine du prix : 'grille', 'artisan' ou 'a_saisir' (à compléter).
+  String? prixSource;
+
   QuoteItem({
     required this.description,
     this.quantite = 1.0,
     this.unite = 'u',
     this.prixUnitaire = 0.0,
+    this.prixSource,
   });
+
+  bool get prixACompleter => prixSource == 'a_saisir' && prixUnitaire <= 0;
 
   double get total => quantite * prixUnitaire;
 
@@ -29,6 +35,7 @@ class QuoteItem {
         quantite: (json['quantite'] as num?)?.toDouble() ?? 1.0,
         unite: json['unite'] as String? ?? 'u',
         prixUnitaire: (json['prix_unitaire'] as num?)?.toDouble() ?? 0.0,
+        prixSource: json['prix_source'] as String?,
       );
 }
 
@@ -51,9 +58,10 @@ class _QuotesViewState extends State<QuotesView> {
   bool _isExtracting = false;
   bool _isSaving = false;
   String? _savedQuoteNum;
+  List<String> _avertissements = [];
 
   final List<QuoteItem> _items = [
-    QuoteItem(description: 'Prestation principale', quantite: 1, unite: 'u', prixUnitaire: 25000),
+    QuoteItem(description: 'Prestation principale', quantite: 1, unite: 'u', prixUnitaire: 0),
   ];
 
   @override
@@ -82,12 +90,20 @@ class _QuotesViewState extends State<QuotesView> {
     setState(() => _isExtracting = true);
 
     try {
-      final res = await widget.networkClient.extractQuote(text);
+      final res = await widget.networkClient.extractQuote(
+        text,
+        commune: _clientAddressController.text,
+      );
       if (mounted) {
         setState(() {
           _clientNomController.text = res['client_nom'] as String? ?? '';
           _clientPhoneController.text = res['client_telephone'] as String? ?? '';
-          _clientAddressController.text = res['client_adresse'] as String? ?? '';
+          if (_clientAddressController.text.trim().isEmpty) {
+            _clientAddressController.text = res['client_adresse'] as String? ?? '';
+          }
+          _avertissements = (res['avertissements'] as List<dynamic>? ?? [])
+              .whereType<String>()
+              .toList();
 
           final rawItems = res['items'] as List<dynamic>? ?? [];
           _items.clear();
@@ -98,18 +114,23 @@ class _QuotesViewState extends State<QuotesView> {
               }
             }
           } else {
-            _items.add(QuoteItem(description: 'Travaux généraux', quantite: 1, unite: 'forfait', prixUnitaire: 50000));
+            _items.add(QuoteItem(description: 'Travaux généraux', quantite: 1, unite: 'forfait', prixSource: 'a_saisir'));
           }
         });
 
+        final sansPrix = (res['lignes_sans_prix'] as num?)?.toInt() ?? 0;
         ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text("Devis structuré avec succès par l'IA !")),
+          SnackBar(
+            content: Text(sansPrix > 0
+                ? "Devis pré-rempli : $sansPrix prix à compléter."
+                : "Devis pré-rempli. Vérifiez les quantités avant l'envoi."),
+          ),
         );
       }
     } catch (e) {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text("Erreur d'analyse : $e")),
+          SnackBar(content: Text(e.toString().replaceFirst('Exception: ', ''))),
         );
       }
     } finally {
@@ -256,11 +277,33 @@ class _QuotesViewState extends State<QuotesView> {
                           )
                         : const Icon(Icons.auto_awesome),
                     label: Text(
-                      _isExtracting ? "Analyse en cours..." : "Analyser & Chiffrer automatiquement",
+                      _isExtracting ? "Analyse en cours..." : "Analyser & pré-remplir le devis",
                       style: const TextStyle(fontWeight: FontWeight.bold),
                     ),
                     onPressed: _isExtracting ? null : _extractFromPrompt,
                   ),
+                  if (_avertissements.isNotEmpty) ...[
+                    const SizedBox(height: 10),
+                    Container(
+                      width: double.infinity,
+                      padding: const EdgeInsets.all(10),
+                      decoration: BoxDecoration(
+                        color: Colors.amber.withValues(alpha: 0.12),
+                        border: Border.all(color: Colors.amber.shade700),
+                        borderRadius: BorderRadius.circular(8),
+                      ),
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: _avertissements
+                            .map((a) => Padding(
+                                  padding: const EdgeInsets.symmetric(vertical: 2),
+                                  child: Text('• $a',
+                                      style: const TextStyle(color: Colors.white, fontSize: 12.5)),
+                                ))
+                            .toList(),
+                      ),
+                    ),
+                  ],
                 ],
               ),
             ),
@@ -418,7 +461,17 @@ class _QuotesViewState extends State<QuotesView> {
                               initialValue: item.prixUnitaire.toStringAsFixed(0),
                               keyboardType: TextInputType.number,
                               style: const TextStyle(color: Colors.white, fontSize: 13),
-                              decoration: const InputDecoration(hintText: "Prix U.", isDense: true),
+                              decoration: InputDecoration(
+                                hintText: "Prix U.",
+                                isDense: true,
+                                helperText: item.prixACompleter ? "À compléter" : null,
+                                helperStyle: TextStyle(color: Colors.amber.shade400, fontSize: 11),
+                                enabledBorder: item.prixACompleter
+                                    ? UnderlineInputBorder(
+                                        borderSide: BorderSide(color: Colors.amber.shade400, width: 2),
+                                      )
+                                    : null,
+                              ),
                               onChanged: (val) {
                                 setState(() {
                                   item.prixUnitaire = double.tryParse(val) ?? 0.0;

@@ -614,11 +614,17 @@ class NetworkClient {
   }
 
   // --- Devis & Factures Pro-Forma ---
-  Future<Map<String, dynamic>> extractQuote(String prompt) async {
+  /// Pré-remplit un devis. Les prix viennent de la grille de référence ou de
+  /// ceux dictés par l'artisan ; les lignes `prix_source == 'a_saisir'` sont à
+  /// compléter. Un 503 signifie que l'IA est indisponible (jamais de faux devis).
+  Future<Map<String, dynamic>> extractQuote(String description, {String? commune}) async {
     try {
       final response = await _dio.post(
         '$_baseUrl/api/quotes/extract',
-        data: {'prompt': prompt},
+        data: {
+          'description_brute': description,
+          if (commune != null && commune.trim().isNotEmpty) 'commune': commune.trim(),
+        },
         options: Options(
           headers: _token != null ? {'authorization': 'Bearer $_token'} : null,
         ),
@@ -627,8 +633,15 @@ class NetworkClient {
         return Map<String, dynamic>.from(response.data as Map);
       }
       return {};
-    } catch (e) {
-      throw Exception('Erreur lors de l\'analyse du devis : $e');
+    } on DioException catch (e) {
+      if (e.response?.statusCode == 401) {
+        throw Exception('Connectez-vous pour utiliser le générateur de devis.');
+      }
+      final data = e.response?.data;
+      final detail = data is Map ? data['detail'] : null;
+      throw Exception(
+        detail is String ? detail : 'Analyse du devis momentanément indisponible.',
+      );
     }
   }
 

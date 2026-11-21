@@ -184,6 +184,7 @@ async def test_etats_d_activation_mis_en_cache(monkeypatch):
 
 @pytest.mark.asyncio
 async def test_embeddings_par_lots(monkeypatch):
+    monkeypatch.setattr(settings, "embedding_provider", "mistral")
     monkeypatch.setattr(settings, "mistral_api_key", "sk-test-reel")
     appels = []
 
@@ -198,7 +199,9 @@ async def test_embeddings_par_lots(monkeypatch):
     monkeypatch.setattr(rag_service, "mistral_client", client)
 
     textes = [f"chunk {i}" * (i + 1) for i in range(20)]
-    await cache_service.cache_embedding(textes[0], [42.0])  # déjà en cache
+    await cache_service.cache_embedding(
+        textes[0], [42.0], espace=settings.espace_embeddings
+    )  # déjà en cache
 
     vecteurs = await rag_service.get_embeddings(textes)
 

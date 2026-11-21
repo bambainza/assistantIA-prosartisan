@@ -1888,7 +1888,7 @@ function openQuotesModal() {
     if (modal) {
         modal.classList.remove('hidden');
         if (currentQuoteData.items.length === 0) {
-            addQuoteItemRow({ description: "Prestation principale", quantite: 1, unite: "u", prix_unitaire: 25000 });
+            addQuoteItemRow({ description: "Prestation principale", quantite: 1, unite: "u", prix_unitaire: 0 });
         }
     }
 }
@@ -1896,6 +1896,18 @@ function openQuotesModal() {
 function closeQuotesModal() {
     const modal = document.getElementById('quotes-modal');
     if (modal) modal.classList.add('hidden');
+}
+
+function renderQuoteExtractWarnings(messages) {
+    const list = document.getElementById('quote-extract-warnings');
+    if (!list) return;
+    list.innerHTML = '';
+    (messages || []).forEach(message => {
+        const li = document.createElement('li');
+        li.textContent = message;
+        list.appendChild(li);
+    });
+    list.classList.toggle('hidden', list.children.length === 0);
 }
 
 async function extractQuoteFromText() {
@@ -1909,31 +1921,47 @@ async function extractQuoteFromText() {
     const originalText = btn.textContent;
     btn.disabled = true;
     btn.textContent = "⏳ Analyse IA en cours...";
+    renderQuoteExtractWarnings([]);
 
+    const commune = (document.getElementById('quote-client-address')?.value || '').trim();
     try {
         const res = await fetch('/api/quotes/extract', {
             method: 'POST',
             headers: {
                 'Content-Type': 'application/json'
             },
-            body: JSON.stringify({ prompt: promptInput.value.trim() })
+            body: JSON.stringify({
+                description_brute: promptInput.value.trim(),
+                commune: commune || null
+            })
         });
 
         if (res.ok) {
             const data = await res.json();
             document.getElementById('quote-client-name').value = data.client_nom || "";
             document.getElementById('quote-client-phone').value = data.client_telephone || "";
-            document.getElementById('quote-client-address').value = data.client_adresse || "";
-            
+            if (!commune) {
+                document.getElementById('quote-client-address').value = data.client_adresse || "";
+            }
+
             const tbody = document.getElementById('quote-items-tbody');
             tbody.innerHTML = '';
             currentQuoteData.items = [];
 
             (data.items || []).forEach(item => addQuoteItemRow(item));
             recalculateQuoteTotals();
-            showToast("Devis extrait et structuré avec succès !");
+            renderQuoteExtractWarnings(data.avertissements);
+            showToast(data.lignes_sans_prix
+                ? `Devis pré-rempli : ${data.lignes_sans_prix} prix à compléter.`
+                : "Devis pré-rempli. Vérifiez les quantités avant l'envoi.");
+        } else if (res.status === 401) {
+            showToast("Connectez-vous pour utiliser le générateur de devis.");
         } else {
-            showToast("Erreur lors de l'analyse du devis.");
+            const err = await res.json().catch(() => ({}));
+            const detail = typeof err.detail === 'string'
+                ? err.detail
+                : "Notes trop courtes ou trop longues (5 à 4000 caractères).";
+            showToast(res.status === 422 ? detail : (detail || "Erreur lors de l'analyse du devis."));
         }
     } catch (e) {
         console.error("Extraction quote error:", e);
@@ -1954,12 +1982,19 @@ function addQuoteItemRow(item = { description: "", quantite: 1, unite: "u", prix
         <td><input type="text" class="item-desc" value="${escapeHtml(item.description || '')}" placeholder="Désignation"></td>
         <td><input type="number" class="item-qty" value="${item.quantite || 1}" min="0.1" step="any"></td>
         <td><input type="text" class="item-unit" value="${escapeHtml(item.unite || 'u')}"></td>
-        <td><input type="number" class="item-price" value="${item.prix_unitaire || 0}" min="0" step="100"></td>
+        <td><input type="number" class="item-price${item.prix_source === 'a_saisir' ? ' price-missing' : ''}" value="${item.prix_unitaire || 0}" min="0" step="100"${item.prix_source === 'a_saisir' ? ' title="Aucun prix de référence : à compléter" aria-label="Prix unitaire à compléter"' : ' aria-label="Prix unitaire"'}></td>
         <td class="item-total-cell">${Math.round((item.quantite || 1) * (item.prix_unitaire || 0)).toLocaleString('fr-FR')} F</td>
         <td><button class="remove-item-btn" title="Supprimer" aria-label="Supprimer la ligne">✕</button></td>
     `;
     row.querySelectorAll('.item-qty, .item-price').forEach(input => {
         input.addEventListener('input', recalculateQuoteTotals);
+    });
+    const priceInput = row.querySelector('.item-price');
+    priceInput.addEventListener('input', () => {
+        if (Number(priceInput.value) > 0) {
+            priceInput.classList.remove('price-missing');
+            priceInput.removeAttribute('title');
+        }
     });
     const removeButton = row.querySelector('.remove-item-btn');
     removeButton.addEventListener('click', () => removeQuoteItemRow(removeButton));

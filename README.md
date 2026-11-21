@@ -71,10 +71,11 @@ app/                    # Code source FastAPI
 ├── services/           # Logique métier (quotas, paiement, IA)
 ├── middleware/          # Auth JWT, rate limiting, IP client (proxies), en-têtes sécurité
 ├── db/                 # Session & init DB
-├── scripts/            # Scripts d'exploitation (reprise des photos Base64)
+├── scripts/            # Scripts d'exploitation (photos Base64, paiements, calibrage du seuil RAG)
 └── main.py             # Point d'entrée
 ingestion/              # Pipeline RAG (PDF/Markdown → Qdrant) ; documents/ = corpus indexé,
-                        # documents_a_valider/ = fiches santé/sécurité en attente de relecture
+                        # documents_a_valider/ = fiches santé/sécurité en attente de relecture,
+                        # evaluation/ = jeu de questions pour calibrer RAG_MIN_SCORE
 admin_web/              # Back-office statique (js/ : un script par domaine)
 chat_web/               # Front chat (PWA)
 prompts/                # Prompt système IA
@@ -101,7 +102,21 @@ Les photos de chantier sont stockées dans `UPLOAD_DIR/chat_images/` (volume per
 
 **Ingestion documentaire admin** : l'upload exige les quatre métadonnées sémantiques (`metier_id`, `secteur_id`, `type_document`, `niveau_expertise`) et contrôle le métier et le secteur dans le référentiel. Le fichier est écrit sans écrasement dans un dossier isolé par tâche, puis ingéré en arrière-plan. La demande et son résultat sont audités avec un `job_id`; un fichier en échec est supprimé.
 
-**Données du back-office & Bascule IA (Mistral / Gemini)** : les listes vides restent vides et ne sont jamais remplacées par des artisans, documents ou statistiques de démonstration. Les routes documentaires renvoient `503` lorsque Qdrant est indisponible. Les journaux d'audit enregistrent l'IP cliente résolue selon `TRUSTED_PROXY_HOPS`. L'onglet Paramètres du back-office (`/api/admin/parametres/llm-providers`) permet de superviser la stabilité de **Mistral AI** et **Google Gemini** (`gemini-3.8-flash`) et de basculer entre le mode `auto` (sélection automatique de la ressource la plus stable et disponible avec coupe-circuit) ou un fournisseur prioritaire (`mistral` / `gemini`).
+**Données du back-office & Bascule IA (Mistral / Gemini)** : les listes vides restent vides et ne sont jamais remplacées par des artisans, documents ou statistiques de démonstration. Les routes documentaires renvoient `503` lorsque Qdrant est indisponible. Les journaux d'audit enregistrent l'IP cliente résolue selon `TRUSTED_PROXY_HOPS`. L'onglet Paramètres du back-office (`/api/admin/parametres/llm-providers`) permet de superviser la stabilité de **Mistral AI** et **Google Gemini** (`gemini-3.8-flash`) et de basculer entre le mode par défaut `gemini` (Gemini prioritaire, réglable par `LLM_PROVIDER`), le mode `auto` (sélection automatique de la ressource la plus stable et disponible avec coupe-circuit) ou `mistral` (Mistral prioritaire).
+
+**Clé IA obligatoire en production** : avec `APP_ENV=production`, l'API refuse de démarrer sans `MISTRAL_API_KEY` ou `GEMINI_API_KEY` valide. Sans clé (développement), les réponses et devis sont des exemples génériques signalés « Mode démonstration ».
+
+**Seuil RAG** : `RAG_MIN_SCORE=0.71` a été calibré le 21 novembre 2026 pour `gemini-embedding-001` (toutes les questions couvertes servies, aucune question hors corpus acceptée). Après tout changement de modèle de vecteurs ou ajout important au corpus, recalibrez-le sur le corpus indexé (clé réelle du fournisseur de vecteurs requise, `GEMINI_API_KEY` par défaut, lecture seule) :
+
+```bash
+python -m app.scripts.calibrer_seuil_rag --avec-reformulation --json rapport_seuil.json
+```
+
+Le script propose le seuil le plus bas qui laisse passer au plus 5 % de questions hors corpus (`--max-faux-positifs`) et liste les questions couvertes qui ne seraient plus servies. `RAG_REFORMULATION_REQUETE=true` cherche aussi la question reformulée en français technique ; elle est désactivée par défaut, car au calibrage elle rapprochait les scores hors corpus des scores couverts sans gain mesuré. Si vous la réactivez, recalibrez avec `--avec-reformulation`.
+
+**Vecteurs Gemini** : la recherche documentaire utilise par défaut `gemini-embedding-001` (`EMBEDDING_PROVIDER=gemini`, 1536 dimensions) dans la collection `connaissances_prosartisan_gemini_1536`. Après passage à Gemini (ou tout changement de modèle ou de dimension), réindexez le corpus — `python -m ingestion.pipeline --docs-dir ./ingestion/documents --metier-id 1` traite tout le corpus, le manifeste étant propre à chaque collection — puis recalibrez `RAG_MIN_SCORE`. `EMBEDDING_PROVIDER=mistral` revient à `mistral-embed` et à la collection historique.
+
+**Grille de prix des devis** : les devis pré-remplis par l'IA ne prennent leurs prix que dans la grille de référence (onglet Devis du back-office, permissions `prix.read`/`prix.write`) ou dans les prix dictés par l'artisan. Une ligne sans prix correspondant (même unité, commune du chantier ou prix national) reste à 0 F et est surlignée. Tant que la grille est vide, toutes les lignes sont à compléter par l'artisan. Appliquez la migration `c4d5e6f7a8b9` (`alembic upgrade head`).
 
 ## 📝 Documentation de référence
 
