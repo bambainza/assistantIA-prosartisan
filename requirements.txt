@@ -25,7 +25,7 @@ redis[hiredis]==5.0.8
 qdrant-client==1.11.0
 
 # === Traitement de documents ===
-pypdf==6.16.1
+pypdf==6.21.4
 tiktoken==0.7.0
 
 # === IA (Mistral) : chat/vision, embeddings, Voxtral STT/TTS ===
@@ -50,7 +50,7 @@ pywebpush==2.5.0
 # complet firebase-admin, dont les dépendances (httpx==0.28.1 exact) entrent
 # en conflit direct avec openai==1.43.0 déjà pinné dans ce projet.
 google-auth==2.58.0
-pyasn1==0.6.4
+pyasn1==0.6.5
 
 # === Dev & Tests ===
 pytest==9.0.3

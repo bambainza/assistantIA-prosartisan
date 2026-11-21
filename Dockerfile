@@ -13,6 +13,9 @@ RUN pip install --no-cache-dir --user -r requirements.txt
 # ── Étape 2 : Image Finale de Production ──
 FROM python:3.12-slim AS runner
 
+ARG BUILD_SHA=development
+ENV BUILD_SHA=$BUILD_SHA
+
 WORKDIR /app
 
 # Dépendances d'exécution minimales (curl pour les healthchecks)
@@ -32,7 +35,8 @@ ENV PYTHONDONTWRITEBYTECODE=1
 
 # Copie du code source et des scripts
 COPY --chown=appuser:appgroup . .
-RUN chmod +x docker-entrypoint.sh
+# Normaliser aussi les contextes ZIP/copies Windows hors checkout Git.
+RUN sed -i 's/\r$//' docker-entrypoint.sh && chmod +x docker-entrypoint.sh
 
 # Dossier des fichiers téléversés (photos de chantier, PDF admin) : doit
 # appartenir à appuser pour qu'un volume monté ici reste inscriptible.
@@ -43,7 +47,7 @@ USER appuser
 EXPOSE 8000
 
 HEALTHCHECK --interval=20s --timeout=5s --start-period=10s --retries=3 \
-    CMD curl -f http://localhost:8000/api/health || exit 1
+    CMD curl -f http://localhost:8000/api/ready || exit 1
 
 ENTRYPOINT ["./docker-entrypoint.sh"]
 CMD ["uvicorn", "app.main:app", "--host", "0.0.0.0", "--port", "8000", "--workers", "2"]

@@ -6,6 +6,7 @@ from unittest.mock import AsyncMock, MagicMock
 import pytest
 from httpx import ASGITransport, AsyncClient
 
+from app.config import settings
 from app.db.session import get_db
 from app.main import app
 from app.middleware.auth import create_access_token
@@ -82,9 +83,87 @@ async def test_admin_get_documents_with_active_status(
         assert len(data["documents"]) > 0
         assert "is_active" in data["documents"][0]
         assert data["documents"][0]["is_active"] is True
-        assert data["documents"][0]["date_ingestion"] == "2026-09-26T12:00:00+00:00"
+        assert data["documents"][0]["date_ingestion"] == "2026-09-26"
+        # La liste lit la collection en service (propre au modèle de vecteurs)
+        assert admin_qdrant.collections
+        assert set(admin_qdrant.collections) == {settings.collection_vectorielle}
     finally:
         app.dependency_overrides.pop(get_db, None)
+
+
+@pytest.mark.asyncio
+async def test_date_ingestion_repli_sur_le_manifeste(
+    tmp_path, monkeypatch, mock_db_with_admin, admin_user, admin_qdrant
+):
+    """Sans `indexed_at`, la date vient du manifeste, si la collection concorde."""
+    import json
+
+    from app.routers.admin import contenus
+
+    (tmp_path / ".ingestion_manifest.json").write_text(
+        json.dumps(
+            {
+                "guide_gemini.md": {
+                    "collection": settings.collection_vectorielle,
+                    "last_ingested_at": "2026-11-21T19:07:14.359829+00:00",
+                },
+                "guide_autre_modele.md": {
+                    "collection": "connaissances_prosartisan",
+                    "last_ingested_at": "2026-08-01T10:00:00+00:00",
+                },
+            }
+        ),
+        encoding="utf-8",
+    )
+    monkeypatch.setattr(contenus, "CORPUS_DOCS_DIR", str(tmp_path))
+    admin_qdrant.points = [
+        MagicMock(payload={"document_name": nom, "metier_id": 1})
+        for nom in ("guide_gemini.md", "guide_autre_modele.md", "guide_absent.md")
+    ]
+    app.dependency_overrides[get_db] = mock_db_with_admin
+    token = create_access_token(data={"sub": str(admin_user.id)})
+
+    try:
+        transport = ASGITransport(app=app)
+        async with AsyncClient(transport=transport, base_url="http://test") as client:
+            res = await client.get(
+                "/api/admin/documents", headers={"Authorization": f"Bearer {token}"}
+            )
+        assert res.status_code == 200
+        dates = {d["filename"]: d["date_ingestion"] for d in res.json()["documents"]}
+        assert dates == {
+            "guide_gemini.md": "2026-11-21",
+            "guide_autre_modele.md": None,
+            "guide_absent.md": None,
+        }
+    finally:
+        app.dependency_overrides.pop(get_db, None)
+
+
+@pytest.mark.parametrize(
+    ("valeur", "attendu"),
+    [
+        ("2026-09-26T12:00:00+00:00", "2026-09-26"),
+        ("2026-09-26", "2026-09-26"),
+        ("pas une date", None),
+        ("", None),
+        (None, None),
+        (1727352000, None),
+    ],
+)
+def test_date_jour(valeur, attendu) -> None:
+    from app.routers.admin.contenus import _date_jour
+
+    assert _date_jour(valeur) == attendu
+
+
+def test_manifeste_du_corpus_trouve() -> None:
+    """Le chemin du corpus ne dépend pas du dossier courant."""
+    import os
+
+    from app.routers.admin.contenus import CORPUS_DOCS_DIR
+
+    assert os.path.isfile(os.path.join(CORPUS_DOCS_DIR, ".ingestion_manifest.json"))
 
 
 @pytest.mark.asyncio

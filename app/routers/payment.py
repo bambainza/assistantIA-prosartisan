@@ -40,6 +40,7 @@ from app.schemas.payment import (
     WebhookPayload,
 )
 from app.services.cache_service import cache_service
+from app.services.parametres_service import parametres_service
 from app.services.payment_providers.demo import (
     NotificationSimulee,
     charger_session,
@@ -62,7 +63,11 @@ router = APIRouter(prefix="/api/payment", tags=["Paiement Mobile Money"])
 _WEBHOOK_REJECTED_COUNTER_KEY = "prosartisan:security:webhook_rejected_total"
 _SECURITY_COUNTER_TTL_SECONDS = 30 * 86400
 
-_NOMS_OPERATEURS = {"WAVE": "Wave", "ORANGE": "Orange Money"}
+_NOMS_OPERATEURS = {
+    "WAVE": "Wave",
+    "ORANGE": "Orange Money",
+    "CINETPAY": "CinetPay",
+}
 _TELEPHONE_ORANGE_RE = re.compile(r"^(\+225)?07\d{8}$")
 _CODE_OTP_RE = re.compile(r"^\d{4}$")
 
@@ -75,13 +80,16 @@ async def _rejeter_webhook(detail: str) -> HTTPException:
 
 
 @router.get("/tarifs")
-async def get_tarifs() -> dict[str, Any]:
-    """Retourne la grille tarifaire des Pass et Packs ProsArtisan."""
+async def get_tarifs(
+    db: AsyncSession = Depends(get_db),
+) -> dict[str, Any]:
+    """Retourne la grille tarifaire des Pass et Packs ProsArtisan ainsi que les opérateurs actifs."""
+    operateurs_actifs = await parametres_service.list_active_payment_operators(db)
     return {
         "offres": TARIFS_PASS,
-        "operateurs": list(_NOMS_OPERATEURS),
+        "operateurs": operateurs_actifs,
         "mode": "demo" if settings.payment_demo_mode else "live",
-        "disponible": payment_service.paiement_disponible(),
+        "disponible": payment_service.paiement_disponible() and bool(operateurs_actifs),
     }
 
 
@@ -164,6 +172,25 @@ async def orange_money_webhook(
         raise await _rejeter_webhook(str(exc)) from exc
 
 
+@router.get("/webhooks/cinetpay")
+async def cinetpay_webhook_probe() -> dict[str, str]:
+    """Sonde de santé GET exigée par CinetPay avant l'envoi de notifications POST."""
+    return {"status": "ok"}
+
+
+@router.post("/webhooks/cinetpay")
+async def cinetpay_webhook(
+    request: Request, db: AsyncSession = Depends(get_db)
+) -> dict[str, Any]:
+    """Notification CinetPay v1 : `notify_token` obligatoire + confirmation GET (401 sinon)."""
+    try:
+        return await payment_service.handle_cinetpay_notification(
+            db, await request.body()
+        )
+    except WebhookNonAuthentifieError as exc:
+        raise await _rejeter_webhook(str(exc)) from exc
+
+
 @router.post("/webhook")
 async def handle_webhook(
     request: Request,
@@ -216,6 +243,10 @@ async def _livrer_notification(notification: NotificationSimulee) -> None:
             if notification.operateur == "WAVE":
                 await payment_service.handle_wave_webhook(
                     db, notification.body, notification.headers[WAVE_SIGNATURE_HEADER]
+                )
+            elif notification.operateur == "CINETPAY":
+                await payment_service.handle_cinetpay_notification(
+                    db, notification.body
                 )
             else:
                 await payment_service.handle_orange_money_notification(

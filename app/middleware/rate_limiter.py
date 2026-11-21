@@ -5,8 +5,8 @@ Fenêtre fixe d'une minute par IP cliente sur les routes sensibles
 tous les workers). Hors production, repli automatique sur un compteur en
 mémoire si Redis est indisponible ; en production, le préfixe
 `prosartisan:rate_limit:` interdit ce repli (voir
-`CacheService._require_shared_backend`) et le trafic passe sans limite plutôt
-que d'être bloqué.
+`CacheService._require_shared_backend`) et une erreur contrôlée 503
+empêche le trafic sensible sans protection.
 
 L'IP cliente est résolue via `get_client_ip` (prise en compte des reverse
 proxies de confiance, `TRUSTED_PROXY_HOPS`). Les WebSockets ne traversent pas
@@ -22,7 +22,7 @@ from starlette.middleware.base import BaseHTTPMiddleware
 
 from app.config import settings
 from app.middleware.client_ip import get_client_ip
-from app.services.cache_service import cache_service
+from app.services.cache_service import SharedBackendUnavailableError, cache_service
 
 # Durée de la fenêtre de comptage, en secondes.
 WINDOW_SECONDS = 60
@@ -42,8 +42,11 @@ async def is_rate_limited(client_ip: str, limit: int | None = None) -> bool:
 
     try:
         count = await cache_service.increment(key, WINDOW_SECONDS)
-    except Exception:
-        # Ne jamais bloquer le trafic si le backend de comptage échoue.
+    except Exception as exc:
+        if settings.is_production:
+            raise SharedBackendUnavailableError(
+                "Compteur de débit indisponible."
+            ) from exc
         count = 0
 
     return count > limit
@@ -59,9 +62,16 @@ class RateLimitMiddleware(BaseHTTPMiddleware):
     async def dispatch(self, request: Request, call_next):
         # Protéger les routes sensibles (Authentification et Chat/Streaming)
         route_sensible = request.url.path.startswith(("/api/chat", "/api/auth"))
-        if route_sensible and await is_rate_limited(
-            get_client_ip(request), self.requests_per_minute
-        ):
+        try:
+            limited = route_sensible and await is_rate_limited(
+                get_client_ip(request), self.requests_per_minute
+            )
+        except SharedBackendUnavailableError:
+            return JSONResponse(
+                status_code=503,
+                content={"detail": "Protection temporairement indisponible."},
+            )
+        if limited:
             return JSONResponse(
                 status_code=status.HTTP_429_TOO_MANY_REQUESTS,
                 content={"detail": RATE_LIMIT_MESSAGE},

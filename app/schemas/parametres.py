@@ -123,3 +123,63 @@ class ActualiteCategorieUpdateRequest(BaseModel):
     pour ne pas invalider les actualités qui le référencent déjà)."""
 
     label: str = Field(..., min_length=2, max_length=100)
+
+
+class PaymentMethodOut(BaseModel):
+    """Configuration d'un moyen de paiement (Wave, Orange Money, CinetPay)."""
+
+    model_config = ConfigDict(from_attributes=True)
+
+    id: int
+    code: str
+    label: str
+    is_active: bool
+
+    @field_validator("is_active", mode="before")
+    @classmethod
+    def _default_is_active(cls, value: object) -> object:
+        return value if value is not None else True
+
+
+class LLMProviderStatusOut(BaseModel):
+    """État de disponibilité et de stabilité d'un fournisseur IA (Mistral ou Gemini)."""
+
+    code: str
+    provider: str
+    label: str
+    model: str
+    vision_model: str
+    configured: bool
+    status: str
+    stability_score: float
+    consecutive_failures: int
+    total_successes: int
+    total_failures: int
+    cooldown_remaining_seconds: int
+    last_latency_ms: float | None = None
+    last_error: str | None = None
+    last_used_at: str | None = None
+
+
+class LLMRoutingConfigOut(BaseModel):
+    """Configuration de routage et de bascule (failover) entre Mistral et Gemini."""
+
+    mode: str
+    failover_enabled: bool
+    active_provider: str
+    candidate_order: list[str]
+    providers: list[LLMProviderStatusOut]
+
+
+class LLMRoutingUpdateRequest(BaseModel):
+    """Mise à jour du mode de sélection du fournisseur IA (`auto`, `mistral`, `gemini`)."""
+
+    mode: str = Field(
+        ...,
+        pattern=r"^(auto|mistral|gemini|AUTO|MISTRAL|GEMINI)$",
+        description="Mode de sélection IA : 'auto', 'mistral' ou 'gemini'.",
+    )
+    failover_enabled: bool | None = Field(
+        None,
+        description="Active ou désactive la bascule automatique vers le fournisseur secondaire.",
+    )

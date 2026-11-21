@@ -1,8 +1,10 @@
 {
   "guide_assainissement_fosse_septique_ci.md": {
     "sha256": "c91b5cdd121378175d549a5954f50bdcd00b753936df00149b300a86c6fd2202",
+    "collection": "connaissances_prosartisan_gemini_1536",
+    "modele_vecteurs": "gemini:gemini-embedding-001:1536",
     "chunks_count": 6,
-    "last_ingested_at": "2026-09-14T22:49:53.563097+00:00",
+    "last_ingested_at": "2026-11-21T19:07:14.359829+00:00",
     "metadata": {
       "metier_id": 3,
       "secteur_id": 1,
@@ -12,8 +14,10 @@
   },
   "guide_carrelage_revetement_dtu52.md": {
     "sha256": "b92c36b41178cd8f0af4bb2e1ce5fb9bc20353baa4b2295d4d716ac0b96058d8",
+    "collection": "connaissances_prosartisan_gemini_1536",
+    "modele_vecteurs": "gemini:gemini-embedding-001:1536",
     "chunks_count": 8,
-    "last_ingested_at": "2026-09-14T22:49:58.253141+00:00",
+    "last_ingested_at": "2026-11-21T19:07:23.435692+00:00",
     "metadata": {
       "metier_id": 13,
       "secteur_id": 1,
@@ -23,8 +27,10 @@
   },
   "guide_climatisation_froid_installation_entretien.md": {
     "sha256": "367c75400b4e6c7b2c98ca79bd9dcb1a39ede2c7bb045bcfe7b6c00bda1861fa",
+    "collection": "connaissances_prosartisan_gemini_1536",
+    "modele_vecteurs": "gemini:gemini-embedding-001:1536",
     "chunks_count": 6,
-    "last_ingested_at": "2026-09-14T22:49:59.779553+00:00",
+    "last_ingested_at": "2026-11-21T19:07:24.784090+00:00",
     "metadata": {
       "metier_id": 3,
       "secteur_id": 1,
@@ -34,8 +40,10 @@
   },
   "guide_depannage_electrique_domestique_securite.md": {
     "sha256": "f7676c037ba547de38bc0f21b990745367321e03e55132d96c81afb99b2d5088",
+    "collection": "connaissances_prosartisan_gemini_1536",
+    "modele_vecteurs": "gemini:gemini-embedding-001:1536",
     "chunks_count": 6,
-    "last_ingested_at": "2026-09-14T22:50:01.419932+00:00",
+    "last_ingested_at": "2026-11-21T19:07:32.998116+00:00",
     "metadata": {
       "metier_id": 2,
       "secteur_id": 1,
@@ -45,8 +53,10 @@
   },
   "guide_diagnostic_fissures_pathologies_batiment.md": {
     "sha256": "ec636ed08f4d6cecf32aa16ff59e39280540d59380228675da6e229e9e81b61f",
+    "collection": "connaissances_prosartisan_gemini_1536",
+    "modele_vecteurs": "gemini:gemini-embedding-001:1536",
     "chunks_count": 5,
-    "last_ingested_at": "2026-09-14T22:50:03.324498+00:00",
+    "last_ingested_at": "2026-11-21T19:07:36.325110+00:00",
     "metadata": {
       "metier_id": 13,
       "secteur_id": 1,
@@ -56,8 +66,10 @@
   },
   "guide_diagnostic_pannes_electroniques_auto.md": {
     "sha256": "248443f3c0526e9ee5936c9bd87fd34428712fcba24b0f1b8ed7539fb03e2ac9",
+    "collection": "connaissances_prosartisan_gemini_1536",
+    "modele_vecteurs": "gemini:gemini-embedding-001:1536",
     "chunks_count": 5,
-    "last_ingested_at": "2026-09-14T22:50:05.695701+00:00",
+    "last_ingested_at": "2026-11-21T19:07:37.538009+00:00",
     "metadata": {
       "metier_id": 4,
       "secteur_id": 1,
@@ -67,8 +79,10 @@
   },
   "guide_fondations_terrassement_geotechnique_ci.md": {
     "sha256": "1d072856e7247790258af27af29645b2c1748fdfc70da8a0b1712578a95880b5",
+    "collection": "connaissances_prosartisan_gemini_1536",
+    "modele_vecteurs": "gemini:gemini-embedding-001:1536",
     "chunks_count": 7,
-    "last_ingested_at": "2026-09-14T22:50:08.536607+00:00",
+    "last_ingested_at": "2026-11-21T19:07:38.912743+00:00",
     "metadata": {
       "metier_id": 13,
       "secteur_id": 1,
@@ -78,8 +92,10 @@
   },
   "guide_installation_solaire_photovoltaique_ci.md": {
     "sha256": "9c4519bcde67346e5960b12ea4e3f4f529b3c0aad4f50f39e0f4d33131c865a2",
+    "collection": "connaissances_prosartisan_gemini_1536",
+    "modele_vecteurs": "gemini:gemini-embedding-001:1536",
     "chunks_count": 6,
-    "last_ingested_at": "2026-09-14T22:50:10.238420+00:00",
+    "last_ingested_at": "2026-11-21T19:07:41.790297+00:00",
     "metadata": {
       "metier_id": 2,
       "secteur_id": 1,
@@ -89,8 +105,10 @@
   },
   "guide_maconnerie_dtu_20_1_ci.md": {
     "sha256": "15aaa78ac4f697b83c30f50a195c46cc097d6390782ec61b6b31a55babf59fc3",
+    "collection": "connaissances_prosartisan_gemini_1536",
+    "modele_vecteurs": "gemini:gemini-embedding-001:1536",
     "chunks_count": 8,
-    "last_ingested_at": "2026-09-14T22:50:12.354290+00:00",
+    "last_ingested_at": "2026-11-21T19:07:45.216950+00:00",
     "metadata": {
       "metier_id": 13,
       "secteur_id": 1,
@@ -100,8 +118,10 @@
   },
   "guide_mecanique_auto_diesel_essence.md": {
     "sha256": "54e97ee691a25f1ceaef85c341c22ca450f55c178bcef3699bddd552a8c03e99",
+    "collection": "connaissances_prosartisan_gemini_1536",
+    "modele_vecteurs": "gemini:gemini-embedding-001:1536",
     "chunks_count": 5,
-    "last_ingested_at": "2026-09-14T22:50:16.150707+00:00",
+    "last_ingested_at": "2026-11-21T19:07:50.383007+00:00",
     "metadata": {
       "metier_id": 4,
       "secteur_id": 1,
@@ -111,8 +131,10 @@
   },
   "guide_menuiserie_charpente_bois_tropical.md": {
     "sha256": "f901a9fcfe259fe71bd32f53ac251e7446e99d429f8f48518ab9ece628055de9",
+    "collection": "connaissances_prosartisan_gemini_1536",
+    "modele_vecteurs": "gemini:gemini-embedding-001:1536",
     "chunks_count": 5,
-    "last_ingested_at": "2026-09-14T22:50:20.859770+00:00",
+    "last_ingested_at": "2026-11-21T19:07:53.089068+00:00",
     "metadata": {
       "metier_id": 13,
       "secteur_id": 1,
@@ -122,10 +144,12 @@
   },
   "guide_peinture_etancheite_tropicale.md": {
     "sha256": "7401fdc81fe667798e457fbf4b7f63b40720a25cefcc76ce6a155a9dcc7bb96c",
+    "collection": "connaissances_prosartisan_gemini_1536",
+    "modele_vecteurs": "gemini:gemini-embedding-001:1536",
     "chunks_count": 7,
-    "last_ingested_at": "2026-09-06T22:34:29.068565+00:00",
+    "last_ingested_at": "2026-11-21T19:07:54.633845+00:00",
     "metadata": {
-      "metier_id": 1,
+      "metier_id": 13,
       "secteur_id": 1,
       "type_document": "guide_technique",
       "niveau_expertise": "intermédiaire"
@@ -133,8 +157,10 @@
   },
   "guide_plomberie_sanitaire_dtu60_1.md": {
     "sha256": "eecb4f1c3c912d538ce6be7a2e70df1d988e69c5e45421be75fcd950faec86b2",
+    "collection": "connaissances_prosartisan_gemini_1536",
+    "modele_vecteurs": "gemini:gemini-embedding-001:1536",
     "chunks_count": 7,
-    "last_ingested_at": "2026-09-06T22:34:29.113209+00:00",
+    "last_ingested_at": "2026-11-21T19:07:56.128740+00:00",
     "metadata": {
       "metier_id": 3,
       "secteur_id": 1,
@@ -144,10 +170,12 @@
   },
   "guide_securite_chantier_epi_prevention_btp.md": {
     "sha256": "d22ee4a8b140eb109a5e894b5d2458e7f660b613e5fca28bfe9c84c9805e3e93",
+    "collection": "connaissances_prosartisan_gemini_1536",
+    "modele_vecteurs": "gemini:gemini-embedding-001:1536",
     "chunks_count": 5,
-    "last_ingested_at": "2026-09-06T22:34:29.152501+00:00",
+    "last_ingested_at": "2026-11-21T19:08:04.478867+00:00",
     "metadata": {
-      "metier_id": 1,
+      "metier_id": 13,
       "secteur_id": 1,
       "type_document": "guide_technique",
       "niveau_expertise": "debutant"
@@ -155,8 +183,10 @@
   },
   "guide_tolerie_peinture_auto_carrosserie.md": {
     "sha256": "1e46a42975314b31ebc6b3b71687e0b52ef8975d6bce42a90c51be3cf3c16d6c",
+    "collection": "connaissances_prosartisan_gemini_1536",
+    "modele_vecteurs": "gemini:gemini-embedding-001:1536",
     "chunks_count": 7,
-    "last_ingested_at": "2026-09-06T22:34:29.185947+00:00",
+    "last_ingested_at": "2026-11-21T19:08:09.477068+00:00",
     "metadata": {
       "metier_id": 4,
       "secteur_id": 1,
@@ -166,8 +196,10 @@
   },
   "normes_electricite_nfc15100_ci.md": {
     "sha256": "82f9133905fc8101bb8fea3ac082d4b0b4ed6d2992bc849129040e66661a6a72",
+    "collection": "connaissances_prosartisan_gemini_1536",
+    "modele_vecteurs": "gemini:gemini-embedding-001:1536",
     "chunks_count": 5,
-    "last_ingested_at": "2026-09-06T22:34:29.225514+00:00",
+    "last_ingested_at": "2026-11-21T19:08:13.268237+00:00",
     "metadata": {
       "metier_id": 2,
       "secteur_id": 1,
@@ -177,8 +209,10 @@
   },
   "guide_btp_ferraillage_coffrage_ci.md": {
     "sha256": "a3f7a7ac0d65db5fd3169cd83c61b72d389541473de6845953df9f5b27dc26df",
+    "collection": "connaissances_prosartisan_gemini_1536",
+    "modele_vecteurs": "gemini:gemini-embedding-001:1536",
     "chunks_count": 7,
-    "last_ingested_at": "2026-09-14T22:49:55.736774+00:00",
+    "last_ingested_at": "2026-11-21T19:07:21.271225+00:00",
     "metadata": {
       "metier_id": 13,
       "secteur_id": 1,
@@ -188,8 +222,10 @@
   },
   "guide_maroquinerie_cuir_artisanat.md": {
     "sha256": "4a7579b7348b097cf78d49c6da8964020ea9eefe957e1eaf70fe7d8659c15112",
+    "collection": "connaissances_prosartisan_gemini_1536",
+    "modele_vecteurs": "gemini:gemini-embedding-001:1536",
     "chunks_count": 7,
-    "last_ingested_at": "2026-09-14T22:50:14.588563+00:00",
+    "last_ingested_at": "2026-11-21T19:07:48.281759+00:00",
     "metadata": {
       "metier_id": 6,
       "secteur_id": 2,
@@ -199,8 +235,10 @@
   },
   "guide_mecanique_motos_tricycles_ci.md": {
     "sha256": "e2cff059859a1061f018ca4e639701abc87c8215d1bbfb5cc7e051f06703d2ce",
+    "collection": "connaissances_prosartisan_gemini_1536",
+    "modele_vecteurs": "gemini:gemini-embedding-001:1536",
     "chunks_count": 7,
-    "last_ingested_at": "2026-09-14T22:50:19.442205+00:00",
+    "last_ingested_at": "2026-11-21T19:07:51.830612+00:00",
     "metadata": {
       "metier_id": 4,
       "secteur_id": 1,
@@ -210,8 +248,10 @@
   },
   "guide_restauration_maquis_hygiene_ci.md": {
     "sha256": "9fd7c2b96f4d4f4aab022d277d2379af5ec5c7404cf332b7facec4e87a04bb47",
+    "collection": "connaissances_prosartisan_gemini_1536",
+    "modele_vecteurs": "gemini:gemini-embedding-001:1536",
     "chunks_count": 7,
-    "last_ingested_at": "2026-09-14T22:51:10.116203+00:00",
+    "last_ingested_at": "2026-11-21T19:08:01.610564+00:00",
     "metadata": {
       "metier_id": 5,
       "secteur_id": 2,
@@ -220,9 +260,11 @@
     }
   },
   "guide_bijouterie_orfevrerie_atelier.md": {
-    "sha256": "4f068fd0a33295c23016cb2fcff3df3022dbf38b779415ac2b7e653ee7c72f43",
+    "sha256": "6fda62fa4b0a8236f6ed02e97b2c6837a542191b1d1e4c21d0be67c67f35e41c",
+    "collection": "connaissances_prosartisan_gemini_1536",
+    "modele_vecteurs": "gemini:gemini-embedding-001:1536",
     "chunks_count": 10,
-    "last_ingested_at": "2026-09-25T22:52:14.198512+00:00",
+    "last_ingested_at": "2026-11-21T19:07:15.894693+00:00",
     "metadata": {
       "metier_id": 6,
       "secteur_id": 2,
@@ -231,9 +273,11 @@
     }
   },
   "guide_boulangerie_patisserie_artisanale.md": {
-    "sha256": "b06ba075f5151e4af0c81274f31be455bd2fb623a3bfd2163977eb38dbb51b5c",
+    "sha256": "1a83721dbeaf563843858199518a10dc2e106e8a39f0f386d723d4dc57802010",
+    "collection": "connaissances_prosartisan_gemini_1536",
+    "modele_vecteurs": "gemini:gemini-embedding-001:1536",
     "chunks_count": 7,
-    "last_ingested_at": "2026-09-25T22:52:14.740234+00:00",
+    "last_ingested_at": "2026-11-21T19:07:18.273853+00:00",
     "metadata": {
       "metier_id": 5,
       "secteur_id": 2,
@@ -242,9 +286,11 @@
     }
   },
   "guide_broderie_finitions_atelier.md": {
-    "sha256": "ff82d1cc499df48b970d71514f2d77a738821c2f14cff8e1fb050817376ca3ab",
+    "sha256": "92be7f34f624b3165b0794e8fa9e0098d8c31c4d7b3e6813fdc10ed0d3a36bb6",
+    "collection": "connaissances_prosartisan_gemini_1536",
+    "modele_vecteurs": "gemini:gemini-embedding-001:1536",
     "chunks_count": 10,
-    "last_ingested_at": "2026-09-25T22:52:15.618292+00:00",
+    "last_ingested_at": "2026-11-21T19:07:19.822714+00:00",
     "metadata": {
       "metier_id": 7,
       "secteur_id": 2,
@@ -253,9 +299,11 @@
     }
   },
   "guide_compostage_fertilisation_organique.md": {
-    "sha256": "a99039669ecdf8fb694e0c7182fc756767fdf8647f623e7a4fb13ca55d805f94",
+    "sha256": "ecab217227ea9b413c4e1f736c39144fa04ac1976e24505aa49135beb4ae8423",
+    "collection": "connaissances_prosartisan_gemini_1536",
+    "modele_vecteurs": "gemini:gemini-embedding-001:1536",
     "chunks_count": 9,
-    "last_ingested_at": "2026-09-25T22:52:16.189857+00:00",
+    "last_ingested_at": "2026-11-21T19:07:26.421931+00:00",
     "metadata": {
       "metier_id": 10,
       "secteur_id": 2,
@@ -264,9 +312,11 @@
     }
   },
   "guide_conservation_aliments_chaine_froid.md": {
-    "sha256": "9534691605b26b8aed8442b5b8607325cde7bd9c4538f04768f1807a065fca14",
+    "sha256": "1a956a6ae9b6cf48cab770cd5c001facaf8edd172ad74bf192c9a5084a7aa28d",
+    "collection": "connaissances_prosartisan_gemini_1536",
+    "modele_vecteurs": "gemini:gemini-embedding-001:1536",
     "chunks_count": 8,
-    "last_ingested_at": "2026-09-25T22:52:16.862645+00:00",
+    "last_ingested_at": "2026-11-21T19:07:27.930961+00:00",
     "metadata": {
       "metier_id": 5,
       "secteur_id": 2,
@@ -275,9 +325,11 @@
     }
   },
   "guide_couture_patronage_retouches.md": {
-    "sha256": "a6b7f62c63fa81a989c34732da02120361a7c114f90b2f7dd0665f1c566d2b84",
+    "sha256": "9f2dcd6602c0c8ca24e1a1fd67cfe38a001b98d25d95d5f2568b3a3c8c2bd84d",
+    "collection": "connaissances_prosartisan_gemini_1536",
+    "modele_vecteurs": "gemini:gemini-embedding-001:1536",
     "chunks_count": 10,
-    "last_ingested_at": "2026-09-25T22:52:17.907041+00:00",
+    "last_ingested_at": "2026-11-21T19:07:29.539531+00:00",
     "metadata": {
       "metier_id": 7,
       "secteur_id": 2,
@@ -286,9 +338,11 @@
     }
   },
   "guide_dechets_electroniques_deee.md": {
-    "sha256": "b3c6df8419982a1e6a58a273cb4e29f6ed4020b4dfc6a5442be6fef48e2cb854",
+    "sha256": "bf1ef87be8b002eab3d7cc675971c9da53007004bee2f538c736b5dd290b4ca0",
+    "collection": "connaissances_prosartisan_gemini_1536",
+    "modele_vecteurs": "gemini:gemini-embedding-001:1536",
     "chunks_count": 8,
-    "last_ingested_at": "2026-09-25T22:52:18.698939+00:00",
+    "last_ingested_at": "2026-11-21T19:07:31.066580+00:00",
     "metadata": {
       "metier_id": 9,
       "secteur_id": 1,
@@ -297,9 +351,11 @@
     }
   },
   "guide_depannage_tv_electromenager_onduleurs.md": {
-    "sha256": "6916b3baa1991461002ee6f273adbd890fd12dd25b47f11f47c6d8f3d69e42cc",
+    "sha256": "847b113b7f8acfe7d81c398d66aeafe2097a9954cabd0d87a49980060af92530",
+    "collection": "connaissances_prosartisan_gemini_1536",
+    "modele_vecteurs": "gemini:gemini-embedding-001:1536",
     "chunks_count": 8,
-    "last_ingested_at": "2026-09-25T22:52:19.766964+00:00",
+    "last_ingested_at": "2026-11-21T19:07:34.583593+00:00",
     "metadata": {
       "metier_id": 9,
       "secteur_id": 1,
@@ -308,9 +364,11 @@
     }
   },
   "guide_hygiene_desinfection_salon.md": {
-    "sha256": "d1dc4c0a911444ca65020c90de4b2cf74321c69df23851bbea12c5a652b18b0f",
+    "sha256": "5092711b6b6a4d8ead5f164ccf989248867f23f24ae966e9204829f7f94a5c68",
+    "collection": "connaissances_prosartisan_gemini_1536",
+    "modele_vecteurs": "gemini:gemini-embedding-001:1536",
     "chunks_count": 10,
-    "last_ingested_at": "2026-09-25T22:52:20.339578+00:00",
+    "last_ingested_at": "2026-11-21T19:07:40.563550+00:00",
     "metadata": {
       "metier_id": 8,
       "secteur_id": 2,
@@ -319,9 +377,11 @@
     }
   },
   "guide_machines_coudre_reglage_entretien.md": {
-    "sha256": "e473e02cad945fe6ed7184cb576003d24a6e1ff599d12b7183e8d32cb18186dd",
+    "sha256": "26dcc7c291df39f609630afc22a0d75d1516567532b4ba958811a519530d1919",
+    "collection": "connaissances_prosartisan_gemini_1536",
+    "modele_vecteurs": "gemini:gemini-embedding-001:1536",
     "chunks_count": 13,
-    "last_ingested_at": "2026-09-25T22:52:20.863296+00:00",
+    "last_ingested_at": "2026-11-21T19:07:43.679691+00:00",
     "metadata": {
       "metier_id": 7,
       "secteur_id": 2,
@@ -330,9 +390,11 @@
     }
   },
   "guide_maraichage_irrigation_goutte_a_goutte.md": {
-    "sha256": "544f80bcc35a7231c10150b12b805ba41c672fe6e54eeab4de3888b8365418de",
+    "sha256": "25c5b1a7a2fe0543022d356fb57d0b796dd479d1c8b9d68045e3cdf9c0df9e45",
+    "collection": "connaissances_prosartisan_gemini_1536",
+    "modele_vecteurs": "gemini:gemini-embedding-001:1536",
     "chunks_count": 9,
-    "last_ingested_at": "2026-09-25T22:52:21.821948+00:00",
+    "last_ingested_at": "2026-11-21T19:07:46.849680+00:00",
     "metadata": {
       "metier_id": 10,
       "secteur_id": 2,
@@ -341,9 +403,11 @@
     }
   },
   "guide_recyclage_plastique_pave.md": {
-    "sha256": "ee176d461af005d468ccd17e6c2a8ccbc08220076133cd51a2b2527c7b9500d7",
+    "sha256": "b0a36f09dc7b9a2e2e7678aa1217bfc0b3f8629c32725fa0cc03f2457045a624",
+    "collection": "connaissances_prosartisan_gemini_1536",
+    "modele_vecteurs": "gemini:gemini-embedding-001:1536",
     "chunks_count": 8,
-    "last_ingested_at": "2026-09-25T22:52:22.290700+00:00",
+    "last_ingested_at": "2026-11-21T19:07:58.328531+00:00",
     "metadata": {
       "metier_id": 10,
       "secteur_id": 2,
@@ -352,9 +416,11 @@
     }
   },
   "guide_reparation_smartphones_ecrans_batteries.md": {
-    "sha256": "510ad558a97a8c436856d109f78143f5e32ce476109cd6c7e12e7bf3ae3046a6",
+    "sha256": "60edebeef091c5d977044abe7ec840ddcf407a982dc7d53dee5bfac989c0197c",
+    "collection": "connaissances_prosartisan_gemini_1536",
+    "modele_vecteurs": "gemini:gemini-embedding-001:1536",
     "chunks_count": 9,
-    "last_ingested_at": "2026-09-25T22:52:22.685556+00:00",
+    "last_ingested_at": "2026-11-21T19:07:59.933711+00:00",
     "metadata": {
       "metier_id": 9,
       "secteur_id": 1,
@@ -363,9 +429,11 @@
     }
   },
   "guide_sculpture_bois_finitions.md": {
-    "sha256": "643ab8eef05965bf693101add06553907cedcfa75324ed907d8baf66e8cb01d2",
+    "sha256": "87104006a48fa0f77e854730581160c3f7276220a7f24ef72c017937773e64c0",
+    "collection": "connaissances_prosartisan_gemini_1536",
+    "modele_vecteurs": "gemini:gemini-embedding-001:1536",
     "chunks_count": 8,
-    "last_ingested_at": "2026-09-25T22:52:23.876824+00:00",
+    "last_ingested_at": "2026-11-21T19:08:03.163907+00:00",
     "metadata": {
       "metier_id": 6,
       "secteur_id": 2,
@@ -374,9 +442,11 @@
     }
   },
   "guide_soudure_electronique_esd.md": {
-    "sha256": "67d0f57f6351c5b688f510bc5d69512ded160b06e5efbc92322ba626535e7a7c",
+    "sha256": "aade2f8215bb280459e92dca4b44214d004f9db568026d71b071e9ce973aa30e",
+    "collection": "connaissances_prosartisan_gemini_1536",
+    "modele_vecteurs": "gemini:gemini-embedding-001:1536",
     "chunks_count": 8,
-    "last_ingested_at": "2026-09-25T22:52:24.321027+00:00",
+    "last_ingested_at": "2026-11-21T19:08:06.146544+00:00",
     "metadata": {
       "metier_id": 9,
       "secteur_id": 1,
@@ -385,9 +455,11 @@
     }
   },
   "guide_tissus_pagne_wax_teinture.md": {
-    "sha256": "a6a414c8288ab94518a7ed1826dfddc5995d45f2ccbb5a343609faa87edc2e91",
+    "sha256": "e3400beaa1456cfb5f97a9a61f3222a6fd35eb7c7c4052331abe38f52bb30b39",
+    "collection": "connaissances_prosartisan_gemini_1536",
+    "modele_vecteurs": "gemini:gemini-embedding-001:1536",
     "chunks_count": 12,
-    "last_ingested_at": "2026-09-25T22:52:24.781556+00:00",
+    "last_ingested_at": "2026-11-21T19:08:08.017527+00:00",
     "metadata": {
       "metier_id": 7,
       "secteur_id": 2,
@@ -396,9 +468,11 @@
     }
   },
   "guide_tresses_extensions_protection.md": {
-    "sha256": "bc9f325aa215468e7c8915c095758f8d0a22bc32b8de979be1f3996a07744e1f",
+    "sha256": "d29c0000a4ea60212ceb18f7c0670dcf6b2f9b39914b31ee3e283898d5f65c09",
+    "collection": "connaissances_prosartisan_gemini_1536",
+    "modele_vecteurs": "gemini:gemini-embedding-001:1536",
     "chunks_count": 10,
-    "last_ingested_at": "2026-09-25T22:52:25.193843+00:00",
+    "last_ingested_at": "2026-11-21T19:08:11.183421+00:00",
     "metadata": {
       "metier_id": 8,
       "secteur_id": 2,

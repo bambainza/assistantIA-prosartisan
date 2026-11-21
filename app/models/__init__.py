@@ -15,6 +15,8 @@ from app.models.message import Message
 from app.models.metier import Metier, SousMetier
 from app.models.notification import Notification
 from app.models.package import Package
+from app.models.payment_method import PaymentMethodConfig
+from app.models.prix_reference import PrixReference
 from app.models.push_subscription import PushSubscription
 from app.models.quota import QuotaUtilisateur
 from app.models.quote import Quote
@@ -35,7 +37,9 @@ __all__ = [
     "Metier",
     "Notification",
     "Package",
+    "PaymentMethodConfig",
     "Permission",
+    "PrixReference",
     "PushSubscription",
     "QuotaUtilisateur",
     "Quote",

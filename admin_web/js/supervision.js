@@ -9,7 +9,8 @@
 async function loadQuotesAndCalculatorsTab() {
     await Promise.all([
         loadAdminQuotes(),
-        loadCalculatorsStats()
+        loadCalculatorsStats(),
+        loadPrixReferences()
     ]);
 }
 
@@ -85,6 +86,8 @@ window.loadCalculatorsStats = async function() {
     const countPlomb = document.getElementById('calc-count-plomb');
     const countCarr = document.getElementById('calc-count-carr');
     const countClim = document.getElementById('calc-count-clim');
+    const countAgglos = document.getElementById('calc-count-agglos');
+    const countConv = document.getElementById('calc-count-conv');
 
     try {
         const res = await adminFetch('/api/admin/calculators/stats');
@@ -94,11 +97,13 @@ window.loadCalculatorsStats = async function() {
         const byTool = data.by_tool || {};
 
         if (kpiCalc) kpiCalc.textContent = (data.total_calculator_calls || 0).toLocaleString('fr-FR');
-        if (countBeton) countBeton.textContent = byTool['calculer_dosage_beton_mortier'] || 0;
-        if (countCable) countCable.textContent = byTool['calculer_section_cable_nfc15100'] || 0;
-        if (countPlomb) countPlomb.textContent = byTool['calculer_pente_evacuation_dtu60'] || 0;
-        if (countCarr) countCarr.textContent = byTool['calculer_surface_carrelage_colle'] || 0;
-        if (countClim) countClim.textContent = byTool['calculer_bilan_thermique_climatisation'] || 0;
+        if (countBeton) countBeton.textContent = byTool['calculer_dosage_beton'] || 0;
+        if (countCable) countCable.textContent = byTool['calculer_section_cable'] || 0;
+        if (countPlomb) countPlomb.textContent = byTool['calculer_evacuation_plomberie'] || 0;
+        if (countCarr) countCarr.textContent = byTool['calculer_carrelage_et_colle'] || 0;
+        if (countClim) countClim.textContent = byTool['calculer_bilan_climatisation'] || 0;
+        if (countAgglos) countAgglos.textContent = byTool['calculer_agglos_mur'] || 0;
+        if (countConv) countConv.textContent = byTool['convertir_unites_chantier'] || 0;
 
     } catch (err) {
         console.error("Erreur chargement stats calculateurs:", err);

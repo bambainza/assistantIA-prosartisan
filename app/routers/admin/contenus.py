@@ -10,6 +10,7 @@ import logging
 import os
 import re
 import uuid
+from datetime import datetime
 from typing import Any
 
 from fastapi import (
@@ -35,13 +36,17 @@ from app.models.metier import Metier
 from app.services.audit_service import audit_service
 from app.services.document_service import DocumentVectorStoreError, document_service
 from app.services.rag_service import rag_service
-from ingestion.pipeline import run_ingestion
+from ingestion.pipeline import load_manifest, run_ingestion
 
 router = APIRouter()
 logger = logging.getLogger(__name__)
 
 
 MAX_ADMIN_UPLOAD_BYTES = 25 * 1024 * 1024
+# Corpus versionné (et son manifeste d'ingestion), indépendant du dossier courant.
+CORPUS_DOCS_DIR = os.path.normpath(
+    os.path.join(os.path.dirname(__file__), "..", "..", "..", "ingestion", "documents")
+)
 
 
 _SAFE_UPLOAD_NAME_RE = re.compile(r"^[A-Za-z0-9][A-Za-z0-9 ._-]{0,150}$")
@@ -60,7 +65,7 @@ async def _scroll_all_qdrant_points(client: Any) -> list[Any]:
     offset: Any = None
     while True:
         batch, next_offset = await client.scroll(
-            collection_name=settings.qdrant_collection,
+            collection_name=settings.collection_vectorielle,
             limit=256,
             offset=offset,
             with_payload=True,
@@ -70,6 +75,36 @@ async def _scroll_all_qdrant_points(client: Any) -> list[Any]:
         if next_offset is None:
             return points
         offset = next_offset
+
+
+def _date_jour(valeur: Any) -> str | None:
+    """Ramène un horodatage ISO 8601 à sa date (`AAAA-MM-JJ`), sinon `None`."""
+    if not isinstance(valeur, str) or not valeur:
+        return None
+    try:
+        return datetime.fromisoformat(valeur).date().isoformat()
+    except ValueError:
+        return None
+
+
+def _dates_ingestion_manifeste() -> dict[str, str]:
+    """Dates d'indexation du corpus d'après son manifeste d'ingestion.
+
+    Repli pour les points indexés avant le champ `indexed_at`. Une entrée ne
+    compte que si elle a été indexée dans la collection en service : la date
+    d'une indexation dans une autre collection (autre modèle de vecteurs) ne
+    décrit pas les points affichés.
+    """
+    dates: dict[str, str] = {}
+    for nom, entree in load_manifest(CORPUS_DOCS_DIR).items():
+        if not isinstance(entree, dict):
+            continue
+        if entree.get("collection") != settings.collection_vectorielle:
+            continue
+        date = _date_jour(entree.get("last_ingested_at"))
+        if date:
+            dates[nom] = date
+    return dates
 
 
 def _write_upload_exclusive(file_path: str, content: bytes) -> None:
@@ -286,7 +321,7 @@ async def get_ingestion_stats(
             port=settings.qdrant_port,
         )
         info = await qdrant_client.get_collection(
-            collection_name=settings.qdrant_collection
+            collection_name=settings.collection_vectorielle
         )
         total_chunks = info.points_count
         points = await _scroll_all_qdrant_points(qdrant_client)
@@ -317,7 +352,7 @@ async def get_ingestion_stats(
     ]
 
     return {
-        "collection": settings.qdrant_collection,
+        "collection": settings.collection_vectorielle,
         "metiers_coverts": metiers_coverts,
         "total_chunks": total_chunks,
     }
@@ -336,6 +371,7 @@ async def get_documents_list(
 
     metiers_res = await db.execute(select(Metier))
     metier_names = {metier.id: metier.nom for metier in metiers_res.scalars().all()}
+    dates_manifeste = await asyncio.to_thread(_dates_ingestion_manifeste)
 
     try:
         from qdrant_client import AsyncQdrantClient
@@ -359,7 +395,8 @@ async def get_documents_list(
                         "metier": metier_names.get(metier_id, f"Métier {metier_id}"),
                         "metier_id": metier_id,
                         "chunks_count": 0,
-                        "date_ingestion": payload.get("indexed_at"),
+                        "date_ingestion": _date_jour(payload.get("indexed_at"))
+                        or dates_manifeste.get(doc_name),
                         "is_active": doc_configs.get(doc_name, True),
                     }
                 documents_map[doc_name]["chunks_count"] += 1

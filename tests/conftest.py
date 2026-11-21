@@ -1,5 +1,6 @@
 """Fixtures partagées pour pytest."""
 
+from typing import Any
 from unittest.mock import AsyncMock, MagicMock
 
 import pytest
@@ -35,11 +36,14 @@ def admin_qdrant(monkeypatch):
     client = MagicMock()
     client.points = []
     client.points_count = 0
+    client.collections = []  # collections interrogées, dans l'ordre
 
-    async def _get_collection(**_kwargs):
+    async def _get_collection(**kwargs):
+        client.collections.append(kwargs.get("collection_name"))
         return MagicMock(points_count=client.points_count)
 
-    async def _scroll(**_kwargs):
+    async def _scroll(**kwargs):
+        client.collections.append(kwargs.get("collection_name"))
         return client.points, None
 
     client.get_collection = _get_collection
@@ -68,10 +72,33 @@ def _isoler_cache():
 @pytest.fixture(autouse=True)
 def _isoler_services_externes(monkeypatch):
     """Garantit que la suite de tests s'exécute de façon autonome et déterministe
-    en mode mock pour les APIs IA externes (Mistral LLM, Voxtral STT/TTS)."""
+    en mode mock pour les APIs IA externes (Mistral LLM, Google Gemini, Voxtral STT/TTS)."""
     from app.config import settings
 
     monkeypatch.setattr(settings, "mistral_api_key", "sk-placeholder-test")
+    monkeypatch.setattr(settings, "gemini_api_key", "AIza-placeholder-test")
+    # La reformulation multilingue ajoute un appel LLM avant la recherche :
+    # désactivée par défaut pour que les tests qui simulent les fournisseurs
+    # (bascule, coupe-circuit) ne comptent que l'appel de réponse. Les tests
+    # dédiés (tests/test_reformulation_requete.py) la réactivent.
+    monkeypatch.setattr(settings, "rag_reformulation_requete", False)
+
+
+@pytest.fixture(autouse=True)
+def _isoler_lecture_activations(monkeypatch: pytest.MonkeyPatch) -> Any:
+    """Le corpus de test est actif, sans dépendre d'une base locale préexistante.
+
+    Les tests de panne remplacent cette fabrique par une session en échec.
+    Les routes conservent leurs propres dépendances get_db et mocks explicites.
+    """
+    from app.db import session as session_module
+
+    session = MagicMock()
+    session.execute = AsyncMock(return_value=MagicMock(all=list))
+    context = MagicMock()
+    context.__aenter__ = AsyncMock(return_value=session)
+    context.__aexit__ = AsyncMock(return_value=False)
+    monkeypatch.setattr(session_module, "async_session", lambda: context)
 
 
 @pytest.fixture(autouse=True)

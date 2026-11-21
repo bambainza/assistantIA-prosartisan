@@ -1,6 +1,8 @@
 """Initialisation de la base de données (création des tables + seed)."""
 
 import logging
+from collections.abc import AsyncIterator
+from contextlib import asynccontextmanager
 
 from sqlalchemy import select, text
 from sqlalchemy.orm import selectinload
@@ -11,6 +13,7 @@ from app.models.actualite import ActualiteCategorie
 from app.models.base import Base
 from app.models.metier import Metier, SousMetier
 from app.models.package import Package
+from app.models.payment_method import PaymentMethodConfig
 from app.models.role import Permission, Role
 from app.models.user import User
 
@@ -18,6 +21,10 @@ logger = logging.getLogger(__name__)
 
 # Mot de passe admin utilisé uniquement hors production quand aucun n'est fourni.
 _DEV_ADMIN_PASSWORD = "dev_admin_password"
+
+# Clé du verrou consultatif PostgreSQL qui sérialise `init_db` entre workers
+# (entier 64 bits arbitraire, propre à cette application : « PROSINIT »).
+CLE_VERROU_INITIALISATION = 0x50524F53494E4954
 
 # Catalogue de départ des permissions granulaires du back-office (RBAC).
 _PERMISSIONS_CATALOG: list[tuple[str, str]] = [
@@ -53,6 +60,12 @@ _PERMISSIONS_CATALOG: list[tuple[str, str]] = [
     (
         "parametres.write",
         "Créer, modifier, désactiver ou supprimer une donnée de référence (métier, sous-métier, catégorie d'actualité)",
+    ),
+    ("quotes.read", "Consulter les devis édités par les artisans"),
+    ("prix.read", "Consulter la grille de prix de référence des devis"),
+    (
+        "prix.write",
+        "Créer, modifier, désactiver ou supprimer un prix de référence des devis",
     ),
 ]
 
@@ -446,6 +459,21 @@ async def seed_data() -> None:
                 session.add(ActualiteCategorie(code=code, label=label))
         await session.commit()
 
+        # 1quater. Grainage des moyens de paiement (module Paramètres / Finance,
+        # idempotent par code) — Wave, Orange Money et CinetPay actifs par défaut.
+        for code, label in [
+            ("WAVE", "Wave"),
+            ("ORANGE", "Orange Money"),
+            ("CINETPAY", "CinetPay"),
+        ]:
+            pm_stmt = select(PaymentMethodConfig).where(
+                PaymentMethodConfig.code == code
+            )
+            existing_pm = (await session.execute(pm_stmt)).scalar_one_or_none()
+            if existing_pm is None:
+                session.add(PaymentMethodConfig(code=code, label=label, is_active=True))
+        await session.commit()
+
         # 2. Grainage de l'administrateur par défaut
         admin_email = settings.admin_email
         admin_stmt = select(User).where(User.email == admin_email)
@@ -576,6 +604,36 @@ async def seed_data() -> None:
         await session.commit()
 
 
+@asynccontextmanager
+async def _verrou_initialisation() -> AsyncIterator[None]:
+    """Sérialise la création des tables et le grainage entre processus.
+
+    Chaque worker uvicorn (et chaque conteneur partageant la base) exécute
+    `init_db` au démarrage. Le grainage vérifie puis insère : sans verrou, deux
+    workers insèrent la même nouvelle permission et l'un échoue sur la
+    contrainte d'unicité. Le verrou consultatif PostgreSQL, tenu sur une
+    connexion dédiée, fait attendre les autres processus ; ils trouvent ensuite
+    tout en place. Il est libéré explicitement, et de toute façon à la
+    fermeture de la connexion si le processus meurt. SQLite (dev/tests, un
+    seul processus) n'en a pas besoin.
+    """
+    if engine.dialect.name != "postgresql":
+        yield
+        return
+
+    async with engine.connect() as conn:
+        await conn.execute(
+            text("SELECT pg_advisory_lock(:cle)"), {"cle": CLE_VERROU_INITIALISATION}
+        )
+        try:
+            yield
+        finally:
+            await conn.execute(
+                text("SELECT pg_advisory_unlock(:cle)"),
+                {"cle": CLE_VERROU_INITIALISATION},
+            )
+
+
 async def init_db() -> None:
     """Crée les tables SQLAlchemy et injecte les données initiales.
 
@@ -586,13 +644,16 @@ async def init_db() -> None:
         if not await check_database_connection():
             raise RuntimeError("la base de données ne répond pas (SELECT 1 a échoué)")
 
-        async with engine.begin() as conn:
-            if conn.dialect.name == "postgresql":
-                # Active l'extension UUID si nécessaire
-                await conn.execute(text('CREATE EXTENSION IF NOT EXISTS "pgcrypto"'))
-            await conn.run_sync(Base.metadata.create_all)
+        async with _verrou_initialisation():
+            async with engine.begin() as conn:
+                if conn.dialect.name == "postgresql":
+                    # Active l'extension UUID si nécessaire
+                    await conn.execute(
+                        text('CREATE EXTENSION IF NOT EXISTS "pgcrypto"')
+                    )
+                await conn.run_sync(Base.metadata.create_all)
 
-        await seed_data()
+            await seed_data()
     except Exception as e:
         if settings.postgres_obligatoire:
             raise

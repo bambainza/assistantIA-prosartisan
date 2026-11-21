@@ -506,6 +506,18 @@
                                     <div id="fin-par-operateur"><!-- Injected via JS --></div>
                                 </div>
                             </div>
+                            <div class="card mt-3">
+                                <div class="card-header">
+                                    <h4 class="card-title mb-0">Moyens de paiement actifs</h4>
+                                    <small class="text-muted">Opérateurs proposés aux utilisateurs dans le chat</small>
+                                </div>
+                                <div class="card-body p-0">
+                                    <table class="table table-sm mb-0 align-middle">
+                                        <caption class="visually-hidden">Activation des moyens de paiement</caption>
+                                        <tbody id="fin-payment-methods-tbody"><!-- Injected via JS --></tbody>
+                                    </table>
+                                </div>
+                            </div>
                         </div>
                         <div class="col-lg-8 mb-4">
                             <div class="card">
@@ -564,6 +576,7 @@
                                         <option value="">Tous les opérateurs</option>
                                         <option value="WAVE">WAVE</option>
                                         <option value="ORANGE">ORANGE</option>
+                                        <option value="CINETPAY">CINETPAY</option>
                                         <option value="MTN">MTN</option>
                                         <option value="MOOV">MOOV</option>
                                     </select>
@@ -1237,6 +1250,80 @@
                                     </div>
                                 </div>
                             </div>
+
+                            <div class="card mt-4">
+                                <div class="card-header d-flex justify-content-between align-items-center flex-wrap gap-2">
+                                    <div>
+                                        <h4 class="card-title mb-0">Moyens de paiement (Mobile Money &amp; CinetPay)</h4>
+                                        <small class="text-muted">Activez ou désactivez les opérateurs proposés aux artisans lors de l'achat d'un Pass (Wave, Orange Money, CinetPay).</small>
+                                    </div>
+                                </div>
+                                <div class="card-body">
+                                    <div class="table-responsive">
+                                        <table class="table table-sm mb-0">
+                                            <caption class="visually-hidden">Liste des moyens de paiement et leur statut d'activation</caption>
+                                            <thead class="table-light">
+                                                <tr>
+                                                    <th scope="col">Code</th>
+                                                    <th scope="col">Opérateur</th>
+                                                    <th scope="col">Statut</th>
+                                                    <th scope="col">Action</th>
+                                                </tr>
+                                            </thead>
+                                            <tbody id="payment-methods-tbody"><!-- Injected via JS --></tbody>
+                                        </table>
+                                    </div>
+                                </div>
+                            </div>
+
+                            <div class="card mt-4">
+                                <div class="card-header d-flex justify-content-between align-items-center flex-wrap gap-2">
+                                    <div>
+                                        <h4 class="card-title mb-0">Moteurs IA &amp; Bascule Haute Disponibilité (Mistral / Gemini)</h4>
+                                        <small class="text-muted">Sélectionnez la stratégie de routage entre Mistral AI et Google Gemini (bascule automatique vers la ressource la plus stable et disponible).</small>
+                                    </div>
+                                    <div class="d-flex gap-1">
+                                        <button type="button" class="btn btn-sm btn-outline-secondary" onclick="resetLLMProvidersHealth()" title="Réinitialiser le coupe-circuit et les compteurs d'échecs">
+                                            <i class="iconoir-refresh me-1"></i>Réinitialiser santé
+                                        </button>
+                                    </div>
+                                </div>
+                                <div class="card-body">
+                                    <div class="row g-2 align-items-end mb-3">
+                                        <div class="col-md-7">
+                                            <label for="llm-routing-mode-select" class="form-label small fw-semibold mb-1">Stratégie de sélection du moteur IA</label>
+                                            <select id="llm-routing-mode-select" class="form-select form-select-sm" onchange="updateLLMRoutingConfig()">
+                                                <option value="auto">Auto — Bascule intelligente (selon stabilité &amp; disponibilité)</option>
+                                                <option value="mistral">Mistral AI prioritaire (mistral-small / medium)</option>
+                                                <option value="gemini">Google Gemini prioritaire (gemini-3.8-flash)</option>
+                                            </select>
+                                        </div>
+                                        <div class="col-md-5">
+                                            <div class="form-check form-switch mb-1">
+                                                <input class="form-check-input" type="checkbox" role="switch" id="llm-failover-switch" checked onchange="updateLLMRoutingConfig()">
+                                                <label class="form-check-label small fw-semibold" for="llm-failover-switch">Failover automatique</label>
+                                            </div>
+                                            <div class="small text-muted">Ressource active : <span id="llm-active-provider-badge" class="badge bg-primary-subtle text-primary">—</span></div>
+                                        </div>
+                                    </div>
+                                    <div id="llm-routing-feedback" class="small mb-2" role="status" aria-live="polite"></div>
+                                    <div class="table-responsive">
+                                        <table class="table table-sm mb-0">
+                                            <caption class="visually-hidden">État de santé et stabilité des fournisseurs IA Mistral et Gemini</caption>
+                                            <thead class="table-light">
+                                                <tr>
+                                                    <th scope="col">Fournisseur</th>
+                                                    <th scope="col">Modèle</th>
+                                                    <th scope="col">Disponibilité</th>
+                                                    <th scope="col">Stabilité</th>
+                                                    <th scope="col">Action</th>
+                                                </tr>
+                                            </thead>
+                                            <tbody id="llm-providers-tbody"><!-- Injected via JS --></tbody>
+                                        </table>
+                                    </div>
+                                </div>
+                            </div>
                         </div>
                     </div>
                 </div>
@@ -1380,6 +1467,121 @@
                                                 <small class="text-muted">Bilan thermique BTU/h & kW</small>
                                             </div>
                                         </div>
+                                        <div class="col-md-6 col-sm-6">
+                                            <div class="p-3 border rounded bg-body-tertiary">
+                                                <div class="d-flex justify-content-between align-items-center">
+                                                    <span class="fw-semibold">🧱 Murs en agglos</span>
+                                                    <span class="badge bg-primary fs-12" id="calc-count-agglos">0</span>
+                                                </div>
+                                                <small class="text-muted">Nombre d'agglos et mortier de pose</small>
+                                            </div>
+                                        </div>
+                                        <div class="col-md-6 col-sm-6">
+                                            <div class="p-3 border rounded bg-body-tertiary">
+                                                <div class="d-flex justify-content-between align-items-center">
+                                                    <span class="fw-semibold">🪣 Conversions d'unités</span>
+                                                    <span class="badge bg-primary fs-12" id="calc-count-conv">0</span>
+                                                </div>
+                                                <small class="text-muted">Sacs, brouettes, seaux, m³, kg</small>
+                                            </div>
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Grille de prix de référence (seule source des prix pré-remplis par l'IA) -->
+                    <div class="row mb-4">
+                        <div class="col-12">
+                            <div class="card">
+                                <div class="card-header bg-light-subtle d-flex justify-content-between align-items-center flex-wrap gap-2">
+                                    <div>
+                                        <h5 class="card-title my-0"><i class="iconoir-coins me-2 text-success"></i>Grille de prix de référence</h5>
+                                        <small class="text-muted">Seule source des prix pré-remplis dans les devis. Sans prix correspondant (même unité, même commune ou prix national), la ligne reste à compléter par l'artisan.</small>
+                                    </div>
+                                    <div class="d-flex gap-2">
+                                        <input type="search" id="prix-search" class="form-control form-control-sm" placeholder="Rechercher une désignation" aria-label="Rechercher dans la grille de prix" style="max-width: 220px;">
+                                        <button type="button" class="btn btn-sm btn-primary" onclick="openPrixForm()"><i class="iconoir-plus me-1"></i>Nouveau prix</button>
+                                    </div>
+                                </div>
+                                <div class="card-body">
+                                    <div id="prix-form" class="border rounded p-3 mb-3 d-none">
+                                        <input type="hidden" id="prix-form-id">
+                                        <div class="row g-2">
+                                            <div class="col-md-4">
+                                                <label for="prix-form-designation" class="form-label">Désignation</label>
+                                                <input type="text" id="prix-form-designation" class="form-control" maxlength="200" placeholder="Ex: Ciment CPJ 42.5">
+                                            </div>
+                                            <div class="col-md-2">
+                                                <label for="prix-form-unite" class="form-label">Unité</label>
+                                                <input type="text" id="prix-form-unite" class="form-control" maxlength="30" list="prix-unites" placeholder="sac">
+                                                <datalist id="prix-unites">
+                                                    <option value="sac"></option><option value="m3"></option><option value="m2"></option>
+                                                    <option value="ml"></option><option value="unite"></option><option value="kg"></option>
+                                                    <option value="litre"></option><option value="barre"></option><option value="rouleau"></option>
+                                                    <option value="voyage"></option><option value="jour"></option><option value="forfait"></option>
+                                                </datalist>
+                                            </div>
+                                            <div class="col-md-2">
+                                                <label for="prix-form-prix" class="form-label">Prix unitaire (F CFA)</label>
+                                                <input type="number" id="prix-form-prix" class="form-control" min="0" step="1" inputmode="numeric">
+                                            </div>
+                                            <div class="col-md-2">
+                                                <label for="prix-form-type" class="form-label">Type</label>
+                                                <select id="prix-form-type" class="form-select">
+                                                    <option value="FOURNITURE">Fourniture</option>
+                                                    <option value="MAIN_D_OEUVRE">Main d'œuvre</option>
+                                                    <option value="FORFAIT">Forfait</option>
+                                                </select>
+                                            </div>
+                                            <div class="col-md-2">
+                                                <label for="prix-form-date" class="form-label">Date du relevé</label>
+                                                <input type="date" id="prix-form-date" class="form-control">
+                                            </div>
+                                            <div class="col-md-4">
+                                                <label for="prix-form-mots-cles" class="form-label">Synonymes (séparés par des virgules)</label>
+                                                <input type="text" id="prix-form-mots-cles" class="form-control" maxlength="500" placeholder="ciment 42.5, ciment portland">
+                                            </div>
+                                            <div class="col-md-3">
+                                                <label for="prix-form-metier" class="form-label">Métier</label>
+                                                <select id="prix-form-metier" class="form-select"><option value="">Tous les métiers</option></select>
+                                            </div>
+                                            <div class="col-md-2">
+                                                <label for="prix-form-commune" class="form-label">Commune</label>
+                                                <input type="text" id="prix-form-commune" class="form-control" maxlength="100" placeholder="Vide = partout">
+                                            </div>
+                                            <div class="col-md-3">
+                                                <label for="prix-form-source" class="form-label">Source du prix</label>
+                                                <input type="text" id="prix-form-source" class="form-control" maxlength="255" placeholder="Quincaillerie, relevé terrain…">
+                                            </div>
+                                        </div>
+                                        <div class="form-check mt-2">
+                                            <input class="form-check-input" type="checkbox" id="prix-form-actif" checked>
+                                            <label class="form-check-label" for="prix-form-actif">Prix actif (utilisé pour les devis)</label>
+                                        </div>
+                                        <div class="mt-2">
+                                            <button type="button" class="btn btn-primary btn-sm" onclick="submitPrixForm()">Enregistrer</button>
+                                            <button type="button" class="btn btn-light btn-sm" onclick="closePrixForm()">Annuler</button>
+                                        </div>
+                                        <div id="prix-form-feedback" class="mt-2 small" role="status" aria-live="polite"></div>
+                                    </div>
+                                    <div class="table-responsive">
+                                        <table class="table table-sm table-hover align-middle mb-0">
+                                            <caption class="visually-hidden">Grille de prix de référence des devis</caption>
+                                            <thead class="table-light">
+                                                <tr>
+                                                    <th scope="col">Désignation</th>
+                                                    <th scope="col">Unité</th>
+                                                    <th scope="col" class="text-end">Prix (F CFA)</th>
+                                                    <th scope="col">Commune</th>
+                                                    <th scope="col">Relevé</th>
+                                                    <th scope="col">Statut</th>
+                                                    <th scope="col">Actions</th>
+                                                </tr>
+                                            </thead>
+                                            <tbody id="prix-tbody"><!-- Injected via JS --></tbody>
+                                        </table>
                                     </div>
                                 </div>
                             </div>
@@ -1673,5 +1875,6 @@
     <script src="/admin/js/communication.js"></script>
     <script src="/admin/js/parametres.js"></script>
     <script src="/admin/js/supervision.js"></script>
+    <script src="/admin/js/prix.js"></script>
 </body>
 </html>

@@ -10,6 +10,7 @@ from __future__ import annotations
 import uuid
 from collections.abc import Callable, Coroutine
 from datetime import UTC, datetime, timedelta
+from math import ceil
 from typing import Any
 
 import bcrypt
@@ -96,7 +97,7 @@ async def revoke_refresh_token(payload: dict[str, Any]) -> None:
         return
     exp = payload.get("exp")
     now = datetime.now(UTC).timestamp()
-    ttl_seconds = max(int(exp - now), 1) if exp else REFRESH_TOKEN_EXPIRE_DAYS * 86400
+    ttl_seconds = max(ceil(exp - now), 1) if exp else REFRESH_TOKEN_EXPIRE_DAYS * 86400
     await cache_service.set(_revoked_jti_cache_key(jti), "1", ttl_seconds=ttl_seconds)
     await cache_service.increment(
         _REVOKED_TOKENS_COUNTER_KEY, _SECURITY_COUNTER_TTL_SECONDS
@@ -109,6 +110,25 @@ async def is_refresh_token_revoked(payload: dict[str, Any]) -> bool:
     if not jti:
         return False
     return await cache_service.get(_revoked_jti_cache_key(jti)) is not None
+
+
+async def consume_refresh_token(payload: dict[str, Any]) -> bool:
+    """Consomme un refresh token une seule fois, même entre plusieurs workers."""
+    jti = payload.get("jti")
+    if not isinstance(jti, str) or not jti:
+        return False
+    exp = payload.get("exp")
+    if not isinstance(exp, (int, float)):
+        return False
+    ttl = max(ceil(exp - datetime.now(UTC).timestamp()), 1)
+    consumed = await cache_service.set_if_absent(
+        _revoked_jti_cache_key(jti), "1", ttl_seconds=ttl
+    )
+    if consumed:
+        await cache_service.increment(
+            _REVOKED_TOKENS_COUNTER_KEY, _SECURITY_COUNTER_TTL_SECONDS
+        )
+    return consumed
 
 
 def decode_token(token: str) -> dict[str, Any]:

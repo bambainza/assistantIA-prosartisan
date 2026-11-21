@@ -10,8 +10,13 @@ from httpx import ASGITransport, AsyncClient
 from app.config import settings
 from app.main import app
 from app.models.quota import QuotaUtilisateur
+from app.services.cache_service import cache_service
 from app.services.quota_service import identite_quota, quota_service
-from app.services.rag_service import rag_service
+from app.services.rag_service import (
+    FALLBACK_MESSAGE,
+    RechercheIndisponibleError,
+    rag_service,
+)
 
 
 def _db(quota: QuotaUtilisateur | None = None) -> MagicMock:
@@ -115,3 +120,93 @@ async def test_stream_panne_ia_evenement_erreur_et_question_rendue(monkeypatch):
 
     assert "event: error" in response.text
     assert await _utilisees(ip="127.0.0.1") == 0
+
+
+# ── Panne de la recherche documentaire (Qdrant / embedding) ──
+
+
+@pytest.fixture
+def recherche_en_panne(monkeypatch):
+    """Mode réel (clé Mistral « valide ») avec un Qdrant injoignable."""
+    monkeypatch.setattr(settings, "mistral_api_key", "sk-test-reel")
+
+    async def _embedding(text):
+        return [0.0] * settings.qdrant_vector_size
+
+    async def _qdrant_en_panne(**kwargs):
+        raise ConnectionError("Qdrant injoignable")
+
+    monkeypatch.setattr(rag_service, "get_embedding", _embedding)
+    monkeypatch.setattr(rag_service.qdrant_client, "query_points", _qdrant_en_panne)
+
+
+@pytest.mark.asyncio
+async def test_panne_recherche_leve_et_ne_met_rien_en_cache(recherche_en_panne):
+    """Une panne n'est pas une absence d'information : ni repli, ni cache."""
+    with pytest.raises(RechercheIndisponibleError):
+        await rag_service.generate_response(question="Dosage béton ?", metier_id=1)
+
+    version = await rag_service._config_version()
+    assert (
+        await cache_service.get_cached_rag_response("Dosage béton ?", 1, version)
+        is None
+    )
+
+
+@pytest.mark.asyncio
+async def test_panne_recherche_stream_leve_avant_le_flux(recherche_en_panne):
+    with pytest.raises(RechercheIndisponibleError):
+        await rag_service.generate_response_stream(question="Dosage béton ?")
+
+
+@pytest.mark.asyncio
+async def test_chat_panne_recherche_503_et_question_rendue(recherche_en_panne):
+    transport = ASGITransport(app=app)
+    async with AsyncClient(transport=transport, base_url="http://test") as client:
+        response = await client.post("/api/chat", json={"question": "Dosage béton ?"})
+        stream = await client.post(
+            "/api/chat/stream", json={"question": "Dosage béton ?"}
+        )
+
+    assert response.status_code == 503
+    assert stream.status_code == 503
+    assert await _utilisees(ip="127.0.0.1") == 0
+
+
+@pytest.mark.asyncio
+async def test_recherche_aboutie_sans_resultat_reste_un_repli_en_cache(monkeypatch):
+    """Recherche réussie mais vide : le repli zéro hallucination est inchangé."""
+    monkeypatch.setattr(settings, "mistral_api_key", "sk-test-reel")
+
+    async def _vide(**kwargs):
+        return []
+
+    monkeypatch.setattr(rag_service, "search_context", _vide)
+
+    res = await rag_service.generate_response(question="Question hors corpus ?")
+
+    assert res["reponse"] == FALLBACK_MESSAGE
+    version = await rag_service._config_version()
+    cached = await cache_service.get_cached_rag_response(
+        "Question hors corpus ?", None, version
+    )
+    assert cached is not None and cached["reponse"] == FALLBACK_MESSAGE
+
+
+@pytest.mark.asyncio
+async def test_mode_mock_sans_qdrant_repli_non_mis_en_cache(monkeypatch):
+    """Dev/tests sans Qdrant : repli servi, mais jamais figé dans le cache."""
+
+    async def _qdrant_en_panne(**kwargs):
+        raise ConnectionError("Qdrant injoignable")
+
+    monkeypatch.setattr(rag_service.qdrant_client, "query_points", _qdrant_en_panne)
+
+    res = await rag_service.generate_response(question="Dosage béton ?")
+
+    assert res["reponse"] == FALLBACK_MESSAGE
+    version = await rag_service._config_version()
+    assert (
+        await cache_service.get_cached_rag_response("Dosage béton ?", None, version)
+        is None
+    )

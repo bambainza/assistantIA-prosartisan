@@ -13,7 +13,6 @@
     <link rel="manifest" href="/chat/manifest.json">
     <link rel="apple-touch-icon" href="/admin/assets/images/favicon.ico">
     <link rel="shortcut icon" href="/admin/assets/images/favicon.ico">
-    <meta name="theme-color" content="#0f0f17">
     <!-- Google Identity Services client library -->
     <script src="https://accounts.google.com/gsi/client" async defer></script>
     <!-- Marked Markdown Parser -->
@@ -244,6 +243,7 @@
                     <div class="modal-form-group">
                         <input type="email" id="login-email-input" placeholder="Adresse e-mail" aria-label="Adresse e-mail" required>
                         <input type="password" id="login-password-input" placeholder="Mot de passe" aria-label="Mot de passe" required>
+                        <input type="text" id="login-totp-input" placeholder="Code à 6 chiffres (si activé)" aria-label="Code à deux facteurs" inputmode="numeric" autocomplete="one-time-code" maxlength="6">
                         <button class="btn btn-primary btn-block btn-lg" onclick="submitLogin()">Se connecter</button>
                     </div>
                     <p class="auth-switch-text">
@@ -268,13 +268,13 @@
         </div>
     </div>
 
-    <!-- Modal Paiement Mobile Money (Wave / Orange Money) -->
+    <!-- Modal Paiement Mobile Money (Wave / Orange Money / CinetPay) -->
     <div class="modal-overlay hidden" id="paywall-modal" role="dialog" aria-modal="true" aria-labelledby="paywall-modal-title">
         <div class="modal-card">
             <button class="modal-close-btn" onclick="closePaywallModal()" title="Fermer" aria-label="Fermer la fenêtre de paiement">×</button>
             <div class="modal-header">
                 <h2 id="paywall-modal-title">⚡ Activer un Pass</h2>
-                <p>Continuez à poser vos questions techniques sur le chantier. Paiement par Mobile Money.</p>
+                <p>Continuez à poser vos questions techniques sur le chantier. Paiement par Mobile Money ou CinetPay.</p>
             </div>
             <div class="modal-body">
                 <fieldset class="paywall-offres">
@@ -286,6 +286,7 @@
                 <div class="modal-form-group">
                     <button class="btn btn-primary btn-block btn-lg paywall-pay-btn" onclick="startPayment('WAVE')">Payer avec Wave</button>
                     <button class="btn btn-primary btn-block btn-lg paywall-pay-btn" onclick="startPayment('ORANGE')">Payer avec Orange Money</button>
+                    <button class="btn btn-primary btn-block btn-lg paywall-pay-btn" onclick="startPayment('CINETPAY')">Payer avec CinetPay</button>
                 </div>
                 <p class="auth-switch-text" id="paywall-mode-hint"></p>
             </div>
@@ -456,8 +457,10 @@
                     <label for="quote-prompt-input">Notes de chantier / Demande du client :</label>
                     <textarea id="quote-prompt-input" rows="3" class="form-control" placeholder="ex: Devis pour M. Konan (0701020304) à Cocody : Réfection salle de bain avec 1 receveur 90x90 à 75000 F, 1 mitigeur douche à 25000 F, 20m² carrelage mural à 4500 F/m², pose et plomberie à 60000 F."></textarea>
                     <button class="btn btn-primary mt-2" onclick="extractQuoteFromText()" id="btn-extract-quote">
-                        ✨ Analyser & Chiffrer automatiquement
+                        ✨ Analyser & pré-remplir le devis
                     </button>
+                    <p class="quote-extract-hint">Les prix viennent de la grille de référence ProsArtisan ou de ceux que vous dictez. Les lignes sans prix sont surlignées : complétez-les avant l'envoi.</p>
+                    <ul id="quote-extract-warnings" class="quote-extract-warnings hidden" role="status" aria-live="polite"></ul>
                 </div>
 
                 <!-- Quote Form Details -->

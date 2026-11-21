@@ -1502,7 +1502,7 @@ async function submitLogin() {
         const response = await fetch('/api/auth/web/login', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ email, password })
+            body: JSON.stringify({ email, password, totp_code: document.getElementById("login-totp-input").value.trim() || null })
         });
 
         if (response.ok) {
@@ -1562,13 +1562,20 @@ async function handleGoogleCredentialResponse(googleResponse) {
         const res = await fetch('/api/auth/web/google', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ credential: googleResponse.credential })
+            body: JSON.stringify({ credential: googleResponse.credential, totp_code: document.getElementById("login-totp-input").value.trim() || null })
         });
         if (res.ok) {
             const data = await res.json();
             loginUser(data);
         } else {
             const err = await res.json();
+            if (res.status === 401 && !document.getElementById('login-totp-input').value) {
+                const code = window.prompt("Saisissez votre code d'authentification à 6 chiffres.");
+                if (code && /^\d{6}$/.test(code.trim())) {
+                    document.getElementById('login-totp-input').value = code.trim();
+                    return handleGoogleCredentialResponse(googleResponse);
+                }
+            }
             showToast(`Connexion Google échouée: ${err.detail || "Erreur"}`);
         }
     } catch (e) {
@@ -1588,6 +1595,7 @@ async function simulateGoogleOAuth() {
 
 // Execute session login
 function loginUser(data) {
+    document.getElementById('login-totp-input').value = '';
     state.isLoggedIn = true;
     state.user = data.user;
     
@@ -1880,7 +1888,7 @@ function openQuotesModal() {
     if (modal) {
         modal.classList.remove('hidden');
         if (currentQuoteData.items.length === 0) {
-            addQuoteItemRow({ description: "Prestation principale", quantite: 1, unite: "u", prix_unitaire: 25000 });
+            addQuoteItemRow({ description: "Prestation principale", quantite: 1, unite: "u", prix_unitaire: 0 });
         }
     }
 }
@@ -1888,6 +1896,18 @@ function openQuotesModal() {
 function closeQuotesModal() {
     const modal = document.getElementById('quotes-modal');
     if (modal) modal.classList.add('hidden');
+}
+
+function renderQuoteExtractWarnings(messages) {
+    const list = document.getElementById('quote-extract-warnings');
+    if (!list) return;
+    list.innerHTML = '';
+    (messages || []).forEach(message => {
+        const li = document.createElement('li');
+        li.textContent = message;
+        list.appendChild(li);
+    });
+    list.classList.toggle('hidden', list.children.length === 0);
 }
 
 async function extractQuoteFromText() {
@@ -1901,31 +1921,47 @@ async function extractQuoteFromText() {
     const originalText = btn.textContent;
     btn.disabled = true;
     btn.textContent = "⏳ Analyse IA en cours...";
+    renderQuoteExtractWarnings([]);
 
+    const commune = (document.getElementById('quote-client-address')?.value || '').trim();
     try {
         const res = await fetch('/api/quotes/extract', {
             method: 'POST',
             headers: {
                 'Content-Type': 'application/json'
             },
-            body: JSON.stringify({ prompt: promptInput.value.trim() })
+            body: JSON.stringify({
+                description_brute: promptInput.value.trim(),
+                commune: commune || null
+            })
         });
 
         if (res.ok) {
             const data = await res.json();
             document.getElementById('quote-client-name').value = data.client_nom || "";
             document.getElementById('quote-client-phone').value = data.client_telephone || "";
-            document.getElementById('quote-client-address').value = data.client_adresse || "";
-            
+            if (!commune) {
+                document.getElementById('quote-client-address').value = data.client_adresse || "";
+            }
+
             const tbody = document.getElementById('quote-items-tbody');
             tbody.innerHTML = '';
             currentQuoteData.items = [];
 
             (data.items || []).forEach(item => addQuoteItemRow(item));
             recalculateQuoteTotals();
-            showToast("Devis extrait et structuré avec succès !");
+            renderQuoteExtractWarnings(data.avertissements);
+            showToast(data.lignes_sans_prix
+                ? `Devis pré-rempli : ${data.lignes_sans_prix} prix à compléter.`
+                : "Devis pré-rempli. Vérifiez les quantités avant l'envoi.");
+        } else if (res.status === 401) {
+            showToast("Connectez-vous pour utiliser le générateur de devis.");
         } else {
-            showToast("Erreur lors de l'analyse du devis.");
+            const err = await res.json().catch(() => ({}));
+            const detail = typeof err.detail === 'string'
+                ? err.detail
+                : "Notes trop courtes ou trop longues (5 à 4000 caractères).";
+            showToast(res.status === 422 ? detail : (detail || "Erreur lors de l'analyse du devis."));
         }
     } catch (e) {
         console.error("Extraction quote error:", e);
@@ -1946,12 +1982,19 @@ function addQuoteItemRow(item = { description: "", quantite: 1, unite: "u", prix
         <td><input type="text" class="item-desc" value="${escapeHtml(item.description || '')}" placeholder="Désignation"></td>
         <td><input type="number" class="item-qty" value="${item.quantite || 1}" min="0.1" step="any"></td>
         <td><input type="text" class="item-unit" value="${escapeHtml(item.unite || 'u')}"></td>
-        <td><input type="number" class="item-price" value="${item.prix_unitaire || 0}" min="0" step="100"></td>
+        <td><input type="number" class="item-price${item.prix_source === 'a_saisir' ? ' price-missing' : ''}" value="${item.prix_unitaire || 0}" min="0" step="100"${item.prix_source === 'a_saisir' ? ' title="Aucun prix de référence : à compléter" aria-label="Prix unitaire à compléter"' : ' aria-label="Prix unitaire"'}></td>
         <td class="item-total-cell">${Math.round((item.quantite || 1) * (item.prix_unitaire || 0)).toLocaleString('fr-FR')} F</td>
         <td><button class="remove-item-btn" title="Supprimer" aria-label="Supprimer la ligne">✕</button></td>
     `;
     row.querySelectorAll('.item-qty, .item-price').forEach(input => {
         input.addEventListener('input', recalculateQuoteTotals);
+    });
+    const priceInput = row.querySelector('.item-price');
+    priceInput.addEventListener('input', () => {
+        if (Number(priceInput.value) > 0) {
+            priceInput.classList.remove('price-missing');
+            priceInput.removeAttribute('title');
+        }
     });
     const removeButton = row.querySelector('.remove-item-btn');
     removeButton.addEventListener('click', () => removeQuoteItemRow(removeButton));
@@ -2277,21 +2320,46 @@ function appendAssistantStreamingBubble() {
 // PWA : enregistrement depuis un fichier externe, compatible avec la CSP.
 if ('serviceWorker' in navigator) {
     window.addEventListener('load', () => {
-        navigator.serviceWorker.register('/chat/sw.js').catch(() => {});
+        navigator.serviceWorker.register('/chat/sw.js').then(reg => {
+            reg.update().catch(() => {});
+        }).catch(() => {});
     });
 }
 
-// ── Paiement Mobile Money (Wave / Orange Money) ──
+// ── Paiement Mobile Money (Wave / Orange Money / CinetPay) ──
 // Parcours : POST /api/payment/init → redirection vers l'URL de l'opérateur
 // (simulateur en mode démo) → retour sur /chat/?transaction=…&paiement=… →
 // suivi de GET /api/payment/transactions/{id} jusqu'à la confirmation, qui
 // arrive par le webhook opérateur indépendamment du retour navigateur.
 let paywallTrigger = null;
 
+function ensurePaywallOperateurButtons(operateursDisponibles = ['WAVE', 'ORANGE', 'CINETPAY']) {
+    const group = document.querySelector('#paywall-modal .modal-form-group');
+    if (!group) return;
+    const labels = {
+        WAVE: 'Payer avec Wave',
+        ORANGE: 'Payer avec Orange Money',
+        CINETPAY: 'Payer avec CinetPay',
+    };
+    const activeSet = new Set(operateursDisponibles.map(op => String(op).toUpperCase()));
+    group.innerHTML = '';
+    ['WAVE', 'ORANGE', 'CINETPAY'].forEach((code) => {
+        if (!activeSet.has(code)) return;
+        const btn = document.createElement('button');
+        btn.type = 'button';
+        btn.className = 'btn btn-primary btn-block btn-lg paywall-pay-btn';
+        btn.dataset.operateur = code;
+        btn.textContent = labels[code];
+        btn.addEventListener('click', () => startPayment(code));
+        group.appendChild(btn);
+    });
+}
+
 async function openPaywallModal() {
     const modal = document.getElementById('paywall-modal');
     if (!modal) return;
     paywallTrigger = document.activeElement;
+    ensurePaywallOperateurButtons();
     modal.classList.remove('hidden');
     const hint = document.getElementById('paywall-mode-hint');
     if (hint) {
@@ -2300,10 +2368,16 @@ async function openPaywallModal() {
             const response = await fetch('/api/payment/tarifs');
             if (response.ok) {
                 const tarifs = await response.json();
-                if (!tarifs.disponible) {
-                    hint.textContent = "Paiement Mobile Money bientôt disponible.";
+                if (Array.isArray(tarifs.operateurs)) {
+                    ensurePaywallOperateurButtons(tarifs.operateurs);
+                }
+                if (!tarifs.disponible || (Array.isArray(tarifs.operateurs) && tarifs.operateurs.length === 0)) {
+                    hint.textContent = "Aucun moyen de paiement n'est actuellement activé.";
                 } else if (tarifs.mode === 'demo') {
-                    hint.textContent += " Mode démonstration : aucun montant ne sera débité.";
+                    const opsLabel = Array.isArray(tarifs.operateurs) && tarifs.operateurs.length > 0
+                        ? ` (${tarifs.operateurs.join(' / ')})`
+                        : '';
+                    hint.textContent += ` Mode démonstration${opsLabel} : aucun montant ne sera débité.`;
                 }
             }
         } catch (e) {

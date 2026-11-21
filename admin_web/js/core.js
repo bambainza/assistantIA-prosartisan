@@ -376,6 +376,13 @@ async function submitGrantPass() {
 }
 
 // 3. Fetch Documents Qdrant
+// `date_ingestion` arrive au format AAAA-MM-JJ, ou null pour un document
+// indexé avant que la date soit enregistrée.
+function formatDateIngestion(date) {
+    const m = /^(\d{4})-(\d{2})-(\d{2})$/.exec(date || '');
+    return m ? `Ingéré le ${m[3]}/${m[2]}/${m[1]}` : "Date d'ingestion inconnue";
+}
+
 async function fetchDocuments() {
     try {
         const res = await adminFetch('/api/admin/documents');
@@ -398,7 +405,7 @@ async function fetchDocuments() {
                             </div>
                         </div>
                         <p class="text-muted mb-3" style="font-size: 11px;">
-                            ${d.chunks_count} chunks vectoriels • Ingéré le ${d.date_ingestion}
+                            ${d.chunks_count} chunks vectoriels • ${formatDateIngestion(d.date_ingestion)}
                         </p>
                         <div class="d-flex gap-2">
                             <button class="btn btn-sm ${isActive ? 'btn-outline-warning' : 'btn-outline-success'}" onclick="toggleDocStatus('${d.filename}')">

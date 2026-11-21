@@ -14,25 +14,36 @@ from __future__ import annotations
 import uuid
 from typing import Any
 
-from fastapi import APIRouter, Depends, HTTPException, Request, status
+from fastapi import APIRouter, Depends, HTTPException, Query, Request, status
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.db.session import get_db
 from app.middleware.auth import require_permission
+from app.models.prix_reference import PrixReference
 from app.schemas.parametres import (
     ActualiteCategorieCreateRequest,
     ActualiteCategorieOut,
     ActualiteCategorieUpdateRequest,
+    LLMRoutingConfigOut,
+    LLMRoutingUpdateRequest,
     MetierCreateRequest,
     MetierOut,
     MetierUpdateRequest,
+    PaymentMethodOut,
     SousMetierCreateRequest,
     SousMetierOut,
     SousMetierUpdateRequest,
 )
+from app.schemas.prix_reference import (
+    PrixReferenceCreate,
+    PrixReferenceOut,
+    PrixReferenceUpdate,
+)
 from app.services.audit_service import audit_service
+from app.services.llm_provider_service import llm_provider_service
 from app.services.parametres_service import parametres_service
+from app.services.prix_reference_service import prix_reference_service
 from app.services.rag_service import rag_service
 
 router = APIRouter(prefix="/api/admin/parametres", tags=["Paramètres (Back-office)"])
@@ -402,3 +413,217 @@ async def delete_categorie(
     )
     await db.commit()
     return {"status": "success", "message": "Catégorie supprimée."}
+
+
+# ── Moyens de paiement (Wave, Orange Money, CinetPay) ────────────────────
+@router.get("/payment-methods", response_model=list[PaymentMethodOut])
+async def list_payment_methods(
+    admin_id: uuid.UUID = Depends(require_permission("parametres.read")),
+    db: AsyncSession = Depends(get_db),
+) -> Any:
+    """Liste des moyens de paiement (Wave, Orange Money, CinetPay) et leur état d'activation."""
+    return await parametres_service.list_payment_methods(db)
+
+
+@router.patch("/payment-methods/{code}/toggle", response_model=PaymentMethodOut)
+async def toggle_payment_method(
+    code: str,
+    request: Request,
+    admin_id: uuid.UUID = Depends(require_permission("parametres.write")),
+    db: AsyncSession = Depends(get_db),
+) -> Any:
+    """Active ou désactive un moyen de paiement (WAVE, ORANGE, CINETPAY)."""
+    method = await parametres_service.toggle_payment_method(db, code)
+    if method is None:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Moyen de paiement introuvable.",
+        )
+    await audit_service.log_action(
+        db,
+        actor_id=admin_id,
+        action="parametres.payment_method.toggle",
+        resource_type="payment_method",
+        resource_id=method.code,
+        after={"code": method.code, "is_active": method.is_active},
+        request=request,
+    )
+    await db.commit()
+    await db.refresh(method)
+    return method
+
+
+# ── Fournisseurs IA / LLM (Mistral AI & Google Gemini) ───────────────────
+@router.get("/llm-providers", response_model=LLMRoutingConfigOut)
+async def get_llm_providers(
+    admin_id: uuid.UUID = Depends(require_permission("parametres.read")),
+) -> Any:
+    """Retourne l'état de disponibilité, le score de stabilité et le mode de bascule Mistral / Gemini."""
+    return await llm_provider_service.get_dashboard_summary()
+
+
+@router.put("/llm-providers", response_model=LLMRoutingConfigOut)
+async def update_llm_providers(
+    payload: LLMRoutingUpdateRequest,
+    request: Request,
+    admin_id: uuid.UUID = Depends(require_permission("parametres.write")),
+    db: AsyncSession = Depends(get_db),
+) -> Any:
+    """Met à jour la stratégie de routage IA (`auto`, `mistral`, `gemini`) et l'option de failover."""
+    mode, failover = await llm_provider_service.set_routing_config(
+        mode=payload.mode,
+        failover_enabled=payload.failover_enabled,
+    )
+    await audit_service.log_action(
+        db,
+        actor_id=admin_id,
+        action="parametres.llm_provider.update",
+        resource_type="llm_provider",
+        resource_id=mode,
+        after={"mode": mode, "failover_enabled": failover},
+        request=request,
+    )
+    await db.commit()
+    return await llm_provider_service.get_dashboard_summary()
+
+
+@router.post("/llm-providers/reset-health", response_model=LLMRoutingConfigOut)
+async def reset_llm_providers_health(
+    request: Request,
+    provider: str | None = None,
+    admin_id: uuid.UUID = Depends(require_permission("parametres.write")),
+    db: AsyncSession = Depends(get_db),
+) -> Any:
+    """Réinitialise le coupe-circuit et les compteurs d'échecs des fournisseurs IA."""
+    await llm_provider_service.reset_health(provider)
+    await audit_service.log_action(
+        db,
+        actor_id=admin_id,
+        action="parametres.llm_provider.reset_health",
+        resource_type="llm_provider",
+        resource_id=(provider or "all").lower(),
+        after={"reset": (provider or "all").lower()},
+        request=request,
+    )
+    await db.commit()
+    return await llm_provider_service.get_dashboard_summary()
+
+
+# ── Grille de prix de référence (devis) ──────────────────────────────────
+# Seule source des prix unitaires pré-remplis dans les devis extraits par
+# l'IA. Permissions dédiées `prix.read` / `prix.write`.
+
+
+def _prix_snapshot(prix: PrixReference) -> dict[str, Any]:
+    return {
+        "designation": prix.designation,
+        "unite": prix.unite,
+        "prix_unitaire": prix.prix_unitaire,
+        "type_item": prix.type_item,
+        "metier_id": prix.metier_id,
+        "commune": prix.commune,
+        "date_releve": prix.date_releve.isoformat() if prix.date_releve else None,
+        "is_active": prix.is_active,
+    }
+
+
+@router.get("/prix-references", response_model=list[PrixReferenceOut])
+async def list_prix_references(
+    metier_id: int | None = None,
+    q: str | None = Query(default=None, max_length=100),
+    actifs_seulement: bool = False,
+    admin_id: uuid.UUID = Depends(require_permission("prix.read")),
+    db: AsyncSession = Depends(get_db),
+) -> Any:
+    """Liste la grille de prix (filtrable par métier, texte, statut)."""
+    return await prix_reference_service.lister(
+        db, actifs_seulement=actifs_seulement, metier_id=metier_id, recherche=q
+    )
+
+
+@router.post(
+    "/prix-references",
+    status_code=status.HTTP_201_CREATED,
+    response_model=PrixReferenceOut,
+)
+async def create_prix_reference(
+    payload: PrixReferenceCreate,
+    request: Request,
+    admin_id: uuid.UUID = Depends(require_permission("prix.write")),
+    db: AsyncSession = Depends(get_db),
+) -> Any:
+    """Ajoute un prix de référence à la grille."""
+    prix = await prix_reference_service.creer(db, payload)
+    await audit_service.log_action(
+        db,
+        actor_id=admin_id,
+        action="parametres.prix_reference.create",
+        resource_type="prix_reference",
+        resource_id=str(prix.id) if prix.id is not None else None,
+        after=_prix_snapshot(prix),
+        request=request,
+    )
+    await _commit_or_409(db, detail="Ce prix de référence ne peut pas être enregistré.")
+    await db.refresh(prix)
+    return prix
+
+
+@router.put("/prix-references/{prix_id}", response_model=PrixReferenceOut)
+async def update_prix_reference(
+    prix_id: int,
+    payload: PrixReferenceUpdate,
+    request: Request,
+    admin_id: uuid.UUID = Depends(require_permission("prix.write")),
+    db: AsyncSession = Depends(get_db),
+) -> Any:
+    """Modifie un prix de référence (montant, désignation, statut...)."""
+    existant = await prix_reference_service.obtenir(db, prix_id)
+    if existant is None:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Prix de référence introuvable.",
+        )
+    avant = _prix_snapshot(existant)
+    prix = await prix_reference_service.modifier(db, prix_id, payload)
+    await audit_service.log_action(
+        db,
+        actor_id=admin_id,
+        action="parametres.prix_reference.update",
+        resource_type="prix_reference",
+        resource_id=str(prix_id),
+        before=avant,
+        after=_prix_snapshot(prix),
+        request=request,
+    )
+    await _commit_or_409(db, detail="Ce prix de référence ne peut pas être enregistré.")
+    await db.refresh(prix)
+    return prix
+
+
+@router.delete("/prix-references/{prix_id}")
+async def delete_prix_reference(
+    prix_id: int,
+    request: Request,
+    admin_id: uuid.UUID = Depends(require_permission("prix.write")),
+    db: AsyncSession = Depends(get_db),
+) -> dict[str, Any]:
+    """Supprime définitivement un prix de référence."""
+    existant = await prix_reference_service.obtenir(db, prix_id)
+    if existant is None:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Prix de référence introuvable.",
+        )
+    avant = _prix_snapshot(existant)
+    await prix_reference_service.supprimer(db, prix_id)
+    await audit_service.log_action(
+        db,
+        actor_id=admin_id,
+        action="parametres.prix_reference.delete",
+        resource_type="prix_reference",
+        resource_id=str(prix_id),
+        before=avant,
+        request=request,
+    )
+    await db.commit()
+    return {"status": "success", "id": prix_id}

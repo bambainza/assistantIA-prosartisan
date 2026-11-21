@@ -11,6 +11,7 @@ class AuthView extends StatefulWidget {
 
 class _AuthViewState extends State<AuthView> {
   final _emailController = TextEditingController();
+  final _totpController = TextEditingController();
   final _passwordController = TextEditingController();
   final _nomController = TextEditingController();
   final _phoneController = TextEditingController();
@@ -19,6 +20,7 @@ class _AuthViewState extends State<AuthView> {
   void dispose() {
     _emailController.dispose();
     _passwordController.dispose();
+    _totpController.dispose();
     _nomController.dispose();
     _phoneController.dispose();
     super.dispose();
@@ -86,6 +88,17 @@ class _AuthViewState extends State<AuthView> {
                 decoration: _buildInputDecoration("Mot de passe", isDark),
               ),
               
+              if (isLogin) ...[
+                const SizedBox(height: 14),
+                TextField(
+                  controller: _totpController,
+                  keyboardType: TextInputType.number,
+                  maxLength: 6,
+                  autofillHints: const [AutofillHints.oneTimeCode],
+                  style: TextStyle(color: textColor),
+                  decoration: _buildInputDecoration("Code à 6 chiffres (si activé)", isDark),
+                ),
+              ],
               if (viewModel.authError != null) ...[
                 const SizedBox(height: 16),
                 Text(
@@ -106,7 +119,7 @@ class _AuthViewState extends State<AuthView> {
                       child: ElevatedButton(
                         onPressed: () {
                           if (isLogin) {
-                            viewModel.login(_emailController.text, _passwordController.text);
+                            viewModel.login(_emailController.text, _passwordController.text, totpCode: _totpController.text.trim());
                           } else {
                             viewModel.register(
                               _emailController.text,

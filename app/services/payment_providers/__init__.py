@@ -4,22 +4,26 @@ from __future__ import annotations
 
 from app.config import settings
 from app.services.payment_providers.base import PaymentProvider
+from app.services.payment_providers.cinetpay import CinetPayLiveProvider
 from app.services.payment_providers.demo import (
+    DemoCinetPayProvider,
     DemoOrangeMoneyProvider,
     DemoWaveProvider,
 )
 from app.services.payment_providers.orange_money import OrangeMoneyLiveProvider
 from app.services.payment_providers.wave import WaveLiveProvider
 
-OPERATEURS = ("WAVE", "ORANGE")
+OPERATEURS = ("WAVE", "ORANGE", "CINETPAY")
 
 _LIVE: dict[str, PaymentProvider] = {
     "WAVE": WaveLiveProvider(),
     "ORANGE": OrangeMoneyLiveProvider(),
+    "CINETPAY": CinetPayLiveProvider(),
 }
 _DEMO: dict[str, PaymentProvider] = {
     "WAVE": DemoWaveProvider(),
     "ORANGE": DemoOrangeMoneyProvider(),
+    "CINETPAY": DemoCinetPayProvider(),
 }
 
 

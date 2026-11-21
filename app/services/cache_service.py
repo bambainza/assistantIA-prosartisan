@@ -18,6 +18,11 @@ from app.config import settings
 
 logger = logging.getLogger(__name__)
 
+
+class SharedBackendUnavailableError(RuntimeError):
+    """Un état de sécurité partagé ne peut pas être lu ou écrit."""
+
+
 # Délai avant une nouvelle tentative de connexion après un échec Redis : sans
 # réessai, une indisponibilité passagère au démarrage bloquerait le worker sur
 # le cache local (non partagé) jusqu'à son redémarrage.
@@ -99,9 +104,28 @@ class CacheService:
             "prosartisan:quota:",
         )
         if settings.is_production and key.startswith(security_prefixes):
-            raise RuntimeError(
+            raise SharedBackendUnavailableError(
                 "Redis est indisponible : le stockage de sécurité partagé est requis."
             )
+
+    async def set_if_absent(self, key: str, value: str, ttl_seconds: int) -> bool:
+        """Réserve une clé atomiquement, sans repli après une écriture ambiguë."""
+        client = await self._get_redis()
+        if client is not None:
+            try:
+                return bool(await client.set(key, value, nx=True, ex=ttl_seconds))
+            except Exception as exc:
+                raise SharedBackendUnavailableError(
+                    "Réservation Redis indisponible."
+                ) from exc
+        self._require_shared_backend(key)
+        # Aucun await entre lecture et écriture : atomique dans la boucle locale
+        # de développement ; ce repli est interdit en production.
+        self._clean_expired_memory_cache()
+        if key in self._memory_cache:
+            return False
+        self._memory_cache[key] = (time.time() + ttl_seconds, value)
+        return True
 
     async def get(self, key: str) -> str | None:
         """Récupère une valeur textuelle depuis Redis ou le cache mémoire."""
@@ -122,6 +146,38 @@ class CacheService:
                 return val
             self._memory_cache.pop(key, None)
         return None
+
+    async def reserve_budget(
+        self, key: str, amount: int, limit: int, ttl_seconds: int
+    ) -> bool:
+        """Réserve un budget borné sans incrémenter les demandes refusées."""
+        client = await self._get_redis()
+        if client is not None:
+            try:
+                return bool(
+                    await client.eval(
+                        "local n=tonumber(redis.call('GET',KEYS[1]) or '0'); "
+                        "if n+tonumber(ARGV[1])>tonumber(ARGV[2]) then return 0 end; "
+                        "redis.call('INCRBY',KEYS[1],ARGV[1]); "
+                        "redis.call('EXPIRE',KEYS[1],ARGV[3]); return 1",
+                        1,
+                        key,
+                        amount,
+                        limit,
+                        ttl_seconds,
+                    )
+                )
+            except Exception as exc:
+                raise SharedBackendUnavailableError(
+                    "Budget Redis indisponible."
+                ) from exc
+        self._require_shared_backend(key)
+        self._clean_expired_memory_cache()
+        current = int(self._memory_cache.get(key, (0, "0"))[1])
+        if current + amount > limit:
+            return False
+        self._memory_cache[key] = (time.time() + ttl_seconds, str(current + amount))
+        return True
 
     async def increment(self, key: str, ttl_seconds: int, amount: int = 1) -> int:
         """Incrémente (``amount`` < 0 : décrémente) un compteur avec expiration.
@@ -190,9 +246,18 @@ class CacheService:
     def _hash_text(text: str) -> str:
         return hashlib.sha256(text.strip().lower().encode("utf-8")).hexdigest()
 
-    async def get_cached_embedding(self, text: str) -> list[float] | None:
-        """Récupère un embedding vectoriel précalculé."""
-        key = f"prosartisan:emb:{self._hash_text(text)}"
+    @classmethod
+    def _embedding_key(cls, text: str, espace: str) -> str:
+        # `espace` identifie le modèle, la dimension et l'usage (question ou
+        # document) : un vecteur d'un autre modèle ne doit jamais être relu.
+        prefixe = f"prosartisan:emb:{espace}:" if espace else "prosartisan:emb:"
+        return prefixe + cls._hash_text(text)
+
+    async def get_cached_embedding(
+        self, text: str, espace: str = ""
+    ) -> list[float] | None:
+        """Récupère un embedding vectoriel précalculé pour un modèle donné."""
+        key = self._embedding_key(text, espace)
         cached = await self.get(key)
         if cached:
             try:
@@ -202,10 +267,14 @@ class CacheService:
         return None
 
     async def cache_embedding(
-        self, text: str, embedding: list[float], ttl_seconds: int = 604800
+        self,
+        text: str,
+        embedding: list[float],
+        ttl_seconds: int = 604800,
+        espace: str = "",
     ) -> None:
         """Met en cache un embedding vectoriel (TTL par défaut 7 jours)."""
-        key = f"prosartisan:emb:{self._hash_text(text)}"
+        key = self._embedding_key(text, espace)
         await self.set(key, json.dumps(embedding), ttl_seconds=ttl_seconds)
 
     @classmethod

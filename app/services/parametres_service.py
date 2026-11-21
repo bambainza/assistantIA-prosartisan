@@ -11,6 +11,14 @@ from sqlalchemy.orm import selectinload
 
 from app.models.actualite import ActualiteCategorie
 from app.models.metier import Metier, SousMetier
+from app.models.payment_method import PaymentMethodConfig
+from app.services.payment_providers import OPERATEURS
+
+_LIBELLES_OPERATEURS_PAR_DEFAUT: dict[str, str] = {
+    "WAVE": "Wave",
+    "ORANGE": "Orange Money",
+    "CINETPAY": "CinetPay",
+}
 
 
 class ParametresService:
@@ -165,6 +173,74 @@ class ParametresService:
             return False
         await db.delete(categorie)
         return True
+
+    # ── Moyens de paiement (Wave, Orange Money, CinetPay) ────────────────
+    async def list_payment_methods(self, db: AsyncSession) -> list[PaymentMethodConfig]:
+        stmt = select(PaymentMethodConfig).order_by(PaymentMethodConfig.id)
+        res = await db.execute(stmt)
+        rows = [
+            row for row in res.scalars().all() if isinstance(row, PaymentMethodConfig)
+        ]
+        if rows:
+            existing_codes = {r.code for r in rows}
+            for idx, code in enumerate(OPERATEURS, start=len(rows) + 1):
+                if code not in existing_codes:
+                    rows.append(
+                        PaymentMethodConfig(
+                            id=idx,
+                            code=code,
+                            label=_LIBELLES_OPERATEURS_PAR_DEFAUT.get(code, code),
+                            is_active=True,
+                        )
+                    )
+            return rows
+        return [
+            PaymentMethodConfig(
+                id=idx,
+                code=code,
+                label=_LIBELLES_OPERATEURS_PAR_DEFAUT.get(code, code),
+                is_active=True,
+            )
+            for idx, code in enumerate(OPERATEURS, start=1)
+        ]
+
+    async def list_active_payment_operators(self, db: AsyncSession) -> list[str]:
+        """Retourne les codes des opérateurs de paiement actuellement activés."""
+        methods = await self.list_payment_methods(db)
+        return [m.code for m in methods if m.is_active]
+
+    async def is_payment_operator_active(self, db: AsyncSession, code: str) -> bool:
+        """Indique si l'opérateur est activé (par défaut True si absent de la base)."""
+        normalized = code.upper()
+        if normalized not in OPERATEURS:
+            return False
+        stmt = select(PaymentMethodConfig).where(PaymentMethodConfig.code == normalized)
+        res = await db.execute(stmt)
+        obj = res.scalar_one_or_none()
+        if isinstance(obj, PaymentMethodConfig):
+            return bool(obj.is_active)
+        return True
+
+    async def toggle_payment_method(
+        self, db: AsyncSession, code: str
+    ) -> PaymentMethodConfig | None:
+        """Active ou désactive un moyen de paiement par son code (WAVE, ORANGE, CINETPAY)."""
+        normalized = code.upper()
+        if normalized not in OPERATEURS:
+            return None
+        stmt = select(PaymentMethodConfig).where(PaymentMethodConfig.code == normalized)
+        res = await db.execute(stmt)
+        obj = res.scalar_one_or_none()
+        if isinstance(obj, PaymentMethodConfig):
+            obj.is_active = not obj.is_active
+            return obj
+        new_obj = PaymentMethodConfig(
+            code=normalized,
+            label=_LIBELLES_OPERATEURS_PAR_DEFAUT.get(normalized, normalized),
+            is_active=False,
+        )
+        db.add(new_obj)
+        return new_obj
 
 
 parametres_service = ParametresService()

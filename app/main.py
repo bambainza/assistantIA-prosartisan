@@ -37,6 +37,7 @@ from app.routers import (
     quota,
     quote,
 )
+from app.services.cache_service import SharedBackendUnavailableError
 from app.services.media_service import ImageInvalideError
 from app.services.quota_service import QuotaIndisponibleError
 from app.services.rag_service import rag_service
@@ -84,11 +85,7 @@ app = FastAPI(
     openapi_url=_openapi_url,
 )
 
-# ── Logging et Request ID Middleware ──
-app.add_middleware(LoggingAndRequestIdMiddleware)
-
-# ── En-têtes de sécurité HTTP (CSP, HSTS, X-Frame-Options...) ──
-app.add_middleware(SecurityHeadersMiddleware)
+# ── Protection CSRF des sessions navigateur ──
 app.add_middleware(CSRFMiddleware)
 
 # ── Rate Limiting Middleware ──
@@ -118,9 +115,15 @@ app.add_middleware(
 )
 
 
+# Ces middlewares enveloppent aussi les refus émis avant les routes.
+app.add_middleware(SecurityHeadersMiddleware)
+app.add_middleware(LoggingAndRequestIdMiddleware)
+
+
 @app.exception_handler(QuotaIndisponibleError)
+@app.exception_handler(SharedBackendUnavailableError)
 async def quota_indisponible_handler(
-    request: Request, exc: QuotaIndisponibleError
+    request: Request, exc: QuotaIndisponibleError | SharedBackendUnavailableError
 ) -> JSONResponse:
     """Compteur de quota (Redis) injoignable : 503 plutôt qu'un quota faussé."""
     return JSONResponse(

@@ -55,8 +55,28 @@ services:
       - REDIS_PASSWORD=${REDIS_PASSWORD}
       - QDRANT_HOST=qdrant
       - QDRANT_PORT=6333
-      - MISTRAL_API_KEY=${MISTRAL_API_KEY}
+      - MISTRAL_API_KEY=${MISTRAL_API_KEY:-}
+      - GEMINI_API_KEY=${GEMINI_API_KEY:-}
+      - GEMINI_BASE_URL=${GEMINI_BASE_URL:-https://generativelanguage.googleapis.com/v1beta}
+      - GEMINI_MODEL=${GEMINI_MODEL:-gemini-3.8-flash}
+      - LLM_PROVIDER=${LLM_PROVIDER:-gemini}
+      - EMBEDDING_PROVIDER=${EMBEDDING_PROVIDER:-gemini}
+      - GEMINI_EMBEDDING_MODEL=${GEMINI_EMBEDDING_MODEL:-gemini-embedding-001}
+      - GEMINI_EMBEDDING_DIMENSIONS=${GEMINI_EMBEDDING_DIMENSIONS:-1536}
+      - RAG_MIN_SCORE=${RAG_MIN_SCORE:-0.71}
+      - RAG_REFORMULATION_REQUETE=${RAG_REFORMULATION_REQUETE:-false}
+      - LLM_FAILOVER_ENABLED=${LLM_FAILOVER_ENABLED:-true}
       - GOOGLE_CLIENT_ID=${GOOGLE_CLIENT_ID}
+      - VAPID_PRIVATE_KEY=${VAPID_PRIVATE_KEY}
+      - VAPID_PUBLIC_KEY=${VAPID_PUBLIC_KEY}
+      - VAPID_CLAIMS_EMAIL=${VAPID_CLAIMS_EMAIL:-contact@prosartisan.ci}
+      - CINETPAY_API_BASE=${CINETPAY_API_BASE:-https://api.cinetpay.net}
+      - CINETPAY_API_KEY=${CINETPAY_API_KEY:-}
+      - CINETPAY_API_PASSWORD=${CINETPAY_API_PASSWORD:-}
+      - CINETPAY_CURRENCY=${CINETPAY_CURRENCY:-XOF}
+      - CINETPAY_PAYMENT_METHOD=${CINETPAY_PAYMENT_METHOD:-}
+      - AUDIO_STT_REQUESTS_PER_DAY=${AUDIO_STT_REQUESTS_PER_DAY:-20}
+      - AUDIO_TTS_CHARS_PER_DAY=${AUDIO_TTS_CHARS_PER_DAY:-20000}
     volumes:
       # Photos de chantier et PDF téléversés : sans volume, perdus à chaque redéploiement.
       - prod_uploads:/app/uploads
@@ -68,7 +88,7 @@ services:
       qdrant:
         condition: service_started
     healthcheck:
-      test: ["CMD", "curl", "-f", "http://localhost:8000/api/health"]
+      test: ["CMD", "curl", "-f", "http://localhost:8000/api/ready"]
       interval: 15s
       timeout: 5s
       retries: 3
