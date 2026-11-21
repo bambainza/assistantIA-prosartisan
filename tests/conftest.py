@@ -36,11 +36,14 @@ def admin_qdrant(monkeypatch):
     client = MagicMock()
     client.points = []
     client.points_count = 0
+    client.collections = []  # collections interrogées, dans l'ordre
 
-    async def _get_collection(**_kwargs):
+    async def _get_collection(**kwargs):
+        client.collections.append(kwargs.get("collection_name"))
         return MagicMock(points_count=client.points_count)
 
-    async def _scroll(**_kwargs):
+    async def _scroll(**kwargs):
+        client.collections.append(kwargs.get("collection_name"))
         return client.points, None
 
     client.get_collection = _get_collection
