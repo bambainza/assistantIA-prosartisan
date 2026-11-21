@@ -156,6 +156,8 @@ Après réussite de la publication GitHub, mettre à jour Docker local avec :
 
 ```powershell
 docker compose -f docker-compose.prod.yml pull app
-docker compose -f docker-compose.prod.yml up -d --no-build --force-recreate app
+docker compose -f docker-compose.prod.yml up -d --no-deps --no-build --force-recreate app
 docker compose -f docker-compose.prod.yml exec app curl -fsS http://localhost:8000/api/ready
 ```
+
+`--no-deps` ne recrée que l'API. Sans lui, Docker Compose recrée aussi `db`, `redis` et `qdrant` dès que leur définition diffère des conteneurs en place, et peut les rebrancher sur d'autres volumes (`prod_*` au lieu des volumes de `docker-compose.yml`).

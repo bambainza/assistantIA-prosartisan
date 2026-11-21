@@ -36,3 +36,5 @@ Ce fichier est chargé automatiquement par Antigravity IDE pour régir le compor
 - Les scripts shell exécutés dans les conteneurs Linux utilisent LF (`*.sh text eol=lf` dans `.gitattributes`) ; le build normalise également le script de démarrage avant exécution.
 
 - En mode Docker local + GitHub, la CI publie l’image sur GHCR et le déploiement distant est ignoré par défaut. Seule la variable de dépôt GitHub Actions `ENABLE_REMOTE_DEPLOY=true` active ce dernier ; ses secrets et son contrôle de révision restent obligatoires lorsqu’il est activé.
+
+- Démarrage multi-workers : `init_db` (tables + grainage) s'exécute sous un verrou consultatif PostgreSQL (`pg_advisory_lock`) ; tout nouveau grainage passe par `seed_data`. Mettre à jour le seul conteneur API avec `--no-deps`.
