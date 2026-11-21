@@ -119,3 +119,4 @@ Côte d'Ivoire, français + langues locales, FCFA (entiers, jamais de décimales
 - Recherche : `RAG_MIN_SCORE` = 0.71 calibré, reformulation désactivée par défaut (calibrage : `app/scripts/calibrer_seuil_rag.py`, jeu `ingestion/evaluation/questions_seuil_rag.jsonl`) ; repli lexical à 50 % des mots-clés et 2 mots communs ; reformulation multilingue de la requête.
 - Calculateurs : table câbles habitat, refus explicites hors domaine, `calculer_agglos_mur`, `convertir_unites_chantier`, alias `calculer_materiaux_btp`.
 - Vecteurs : Gemini `gemini-embedding-001` (1536 dimensions) par défaut, collection `connaissances_prosartisan_gemini_1536`, réindexation puis recalibrage requis après tout changement de modèle.
+- Démarrage multi-workers : `init_db` (tables + grainage) s'exécute sous un verrou consultatif PostgreSQL (`pg_advisory_lock`) ; tout nouveau grainage passe par `seed_data`. Mettre à jour le seul conteneur API avec `--no-deps`.

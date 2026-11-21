@@ -253,3 +253,11 @@ Corpus réindexé dans `connaissances_prosartisan_gemini_1536` : 37 guides, 283 
 | Avec reformulation | 0.7300 | 0.7219 | 0.008 | 0.73 |
 
 Retenu : `RAG_MIN_SCORE=0.71` (milieu de l'écart) et `RAG_REFORMULATION_REQUETE=false`. Résultat : 61/61 questions couvertes servies, dont les 6 en nouchi, et 0/45 question hors corpus acceptée. La reformulation remontait aussi les scores hors corpus sans servir une question de plus. Le rapport détaillé est archivé dans `ingestion/evaluation/rapport_calibrage_2026-11-21.json`. La marge reste faible (0.01 de chaque côté) : recalibrer après tout ajout important au corpus.
+
+## Démarrage multi-workers : verrou d'initialisation — 21 novembre 2026
+
+Chaque worker uvicorn (deux dans l'image) exécute `init_db` au démarrage : création des tables puis grainage (métiers, permissions et rôles RBAC, catégories, moyens de paiement, offres, admin). Le grainage vérifie puis insère. Au premier démarrage après l'ajout de permissions, deux workers inséraient la même permission : l'un échouait sur `ix_permissions_code` et uvicorn devait le relancer. Sur une base neuve, la course commençait dès `CREATE EXTENSION pgcrypto`.
+
+`init_db` s'exécute désormais sous un verrou consultatif PostgreSQL (`pg_advisory_lock`, clé `CLE_VERROU_INITIALISATION` dans `app/db/init_db.py`), tenu sur une connexion dédiée : les autres workers et conteneurs attendent, puis trouvent tout en place. Le verrou est libéré explicitement, même en cas d'échec, et dans tous les cas à la fermeture de la connexion. SQLite (dev/tests, un seul processus) n'en a pas besoin. Test : `tests/test_verrou_initialisation.py`, dont un démarrage de quatre processus concurrents sur une base PostgreSQL neuve (activé en CI par `RUN_SHARED_BACKEND_TESTS=1`).
+
+Mise à jour du seul conteneur `app` : `docker compose -f docker-compose.prod.yml up -d --no-deps --no-build --force-recreate app`. Sans `--no-deps`, Docker Compose recrée aussi `db`, `redis` et `qdrant` dès que leur définition diffère des conteneurs en place, et peut les rebrancher sur d'autres volumes.
