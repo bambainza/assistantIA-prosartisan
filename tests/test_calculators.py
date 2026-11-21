@@ -203,7 +203,9 @@ def test_execute_tool_inconnu_leve_erreur():
 def test_get_tool_definitions_structure():
     """Vérifie la conformité de la spécification JSON Schema pour Mistral."""
     tools = CalculatorService.get_tool_definitions()
-    assert len(tools) == 5
+    assert len(tools) == 7
+    noms = {t["function"]["name"] for t in tools}
+    assert {"calculer_agglos_mur", "convertir_unites_chantier"} <= noms
     for t in tools:
         assert t["type"] == "function"
         assert "name" in t["function"]

@@ -2,7 +2,7 @@
 
 from urllib.parse import quote_plus
 
-from pydantic import Field, model_validator
+from pydantic import Field, field_validator, model_validator
 from pydantic_settings import BaseSettings
 
 # Valeurs de secret livrées par défaut : interdites en production.
@@ -17,6 +17,28 @@ _SECRETS_FAIBLES = {
     "BXOGEmSclzlZTkj7aufE7jUK2_-4XZvBW6GEFvR0X4E",  # clé VAPID de dev
     "",
 }
+
+
+def cle_api_ia_valide(raw_key: str | None) -> bool:
+    """Vrai si la clé d'API IA n'est ni vide ni un placeholder d'exemple.
+
+    Source unique de la règle, partagée par le contrôle de démarrage en
+    production et par `llm_provider_service` (choix du mode mock).
+    """
+    lower = (raw_key or "").strip().lower()
+    if not lower:
+        return False
+    prefixes_exemple = (
+        "sk-placeholder",
+        "aiza-placeholder",
+        "your-",
+        "your_",
+        "votre_",
+        "votre-",
+        "placeholder",
+        "changeme",
+    )
+    return not lower.startswith(prefixes_exemple) and "placeholder" not in lower
 
 
 class Settings(BaseSettings):
@@ -89,19 +111,80 @@ class Settings(BaseSettings):
     # ── Qdrant ──
     qdrant_host: str = "qdrant"
     qdrant_port: int = 6333
+    # Nom de base de la collection. La collection réellement utilisée dépend du
+    # fournisseur de vecteurs : voir `collection_vectorielle`.
     qdrant_collection: str = "connaissances_prosartisan"
-    # Dimension des vecteurs de la collection (doit correspondre à embedding_model :
-    # 1024 pour mistral-embed).
+    # Dimension des vecteurs `mistral-embed` (1024). Avec Gemini, la dimension
+    # vient de `gemini_embedding_dimensions` : voir `embedding_dimensions`.
     qdrant_vector_size: int = 1024
+    # Fournisseur des vecteurs de la recherche documentaire : "gemini" (défaut,
+    # `gemini-embedding-001`) ou "mistral" (`mistral-embed`). Les vecteurs de
+    # deux modèles sont incompatibles : changer de fournisseur impose de
+    # réindexer le corpus (`python -m ingestion.pipeline ...`), dans une
+    # collection distincte (voir `collection_vectorielle`).
+    embedding_provider: str = "gemini"
+    gemini_embedding_model: str = "gemini-embedding-001"
+    # 768, 1536 ou 3072 (tailles recommandées par Google, réduction sans perte
+    # notable de qualité en dessous de 3072).
+    gemini_embedding_dimensions: int = 1536
+
+    @property
+    def embedding_dimensions(self) -> int:
+        """Dimension des vecteurs du fournisseur actif (taille de la collection)."""
+        if self.embedding_provider == "gemini":
+            return self.gemini_embedding_dimensions
+        return self.qdrant_vector_size
+
+    @property
+    def collection_vectorielle(self) -> str:
+        """Collection Qdrant propre au modèle de vecteurs actif.
+
+        Mistral garde le nom historique (compatibilité des déploiements
+        existants) ; Gemini utilise `<nom>_gemini_<dimension>`, pour ne jamais
+        mélanger ni interroger des vecteurs d'un autre modèle.
+        """
+        if self.embedding_provider == "gemini":
+            return f"{self.qdrant_collection}_gemini_{self.gemini_embedding_dimensions}"
+        return self.qdrant_collection
+
+    @property
+    def espace_embeddings(self) -> str:
+        """Identifiant du modèle de vecteurs actif (clé de cache, manifeste)."""
+        if self.embedding_provider == "gemini":
+            return f"gemini:{self.gemini_embedding_model}:{self.gemini_embedding_dimensions}"
+        return f"mistral:{self.embedding_model}"
+
     # Score de similarité minimal (cosinus) pour qu'un extrait retrouvé soit
     # considéré pertinent. En dessous, on déclenche le repli "zéro hallucination"
     # plutôt que de laisser le LLM broder sur un contexte hors sujet.
-    rag_min_score: float = 0.15
+    # Valeur calibrée le 2026-11-21 pour `gemini-embedding-001` (1536 dim.) sur
+    # les 37 guides indexés : les 61 questions couvertes obtiennent ≥ 0.7205 et
+    # les 45 questions hors corpus ≤ 0.6948 ; 0.71 est au milieu de l'écart
+    # (100 % servies, 0 % hors corpus acceptées). Rapport :
+    # `ingestion/evaluation/rapport_calibrage_2026-11-21.json`. À recalibrer
+    # (`python -m app.scripts.calibrer_seuil_rag`) après tout changement de
+    # modèle de vecteurs ou ajout important au corpus. 0.15 (ancienne valeur)
+    # laissait passer presque tout extrait.
+    rag_min_score: float = Field(default=0.71, ge=0.0, le=1.0)
+    # Repli lexical (Gemini seul, sans embeddings) : part minimale des mots-clés
+    # de la question retrouvés dans l'extrait, et nombre minimal de mots communs.
+    rag_lexical_min_score: float = Field(default=0.5, ge=0.0, le=1.0)
+    rag_lexical_min_overlap: int = Field(default=2, ge=1)
+    # Reformulation de la question (nouchi, dioula, baoulé, bété → français
+    # technique) avant la recherche vectorielle. La question d'origine est
+    # cherchée aussi ; le LLM reçoit toujours la question d'origine.
+    # Désactivée par défaut : au calibrage du 2026-11-21, elle remontait aussi
+    # les scores hors corpus (écart réduit de 0.026 à 0.008) sans servir une
+    # question couverte de plus, pour un appel LLM supplémentaire par question.
+    # À réactiver si des questions en langues locales échouent, puis recalibrer.
+    rag_reformulation_requete: bool = False
 
     # ── LLM (Mistral & Google Gemini) & Vision / Audio ──
-    # Stratégie de routage IA : "auto" (sélectionne la ressource la plus stable et
-    # disponible), "mistral" (Mistral prioritaire) ou "gemini" (Gemini prioritaire).
-    llm_provider: str = "auto"
+    # Stratégie de routage IA : "gemini" (Gemini prioritaire, défaut), "mistral"
+    # (Mistral prioritaire) ou "auto" (ressource la plus stable et disponible).
+    # Le fournisseur secondaire sert de secours si LLM_FAILOVER_ENABLED=true et
+    # que sa clé est configurée. Un choix fait dans le back-office (Redis) prime.
+    llm_provider: str = "gemini"
     llm_failover_enabled: bool = True
     llm_circuit_breaker_threshold: int = 3
     llm_circuit_breaker_cooldown_seconds: int = 120
@@ -221,6 +304,23 @@ class Settings(BaseSettings):
     def is_production(self) -> bool:
         return self.app_env.lower() in {"production", "prod"}
 
+    @field_validator("embedding_provider")
+    @classmethod
+    def _valider_embedding_provider(cls, value: str) -> str:
+        valeur = value.strip().lower()
+        if valeur not in {"gemini", "mistral"}:
+            raise ValueError("EMBEDDING_PROVIDER doit valoir 'gemini' ou 'mistral'.")
+        return valeur
+
+    @field_validator("gemini_embedding_dimensions")
+    @classmethod
+    def _valider_dimensions_gemini(cls, value: int) -> int:
+        if value not in {768, 1536, 3072}:
+            raise ValueError(
+                "GEMINI_EMBEDDING_DIMENSIONS doit valoir 768, 1536 ou 3072."
+            )
+        return value
+
     @model_validator(mode="after")
     def _verifier_secrets_production(self) -> "Settings":
         """Refuse de démarrer en production avec des secrets/CORS non configurés."""
@@ -242,6 +342,13 @@ class Settings(BaseSettings):
             erreurs.append("CORS_ALLOWED_ORIGINS (le joker '*' est interdit)")
         if self.app_debug:
             erreurs.append("APP_DEBUG (doit être false)")
+        if not (
+            cle_api_ia_valide(self.mistral_api_key)
+            or cle_api_ia_valide(self.gemini_api_key)
+        ):
+            # Sans fournisseur IA, le service basculerait en mode mock et
+            # servirait des réponses et devis factices à de vrais artisans.
+            erreurs.append("MISTRAL_API_KEY ou GEMINI_API_KEY (au moins une clé IA)")
         if self.payment_mode.lower() not in {"demo", "live"}:
             erreurs.append("PAYMENT_MODE (demo ou live)")
         if not self.payment_demo_mode:

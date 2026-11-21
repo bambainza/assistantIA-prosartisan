@@ -7,6 +7,8 @@ Fournit des algorithmes certifiés pour :
 3. Pente et diamètres d'évacuation sanitaire (Plomberie DTU 60.11).
 4. Quantités de carrelage, colle et peinture (Finitions / Second œuvre).
 5. Bilan thermique et puissance de climatisation (Froid tropical).
+6. Nombre d'agglos et mortier de pose d'un mur (Maçonnerie).
+7. Conversions d'unités de chantier (sacs, brouettes, seaux, m³, litres, kg).
 
 Ces fonctions sont déterministes et utilisables directement par l'application ou
 invoquées sous forme de Tools / Function Calling par le LLM.
@@ -16,6 +18,105 @@ from __future__ import annotations
 
 import math
 from typing import Any
+
+CLASSES_CIMENT: tuple[str, ...] = ("CPJ 42.5", "CPJ 32.5")
+# Ouvrages porteurs dont le dosage est relevé avec un ciment CPJ 32.5.
+OUVRAGES_STRUCTURE: frozenset[str] = frozenset(
+    {"fondation_semelle", "poteau_poutre_dalle"}
+)
+SURDOSAGE_CPJ_32_5_KG_M3 = 50
+
+# ── Électricité : calibre maximal du disjoncteur par section de conducteur ──
+# Valeurs prudentes pour l'habitat (conducteurs isolés PVC sous conduit
+# encastré, 2 conducteurs chargés, température ambiante ≤ 30 °C), alignées sur
+# les tableaux usuels NF C 15-100 du logement : 1,5 mm² → 16 A, 2,5 mm² → 20 A,
+# 4 mm² → 25 A, 6 mm² → 32 A, 10 mm² → 40 A. Au-delà, valeurs inférieures au
+# courant admissible Iz de la méthode de référence B (CEI 60364-5-52).
+# Lecture : un disjoncteur de calibre In protège la section S si In ≤ table[S].
+# À faire valider par un électricien qualifié avant toute évolution.
+CALIBRE_MAX_DISJONCTEUR_CUIVRE_A: dict[float, int] = {
+    1.5: 16,
+    2.5: 20,
+    4.0: 25,
+    6.0: 32,
+    10.0: 40,
+    16.0: 63,
+    25.0: 80,
+    35.0: 100,
+    50.0: 125,
+    70.0: 160,
+    95.0: 200,
+}
+# Aluminium : section minimale 16 mm² ; courants admissibles ≈ 78 % du cuivre.
+CALIBRE_MAX_DISJONCTEUR_ALUMINIUM_A: dict[float, int] = {
+    16.0: 50,
+    25.0: 63,
+    35.0: 80,
+    50.0: 100,
+    70.0: 125,
+    95.0: 160,
+}
+CALIBRES_DISJONCTEUR_A: tuple[int, ...] = (
+    10,
+    16,
+    20,
+    25,
+    32,
+    40,
+    50,
+    63,
+    80,
+    100,
+    125,
+    160,
+    200,
+)
+HYPOTHESES_CABLE = (
+    "Conducteurs isolés PVC sous conduit encastré, 2 conducteurs chargés, "
+    "ambiance ≤ 30 °C, circuit non groupé. Pour un autre mode de pose, une "
+    "ambiance plus chaude ou des circuits groupés, faire vérifier la section "
+    "par un électricien qualifié."
+)
+
+# ── Maçonnerie : agglos (parpaings) 40 × 20 cm ──
+AGGLOS_PAR_M2 = 12.5  # face 0,40 m × 0,20 m
+# Volume de mortier de pose par m² de mur, selon l'épaisseur de l'agglo
+# (joints de 1 à 1,5 cm, agglos creux) — ratios usuels de chantier.
+MORTIER_POSE_M3_PAR_M2: dict[int, float] = {10: 0.012, 15: 0.018, 20: 0.024}
+DOSAGE_MORTIER_POSE_KG_M3 = 300  # cohérent avec `mortier_pose_parpaing`
+SABLE_MORTIER_POSE_LITRES_M3 = 1000
+
+# ── Conversions d'unités de chantier ──
+# Volumes en litres. Brouette « rase » de chantier = 60 L (convention déjà
+# utilisée par le dosage béton) ; seau de maçon = 10 L.
+UNITES_VOLUME_LITRES: dict[str, float] = {
+    "litre": 1.0,
+    "m3": 1000.0,
+    "brouette": 60.0,
+    "seau": 10.0,
+}
+# Masses en kg. Le sac n'a de sens que pour le ciment (sac de 50 kg).
+UNITES_MASSE_KG: dict[str, float] = {"kg": 1.0, "tonne": 1000.0, "sac": 50.0}
+# Masses volumiques apparentes moyennes (kg par litre, matériau sec en vrac).
+MASSES_VOLUMIQUES_KG_L: dict[str, float] = {
+    "ciment": 1.4,
+    "sable": 1.6,
+    "gravier": 1.5,
+    "eau": 1.0,
+}
+ALIAS_UNITES: dict[str, str] = {
+    "l": "litre",
+    "litres": "litre",
+    "m³": "m3",
+    "metre_cube": "m3",
+    "brouettes": "brouette",
+    "seaux": "seau",
+    "sacs": "sac",
+    "sac_ciment": "sac",
+    "tonnes": "tonne",
+    "t": "tonne",
+    "kilogramme": "kg",
+}
 
 
 class CalculatorService:
@@ -99,10 +200,33 @@ class CalculatorService:
             },
         }
 
-        recette = recettes.get(type_ouvrage, recettes["poteau_poutre_dalle"])
+        recette = recettes.get(type_ouvrage)
+        if recette is None:
+            # Jamais de bascule silencieuse vers une autre recette : un dosage
+            # de structure appliqué à un enduit (ou l'inverse) fausse la commande.
+            raise ValueError(
+                f"type_ouvrage '{type_ouvrage}' inconnu. Valeurs acceptées : "
+                + ", ".join(sorted(recettes))
+                + "."
+            )
+        if classe_ciment not in CLASSES_CIMENT:
+            raise ValueError(
+                f"classe_ciment '{classe_ciment}' inconnue. Valeurs acceptées : "
+                + ", ".join(CLASSES_CIMENT)
+                + "."
+            )
+
+        dosage_kg_m3 = recette["dosage_ciment_kg_m3"]
+        ajustement_kg_m3 = 0
+        if classe_ciment == "CPJ 32.5" and type_ouvrage in OUVRAGES_STRUCTURE:
+            # Un CPJ 32.5 est moins résistant qu'un CPJ 42.5 : pour un béton
+            # armé porteur, on compense par un dosage plus riche (pratique
+            # courante : 350 kg/m³ en 42.5 ↔ 400 kg/m³ en 32.5).
+            ajustement_kg_m3 = SURDOSAGE_CPJ_32_5_KG_M3
+            dosage_kg_m3 += ajustement_kg_m3
 
         # Calcul des totaux bruts
-        poids_ciment_total_kg = round(recette["dosage_ciment_kg_m3"] * volume_m3, 1)
+        poids_ciment_total_kg = round(dosage_kg_m3 * volume_m3, 1)
         # Sacs de ciment de 50 kg (arrondi au sac supérieur pour sécurité chantier)
         sacs_ciment_50kg = math.ceil(poids_ciment_total_kg / 50.0)
 
@@ -120,6 +244,8 @@ class CalculatorService:
             "type_ouvrage": recette["nom"],
             "volume_m3": volume_m3,
             "classe_ciment": classe_ciment,
+            "dosage_ciment_kg_m3": dosage_kg_m3,
+            "ajustement_classe_ciment_kg_m3": ajustement_kg_m3,
             "resultats": {
                 "ciment_poids_kg": poids_ciment_total_kg,
                 "sacs_ciment_50kg": sacs_ciment_50kg,
@@ -179,6 +305,10 @@ class CalculatorService:
         intensite_amperes = round(intensite_amperes, 2)
         if intensite_amperes <= 0:
             raise ValueError("L'intensité calculée doit être positive.")
+        if nature_conducteur.lower() not in {"cuivre", "aluminium"}:
+            raise ValueError("nature_conducteur doit valoir 'cuivre' ou 'aluminium'.")
+        if longueur_metres <= 0:
+            raise ValueError("La longueur du circuit doit être strictement positive.")
 
         # Résistivité électrique ρ (Ohm.mm²/m)
         rho = 0.0175 if nature_conducteur.lower() == "cuivre" else 0.028
@@ -198,59 +328,45 @@ class CalculatorService:
                 2 * rho * longueur_metres * intensite_amperes * cos_phi
             ) / delta_u_max_v
 
-        # Sections standards normalisées (mm²)
-        sections_normalisees = [
-            1.5,
-            2.5,
-            4.0,
-            6.0,
-            10.0,
-            16.0,
-            25.0,
-            35.0,
-            50.0,
-            70.0,
-            95.0,
-        ]
+        est_cuivre = nature_conducteur.lower() == "cuivre"
+        table_calibres = (
+            CALIBRE_MAX_DISJONCTEUR_CUIVRE_A
+            if est_cuivre
+            else CALIBRE_MAX_DISJONCTEUR_ALUMINIUM_A
+        )
 
-        capacites_thermiques_cuivre: dict[float, float] = {
-            1.5: 16.0,
-            2.5: 25.0,
-            4.0: 32.0,
-            6.0: 40.0,
-            10.0: 63.0,
-            16.0: 80.0,
-            25.0: 100.0,
-            35.0: 125.0,
-            50.0: 160.0,
-            70.0: 200.0,
-            95.0: 250.0,
-        }
+        # Calibre disjoncteur normalisé recommandé : le plus petit In ≥ Ib.
+        disjoncteur_recommande = next(
+            (c for c in CALIBRES_DISJONCTEUR_A if c >= intensite_amperes), None
+        )
+        if disjoncteur_recommande is None or disjoncteur_recommande > max(
+            table_calibres.values()
+        ):
+            # Jamais de section « par défaut » sous-dimensionnée : au-delà de la
+            # table, l'installation relève d'une étude spécifique.
+            raise ValueError(
+                f"Intensité de {intensite_amperes} A hors du domaine de ce "
+                "calculateur (habitat et petit tertiaire). Faire réaliser une "
+                "étude par un électricien qualifié."
+            )
 
-        # Calibre disjoncteur normalisé recommandé (In >= Ib)
-        calibres_standard = [10, 16, 20, 25, 32, 40, 50, 63, 80, 100, 125]
-        disjoncteur_recommande = None
-        for c in calibres_standard:
-            if c >= intensite_amperes:
-                disjoncteur_recommande = c
-                break
-        if disjoncteur_recommande is None:
-            disjoncteur_recommande = 125
-
-        # Règle NF C 15-100 de coordination : Ib <= In <= Iz
-        # Le câble doit supporter en continu au moins le calibre de protection In
-        courant_dimensionnement_thermique = float(disjoncteur_recommande)
-
-        section_retenue = None
-        for s in sections_normalisees:
-            if s >= section_theorique_mm2:
-                i_adm = capacites_thermiques_cuivre.get(s, s * 4)
-                if i_adm >= courant_dimensionnement_thermique:
-                    section_retenue = s
-                    break
-
+        # Coordination NF C 15-100 : Ib ≤ In ≤ Iz. La section retenue est la
+        # plus petite qui protège le calibre In ET respecte la chute de tension.
+        section_retenue = next(
+            (
+                s
+                for s, calibre_max in sorted(table_calibres.items())
+                if s >= section_theorique_mm2 and calibre_max >= disjoncteur_recommande
+            ),
+            None,
+        )
         if section_retenue is None:
-            section_retenue = sections_normalisees[-1]
+            raise ValueError(
+                "Aucune section normalisée de la table ne respecte à la fois le "
+                f"calibre {disjoncteur_recommande} A et la chute de tension de "
+                f"{chute_tension_max_pct} % sur {longueur_metres} m. Réduire la "
+                "longueur, scinder le circuit ou faire réaliser une étude."
+            )
 
         # Recalcul de la chute de tension réelle avec la section normalisée
         if type_alimentation == "triphase" or tension_volts >= 380:
@@ -276,6 +392,8 @@ class CalculatorService:
             "chute_tension_reelle_pct": chute_reelle_pct,
             "chute_tension_reelle_v": round(chute_reelle_v, 2),
             "conformite_norme": chute_reelle_pct <= chute_tension_max_pct,
+            "nature_conducteur": "cuivre" if est_cuivre else "aluminium",
+            "hypotheses": HYPOTHESES_CABLE,
             "recommandations": [
                 f"Utiliser un disjoncteur divisionnaire calibré à {disjoncteur_recommande}A (Courbe C pour usage général, Courbe D si moteur/climatiseur).",
                 "Protéger le circuit par un interrupteur différentiel 30mA type AC ou type A.",
@@ -478,9 +596,161 @@ class CalculatorService:
             "puissance_btu_commerciale": split_recommande["btu"],
             "conseils_installation": [
                 "Placer l'unité extérieure à l'abri du rayonnement solaire direct de l'après-midi pour optimiser le rendement.",
-                "Respecter une section de câble d'au moins 2.5 mm² pour 1.5 CV à 2.0 CV avec disjoncteur 16A/20A Courbe D.",
+                "Circuit dédié par climatiseur : 2.5 mm² jusqu'à 1.5 CV, 4 mm² à partir de 2 CV, disjoncteur divisionnaire 16A ou 20A courbe C (vérifier le calibre exigé par le fabricant).",
                 "Tirer au vide l'installation pendant au moins 15 minutes avant ouverture des vannes frigorifiques.",
             ],
+        }
+
+    # ── 6. MAÇONNERIE : MUR EN AGGLOS (PARPAINGS) ───────────────────────────
+
+    @staticmethod
+    def calculer_agglos_mur(
+        longueur_m: float,
+        hauteur_m: float,
+        surface_ouvertures_m2: float = 0.0,
+        epaisseur_agglo_cm: int = 15,
+        pertes_pct: float = 5.0,
+    ) -> dict[str, Any]:
+        """Calcule le nombre d'agglos 40 × 20 cm et le mortier de pose d'un mur.
+
+        Args:
+            longueur_m: Longueur du mur en mètres.
+            hauteur_m: Hauteur du mur en mètres.
+            surface_ouvertures_m2: Surface des portes et fenêtres à déduire (m²).
+            epaisseur_agglo_cm: 10 (cloison), 15 (mur courant) ou 20 (porteur).
+            pertes_pct: Casse et coupes (5 % par défaut, 0 à 20 %).
+        """
+        if longueur_m <= 0 or hauteur_m <= 0:
+            raise ValueError("La longueur et la hauteur du mur doivent être > 0.")
+        if surface_ouvertures_m2 < 0:
+            raise ValueError("La surface des ouvertures ne peut pas être négative.")
+        if epaisseur_agglo_cm not in MORTIER_POSE_M3_PAR_M2:
+            raise ValueError(
+                "epaisseur_agglo_cm doit valoir 10, 15 ou 20 (agglos 40 × 20 cm)."
+            )
+        if not 0 <= pertes_pct <= 20:
+            raise ValueError("pertes_pct doit être compris entre 0 et 20.")
+
+        surface_brute_m2 = round(longueur_m * hauteur_m, 2)
+        surface_nette_m2 = round(surface_brute_m2 - surface_ouvertures_m2, 2)
+        if surface_nette_m2 <= 0:
+            raise ValueError("Les ouvertures dépassent la surface du mur.")
+
+        agglos_net = surface_nette_m2 * AGGLOS_PAR_M2
+        agglos_a_commander = math.ceil(agglos_net * (1 + pertes_pct / 100.0))
+
+        mortier_m3 = round(
+            surface_nette_m2 * MORTIER_POSE_M3_PAR_M2[epaisseur_agglo_cm], 3
+        )
+        ciment_kg = round(mortier_m3 * DOSAGE_MORTIER_POSE_KG_M3, 1)
+        sable_litres = round(mortier_m3 * SABLE_MORTIER_POSE_LITRES_M3, 1)
+
+        return {
+            "surface_brute_m2": surface_brute_m2,
+            "surface_ouvertures_m2": surface_ouvertures_m2,
+            "surface_nette_m2": surface_nette_m2,
+            "epaisseur_agglo_cm": epaisseur_agglo_cm,
+            "agglos_par_m2": AGGLOS_PAR_M2,
+            "pertes_pct": pertes_pct,
+            "resultats": {
+                "agglos_unites": agglos_a_commander,
+                "mortier_pose_m3": mortier_m3,
+                "ciment_kg": ciment_kg,
+                "sacs_ciment_50kg": math.ceil(ciment_kg / 50.0) if ciment_kg else 0,
+                "sable_m3": round(sable_litres / 1000.0, 2),
+                "sable_brouettes_60l": round(sable_litres / 60.0, 1),
+            },
+            "conseils_chantier": [
+                "Mortier de pose dosé à 300 kg/m³ (1 sac de ciment pour 2,5 à 3 brouettes de sable).",
+                "Humidifier les agglos avant la pose par forte chaleur.",
+                "Croiser les joints d'un rang à l'autre et chaîner horizontalement tous les 3 m de hauteur.",
+            ],
+        }
+
+    # ── 7. CONVERSIONS D'UNITÉS DE CHANTIER ─────────────────────────────────
+
+    @staticmethod
+    def convertir_unites_chantier(
+        valeur: float,
+        unite_source: str,
+        unite_cible: str,
+        materiau: str | None = None,
+    ) -> dict[str, Any]:
+        """Convertit entre unités de chantier (sacs, brouettes, seaux, m³, litres, kg).
+
+        Args:
+            valeur: Quantité à convertir (> 0).
+            unite_source: litre, m3, brouette (60 L), seau (10 L), kg, tonne, sac (ciment 50 kg).
+            unite_cible: Même liste d'unités.
+            materiau: ciment, sable, gravier ou eau — requis pour passer d'un
+                volume à une masse (ou l'inverse) et pour toute conversion en sacs.
+        """
+        if valeur <= 0:
+            raise ValueError("La valeur à convertir doit être strictement positive.")
+
+        def _normaliser(unite: str) -> str:
+            u = unite.strip().lower()
+            u = ALIAS_UNITES.get(u, u)
+            if u not in UNITES_VOLUME_LITRES and u not in UNITES_MASSE_KG:
+                raise ValueError(
+                    f"Unité '{unite}' inconnue. Unités acceptées : "
+                    + ", ".join([*UNITES_VOLUME_LITRES, *UNITES_MASSE_KG])
+                    + "."
+                )
+            return u
+
+        source = _normaliser(unite_source)
+        cible = _normaliser(unite_cible)
+        mat = materiau.strip().lower() if materiau else None
+        if mat is not None and mat not in MASSES_VOLUMIQUES_KG_L:
+            raise ValueError(
+                f"Matériau '{materiau}' inconnu. Matériaux acceptés : "
+                + ", ".join(MASSES_VOLUMIQUES_KG_L)
+                + "."
+            )
+        if "sac" in (source, cible) and mat != "ciment":
+            raise ValueError(
+                "L'unité 'sac' désigne un sac de ciment de 50 kg : préciser materiau='ciment'."
+            )
+
+        source_volume = source in UNITES_VOLUME_LITRES
+        cible_volume = cible in UNITES_VOLUME_LITRES
+        if source_volume != cible_volume and mat is None:
+            raise ValueError(
+                "Passer d'un volume à une masse exige le matériau (ciment, sable, gravier ou eau)."
+            )
+
+        if source_volume:
+            litres = valeur * UNITES_VOLUME_LITRES[source]
+            kg = litres * MASSES_VOLUMIQUES_KG_L[mat] if mat else None
+        else:
+            kg = valeur * UNITES_MASSE_KG[source]
+            litres = kg / MASSES_VOLUMIQUES_KG_L[mat] if mat else None
+
+        resultat = (
+            litres / UNITES_VOLUME_LITRES[cible]
+            if cible_volume
+            else kg / UNITES_MASSE_KG[cible]  # type: ignore[operator]
+        )
+
+        hypotheses = [
+            "Brouette rase de chantier = 60 litres ; seau de maçon = 10 litres.",
+        ]
+        if mat:
+            hypotheses.append(
+                f"Masse volumique apparente du {mat} sec en vrac : "
+                f"{MASSES_VOLUMIQUES_KG_L[mat]} kg/litre (valeur moyenne, varie avec l'humidité)."
+            )
+        if "sac" in (source, cible):
+            hypotheses.append("Sac de ciment = 50 kg.")
+
+        return {
+            "valeur": valeur,
+            "unite_source": source,
+            "unite_cible": cible,
+            "materiau": mat,
+            "resultat": round(resultat, 3),
+            "hypotheses": hypotheses,
         }
 
     # ── MISTRAL / OPENAI FUNCTION CALLING DEFINITIONS ────────────────────────
@@ -564,7 +834,91 @@ class CalculatorService:
                                 "type": "number",
                                 "description": "Tolérance max (3% éclairage, 5% force)",
                             },
+                            "nature_conducteur": {
+                                "type": "string",
+                                "enum": ["cuivre", "aluminium"],
+                            },
                         },
+                    },
+                },
+            },
+            {
+                "type": "function",
+                "function": {
+                    "name": "calculer_agglos_mur",
+                    "description": "Calcule le nombre d'agglos (parpaings 40x20 cm) d'un mur, avec pertes, et le mortier de pose (sacs de ciment, sable).",
+                    "parameters": {
+                        "type": "object",
+                        "properties": {
+                            "longueur_m": {
+                                "type": "number",
+                                "description": "Longueur du mur en mètres",
+                            },
+                            "hauteur_m": {
+                                "type": "number",
+                                "description": "Hauteur du mur en mètres",
+                            },
+                            "surface_ouvertures_m2": {
+                                "type": "number",
+                                "description": "Surface des portes et fenêtres à déduire (m²)",
+                            },
+                            "epaisseur_agglo_cm": {
+                                "type": "integer",
+                                "enum": [10, 15, 20],
+                                "description": "Épaisseur de l'agglo en cm",
+                            },
+                            "pertes_pct": {
+                                "type": "number",
+                                "description": "Casse et coupes en % (5 par défaut)",
+                            },
+                        },
+                        "required": ["longueur_m", "hauteur_m"],
+                    },
+                },
+            },
+            {
+                "type": "function",
+                "function": {
+                    "name": "convertir_unites_chantier",
+                    "description": "Convertit une quantité entre unités de chantier : sacs de ciment (50 kg), brouettes (60 L), seaux (10 L), m³, litres, kg, tonnes.",
+                    "parameters": {
+                        "type": "object",
+                        "properties": {
+                            "valeur": {
+                                "type": "number",
+                                "description": "Quantité à convertir",
+                            },
+                            "unite_source": {
+                                "type": "string",
+                                "enum": [
+                                    "litre",
+                                    "m3",
+                                    "brouette",
+                                    "seau",
+                                    "kg",
+                                    "tonne",
+                                    "sac",
+                                ],
+                            },
+                            "unite_cible": {
+                                "type": "string",
+                                "enum": [
+                                    "litre",
+                                    "m3",
+                                    "brouette",
+                                    "seau",
+                                    "kg",
+                                    "tonne",
+                                    "sac",
+                                ],
+                            },
+                            "materiau": {
+                                "type": "string",
+                                "enum": ["ciment", "sable", "gravier", "eau"],
+                                "description": "Requis pour passer d'un volume à une masse et pour les sacs",
+                            },
+                        },
+                        "required": ["valeur", "unite_source", "unite_cible"],
                     },
                 },
             },
@@ -669,17 +1023,27 @@ class CalculatorService:
         """Exécute de façon sécurisée le calculateur métier correspondant au tool invoqué."""
         handlers: dict[str, Any] = {
             "calculer_dosage_beton": cls.calculer_dosage_beton,
+            # Nom prévu par le cahier des charges, conservé comme alias.
+            "calculer_materiaux_btp": cls.calculer_dosage_beton,
             "calculer_section_cable": cls.calculer_section_cable,
             "calculer_evacuation_plomberie": cls.calculer_evacuation_plomberie,
             "calculer_carrelage_et_colle": cls.calculer_carrelage_et_colle,
             "calculer_bilan_climatisation": cls.calculer_bilan_climatisation,
+            "calculer_agglos_mur": cls.calculer_agglos_mur,
+            "convertir_unites_chantier": cls.convertir_unites_chantier,
         }
 
         handler = handlers.get(tool_name)
         if not handler:
             raise ValueError(f"Outil de calcul '{tool_name}' non reconnu.")
 
-        return handler(**arguments)
+        try:
+            return handler(**arguments)
+        except TypeError as exc:
+            # Paramètre inconnu ou manquant : erreur de saisie, pas une panne.
+            raise ValueError(
+                f"Paramètres invalides pour l'outil '{tool_name}' : {exc}"
+            ) from exc
 
 
 calculator_service = CalculatorService()

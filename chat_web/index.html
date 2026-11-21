@@ -457,8 +457,10 @@
                     <label for="quote-prompt-input">Notes de chantier / Demande du client :</label>
                     <textarea id="quote-prompt-input" rows="3" class="form-control" placeholder="ex: Devis pour M. Konan (0701020304) à Cocody : Réfection salle de bain avec 1 receveur 90x90 à 75000 F, 1 mitigeur douche à 25000 F, 20m² carrelage mural à 4500 F/m², pose et plomberie à 60000 F."></textarea>
                     <button class="btn btn-primary mt-2" onclick="extractQuoteFromText()" id="btn-extract-quote">
-                        ✨ Analyser & Chiffrer automatiquement
+                        ✨ Analyser & pré-remplir le devis
                     </button>
+                    <p class="quote-extract-hint">Les prix viennent de la grille de référence ProsArtisan ou de ceux que vous dictez. Les lignes sans prix sont surlignées : complétez-les avant l'envoi.</p>
+                    <ul id="quote-extract-warnings" class="quote-extract-warnings hidden" role="status" aria-live="polite"></ul>
                 </div>
 
                 <!-- Quote Form Details -->

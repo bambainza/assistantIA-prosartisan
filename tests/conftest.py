@@ -74,6 +74,11 @@ def _isoler_services_externes(monkeypatch):
 
     monkeypatch.setattr(settings, "mistral_api_key", "sk-placeholder-test")
     monkeypatch.setattr(settings, "gemini_api_key", "AIza-placeholder-test")
+    # La reformulation multilingue ajoute un appel LLM avant la recherche :
+    # désactivée par défaut pour que les tests qui simulent les fournisseurs
+    # (bascule, coupe-circuit) ne comptent que l'appel de réponse. Les tests
+    # dédiés (tests/test_reformulation_requete.py) la réactivent.
+    monkeypatch.setattr(settings, "rag_reformulation_requete", False)
 
 
 @pytest.fixture(autouse=True)

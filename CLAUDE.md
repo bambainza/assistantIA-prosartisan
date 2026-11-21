@@ -17,7 +17,7 @@ Documents de référence à consulter en priorité : `AGENTS.md` (règles d'ing�
 | Backend | Python 3.12, FastAPI, Pydantic v2 |
 | BDD relationnelle | PostgreSQL 16, SQLAlchemy 2.0 (async), asyncpg, Alembic |
 | Cache / quotas / rate-limit | Redis 7 (jamais d'état en mémoire par worker) |
-| Base vectorielle (RAG) | Qdrant, embeddings Mistral `mistral-embed` |
+| Base vectorielle (RAG) | Qdrant, vecteurs Gemini `gemini-embedding-001` (1536 dim., défaut) ou Mistral `mistral-embed` (`EMBEDDING_PROVIDER`), une collection par modèle |
 | IA | Mistral Small / Medium (texte + vision), Voxtral (vocal STT/TTS) |
 | Paiement | Wave Business API, Orange Money API, CinetPay v1 API (webhooks signés HMAC SHA-256 ou confirmés par API) |
 | Mobile | Flutter (`mobile_app_flutter/`, Android prioritaire) |
@@ -49,6 +49,9 @@ alembic upgrade head
 # Pipeline d'ingestion RAG (PDF/Markdown → chunks → Qdrant)
 python -m ingestion.pipeline --docs-dir ./ingestion/documents --metier-id 1
 
+# Calibrage du seuil RAG_MIN_SCORE sur le corpus indexé (clé réelle du fournisseur de vecteurs, Gemini par défaut, lecture seule)
+python -m app.scripts.calibrer_seuil_rag --avec-reformulation --json rapport_seuil.json
+
 # Flutter
 cd mobile_app_flutter && flutter pub get && flutter test && flutter analyze
 ```
@@ -68,15 +71,16 @@ Séparation stricte imposée : logique métier dans `app/services/`, jamais dans
 
 ## Règles d'or — ne jamais contourner (voir `AGENTS.md` pour le détail complet)
 
-1. **Zéro hallucination RAG** : sans extrait pertinent en base (score < `RAG_MIN_SCORE`), le service court-circuite l'appel LLM et renvoie le message de repli codé (`FALLBACK_MESSAGE` dans `app/services/rag_service.py`), identique mot pour mot à celui de `prompts/system_prompt.txt`. Une panne de la recherche (embedding, Qdrant) lève `RechercheIndisponibleError` → `503` et question rendue : jamais de repli ni de mise en cache sur une panne (hors mode mock de dev/tests, repli non mis en cache).
+1. **Zéro hallucination RAG** : sans extrait pertinent en base (score < `RAG_MIN_SCORE`, 0.71 calibré pour `gemini-embedding-001`, à recalibrer avec `python -m app.scripts.calibrer_seuil_rag` après tout changement de modèle ou de corpus, jamais à l'œil), le service court-circuite l'appel LLM et renvoie le message de repli codé (`FALLBACK_MESSAGE` dans `app/services/rag_service.py`), identique mot pour mot à celui de `prompts/system_prompt.txt`. Une panne de la recherche (embedding, Qdrant) lève `RechercheIndisponibleError` → `503` et question rendue : jamais de repli ni de mise en cache sur une panne (hors mode mock de dev/tests, repli non mis en cache).
 2. **Identité déduite du JWT, jamais du client** : aucun `user_id` n'est accepté depuis le corps/query/path d'une requête entrante — toujours `get_current_user_id` / `get_optional_user_id`. Seul un token `type=access` est accepté (refresh token en `Bearer` → `401`). Mode non connecté → aucun historique serveur (plus de compte anonyme partagé ; `/api/conversations` exige le JWT, `conversation_id` anonyme → `401`) ; quota anonyme compté par IP.
 2 bis. **Sessions navigateur** : `chat_web` passe par `/api/auth/web/*` et des cookies access/refresh `HttpOnly`; aucun JWT dans `localStorage`. Les mutations cookie exigent `X-CSRF-Token`, tandis que Flutter conserve le Bearer. Le Markdown LLM est assaini par liste blanche avant toute insertion DOM et la CSP du chat interdit les attributs de script inline.
 3. **Isolation par propriétaire (anti-IDOR)** : toute ressource retrouvée par ID opaque (conversation, transaction, document) doit être filtrée par `WHERE user_id = ...`.
 4. **Webhooks Mobile Money** : Wave → `Wave-Signature` (HMAC SHA-256 de `t + corps`, anti-rejeu) ; Orange Money → `notif_token` puis confirmation `transactionstatus` ; CinetPay v1 → `notify_token` + `merchant_transaction_id` puis confirmation `GET /v1/payment/{merchant_transaction_id}` ; générique → `X-Signature`. Non authentifié → `401` systématique, jamais optionnel. Crédit unique (idempotent) et seulement si le montant confirmé = montant de la transaction. `PAYMENT_MODE=demo` (défaut) = simulateur fidèle des parcours officiels, désactivé en production sauf `PAYMENT_DEMO_IN_PRODUCTION=true`.
-5. **Garde-fous de démarrage en production** (`APP_ENV=production`) : refus de démarrer si `APP_SECRET_KEY`, `JWT_SECRET_KEY`, `MOBILE_MONEY_SECRET_KEY`, `DB_PASSWORD`, `VAPID_PRIVATE_KEY` sont à leur valeur par défaut, si `CORS_ALLOWED_ORIGINS=*`, ou si `APP_DEBUG=true`.
+5. **Garde-fous de démarrage en production** (`APP_ENV=production`) : refus de démarrer si `APP_SECRET_KEY`, `JWT_SECRET_KEY`, `MOBILE_MONEY_SECRET_KEY`, `DB_PASSWORD`, `VAPID_PRIVATE_KEY` sont à leur valeur par défaut, si `CORS_ALLOWED_ORIGINS=*`, si `APP_DEBUG=true`, ou si aucune clé IA valide (`MISTRAL_API_KEY` ou `GEMINI_API_KEY`) n'est fournie. La réponse de démonstration (sans clé IA, dev/tests) est signalée comme telle et jamais mise en cache.
 6. **Jamais de secrets en dur** — tout passe par `app.config.settings` / `.env`. Le compte admin seed exige `ADMIN_PASSWORD` en prod (pas de valeur par défaut).
 7. **État partagé entre workers** (quotas, rate-limit) → Redis obligatoire, jamais un attribut de classe Python. Quota = Pass premium → compteur Redis journalier (`INCR` atomique) → crédits achetés (`credits_requetes`, décrément SQL atomique) ; Redis injoignable en prod → `503`. Réponse IA en échec après décompte → question rendue (`quota_service.restituer_quota`). `metier_id` jamais codé en dur dans un client (`GET /api/metiers`). IP cliente via `get_client_ip` (`TRUSTED_PROXY_HOPS`), jamais `request.client.host`.
 7 bis. **Photos hors base, coûts IA & bascule Mistral / Gemini** : photo validée (`media_service.prepare_chat_image`) avant quota, stockée sur disque, référence `media:<nom>` en base, URL signée côté client. Contrôles gratuits (taille, propriété, débit, quota) avant tout appel facturé (STT, vision), WebSocket compris. `generate_response` et `generate_response_stream` partagent `RAGService._prepare` et `llm_provider_service` (bascule haute disponibilité et coupe-circuit entre Mistral AI et Google Gemini `gemini-3.8-flash`, pilotable dans `/api/admin/parametres/llm-providers`) ; (dés)activer un métier/document → `rag_service.invalidate_activation_cache()`.
+7 ter. **Devis sans prix inventés & calculateurs stricts** : le LLM n'extrait que désignations, quantités et calculs (`quote_service`) ; un prix vient de la grille `prix_references` (back-office, permissions `prix.read`/`prix.write`, audit) ou d'un prix dicté par l'artisan et retrouvé dans sa note, sinon la ligne reste à compléter (`prix_source: "a_saisir"`). IA indisponible → `503`, jamais de devis factice. Quantités de béton, mortier, agglos et carrelage via `calculator_service`. Un calculateur ne se replie jamais en silence sur une valeur par défaut (entrée inconnue ou hors domaine → `ValueError`/`400`) ; la table câbles suit l'habitat NF C 15-100 et toute évolution exige la validation d'un professionnel. La recherche RAG peut aussi chercher la question reformulée en français technique (`RAG_REFORMULATION_REQUETE`, désactivée par défaut depuis le calibrage), le LLM recevant toujours la question d'origine.
 8. **Travaux longs hors requête HTTP** (ingestion, appel externe lourd) → `BackgroundTasks` + réponse `202 Accepted` immédiate.
 9. **Migrations Alembic obligatoires** pour toute évolution de modèle ORM déjà déployé — `Base.metadata.create_all` ne sert qu'au dev/tests. Tout nouveau modèle est importé dans `app/models/__init__.py` (sinon les scripts `app/scripts/` échouent à résoudre les relations). Horodatages en UTC naïf (`UTCNaiveDateTime`, appliqué via `Base.type_annotation_map`) ; un échec de migration au démarrage du conteneur l'arrête.
 10. **Métadonnées d'ingestion obligatoires** : `metier_id`, `secteur_id`, `type_document`, `niveau_expertise` validées à l'ingestion, sinon document rejeté (jamais indexé silencieusement). Fiche à enjeu santé/sécurité : `ingestion/documents_a_valider/` jusqu'à relecture par un professionnel.
@@ -107,3 +111,11 @@ Côte d'Ivoire, français + langues locales, FCFA (entiers, jamais de décimales
 - Les scripts shell exécutés dans les conteneurs Linux utilisent LF (`*.sh text eol=lf` dans `.gitattributes`) ; le build normalise également le script de démarrage avant exécution.
 
 - En mode Docker local + GitHub, la CI publie l’image sur GHCR et le déploiement distant est ignoré par défaut. Seule la variable de dépôt GitHub Actions `ENABLE_REMOTE_DEPLOY=true` active ce dernier ; ses secrets et son contrôle de révision restent obligatoires lorsqu’il est activé.
+
+## Fiabilité métier (2026-11-21)
+
+- Production : refus de démarrer sans clé IA valide (Mistral ou Gemini).
+- Devis : grille de prix de référence (`prix_references`, onglet Devis du back-office) ou prix dicté par l'artisan et vérifié ; jamais un prix du LLM ; `503` si l'IA est indisponible.
+- Recherche : `RAG_MIN_SCORE` = 0.71 calibré, reformulation désactivée par défaut (calibrage : `app/scripts/calibrer_seuil_rag.py`, jeu `ingestion/evaluation/questions_seuil_rag.jsonl`) ; repli lexical à 50 % des mots-clés et 2 mots communs ; reformulation multilingue de la requête.
+- Calculateurs : table câbles habitat, refus explicites hors domaine, `calculer_agglos_mur`, `convertir_unites_chantier`, alias `calculer_materiaux_btp`.
+- Vecteurs : Gemini `gemini-embedding-001` (1536 dimensions) par défaut, collection `connaissances_prosartisan_gemini_1536`, réindexation puis recalibrage requis après tout changement de modèle.

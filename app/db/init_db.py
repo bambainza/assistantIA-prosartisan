@@ -55,6 +55,12 @@ _PERMISSIONS_CATALOG: list[tuple[str, str]] = [
         "parametres.write",
         "Créer, modifier, désactiver ou supprimer une donnée de référence (métier, sous-métier, catégorie d'actualité)",
     ),
+    ("quotes.read", "Consulter les devis édités par les artisans"),
+    ("prix.read", "Consulter la grille de prix de référence des devis"),
+    (
+        "prix.write",
+        "Créer, modifier, désactiver ou supprimer un prix de référence des devis",
+    ),
 ]
 
 # Rôles pré-configurés et les codes de permission qui leur sont accordés.

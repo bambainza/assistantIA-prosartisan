@@ -15,6 +15,7 @@ from __future__ import annotations
 
 import asyncio
 import copy
+import hashlib
 import json
 import logging
 import os
@@ -77,6 +78,10 @@ _INACTIVE_METIERS_KEY = "prosartisan:rag_config:inactive_metiers"
 _CONFIG_VERSION_KEY = "prosartisan:rag_config:version"
 _CONFIG_VERSION_TTL_SECONDS = 30 * 86400
 
+# Usage d'un vecteur : document indexé ou question de recherche.
+TACHE_DOCUMENT = "document"
+TACHE_REQUETE = "requete"
+
 # Taille des lots d'embeddings (≈ 16 × 450 mots, sous la limite de tokens
 # d'une requête `mistral-embed`).
 EMBEDDING_BATCH_SIZE = 16
@@ -105,14 +110,40 @@ def load_system_prompt() -> str:
     )
 
 
+MOCK_REPLY_NOTICE = (
+    "[Mode démonstration : aucune IA n'est configurée sur ce serveur. "
+    "Cette réponse générique n'est pas issue des documents techniques.]"
+)
+
+
 def _mock_reply(metier_id: int | None) -> str:
+    """Réponse de démonstration (dev/tests sans clé IA), jamais mise en cache.
+
+    Impossible en production : le démarrage y exige au moins une clé IA
+    (`Settings._verifier_secrets_production`).
+    """
     return (
         "Points clés techniques pour votre intervention :\n"
         "1. Vérifiez la planéité et le niveau de la surface.\n"
         "2. Respectez le dosage approprié (350 kg/m³ pour le mortier de pose).\n"
         "3. Appliquez les consignes de sécurité sur le chantier.\n\n"
-        f"(Réponse basée sur les documents métier {metier_id if metier_id else 'général'})"
+        f"{MOCK_REPLY_NOTICE}"
     )
+
+
+# Reformulation de la requête de recherche (questions en nouchi, dioula,
+# baoulé, bété) : mise en cache par question pour ne payer l'appel qu'une fois.
+_REFORMULATION_CACHE_PREFIX = "prosartisan:rag:reformulation:"
+_REFORMULATION_TTL_SECONDS = 7 * 86400
+_REFORMULATION_MAX_CHARS = 300
+REFORMULATION_PROMPT = (
+    "Tu prépares une recherche documentaire pour des artisans de Côte d'Ivoire. "
+    "La question peut être écrite en français, en nouchi (argot ivoirien), en "
+    "dioula, en baoulé ou en bété, ou mélanger ces langues. Réécris-la en une "
+    "seule requête de recherche en français technique standard (termes du "
+    "métier, sans argot). N'ajoute aucune information absente de la question, "
+    "ne réponds pas à la question. Renvoie uniquement la requête, sur une ligne."
+)
 
 
 def _parse_arguments(arguments: Any) -> dict[str, Any]:
@@ -161,32 +192,51 @@ class RAGService:
 
     @staticmethod
     def _is_embedding_mock_mode() -> bool:
-        """Mode mock pour les embeddings (mistral-embed)."""
-        return not llm_provider_service.is_provider_configured(PROVIDER_MISTRAL)
+        """Vrai si le fournisseur de vecteurs actif (`EMBEDDING_PROVIDER`) n'a pas de clé valide."""
+        return not llm_provider_service.is_provider_configured(
+            settings.embedding_provider
+        )
 
     async def ensure_collection(self) -> None:
-        """Crée la collection Qdrant si elle n'existe pas encore (idempotent).
+        """Crée la collection Qdrant du modèle de vecteurs actif si elle manque.
 
         Sans cette étape, `/api/chat` en mode réel ne trouve jamais de contexte
         tant que personne n'a lancé l'ingestion manuellement : le RAG répondrait
-        alors depuis les seules connaissances générales du LLM.
+        alors depuis les seules connaissances générales du LLM. Une collection
+        existante d'une autre dimension est signalée (journal d'erreur) : elle
+        appartient à un autre modèle et doit être réindexée.
         """
+        collection = settings.collection_vectorielle
+        taille = settings.embedding_dimensions
         try:
-            exists = await self.qdrant_client.collection_exists(
-                settings.qdrant_collection
-            )
-            if exists:
+            if await self.qdrant_client.collection_exists(collection):
+                info = await self.qdrant_client.get_collection(collection)
+                taille_existante = getattr(
+                    getattr(getattr(info, "config", None), "params", None),
+                    "vectors",
+                    None,
+                )
+                taille_existante = getattr(taille_existante, "size", None)
+                if isinstance(taille_existante, int) and taille_existante != taille:
+                    logger.error(
+                        "La collection Qdrant '%s' contient des vecteurs de dimension "
+                        "%d, mais le modèle actif (%s) produit %d dimensions : "
+                        "réindexer le corpus avec `python -m ingestion.pipeline`.",
+                        collection,
+                        taille_existante,
+                        settings.espace_embeddings,
+                        taille,
+                    )
                 return
             await self.qdrant_client.create_collection(
-                collection_name=settings.qdrant_collection,
-                vectors_config=VectorParams(
-                    size=settings.qdrant_vector_size, distance=Distance.COSINE
-                ),
+                collection_name=collection,
+                vectors_config=VectorParams(size=taille, distance=Distance.COSINE),
             )
             logger.info(
-                "Collection Qdrant '%s' créée (taille=%d).",
-                settings.qdrant_collection,
-                settings.qdrant_vector_size,
+                "Collection Qdrant '%s' créée (taille=%d, modèle %s).",
+                collection,
+                taille,
+                settings.espace_embeddings,
             )
         except Exception as exc:
             logger.warning(
@@ -194,25 +244,41 @@ class RAGService:
                 "(%s). Tant que la recherche reste impossible, les questions "
                 "reçoivent une erreur 503 et sont rendues (repli standard en "
                 "mode mock uniquement).",
-                settings.qdrant_collection,
+                collection,
                 exc,
             )
 
     # ── Embeddings ──
 
-    async def get_embedding(self, text: str) -> list[float]:
-        """Génère un embedding vectoriel pour un texte donné avec mise en cache."""
-        return (await self.get_embeddings([text]))[0]
+    async def get_embedding(self, text: str, tache: str = TACHE_REQUETE) -> list[float]:
+        """Vecteur d'un texte (par défaut une question de recherche), avec cache."""
+        return (await self.get_embeddings([text], tache=tache))[0]
 
-    async def get_embeddings(self, texts: list[str]) -> list[list[float]]:
-        """Génère les embeddings d'une liste de textes, par lots, avec mise en cache.
+    async def get_embeddings(
+        self, texts: list[str], tache: str = TACHE_DOCUMENT
+    ) -> list[list[float]]:
+        """Vecteurs d'une liste de textes, par lots, avec mise en cache.
 
-        Seuls les textes absents du cache sont envoyés à `mistral-embed`, par
-        lots de `EMBEDDING_BATCH_SIZE` (un appel HTTP par lot au lieu d'un par
-        chunk lors de l'ingestion).
+        Fournisseur : `EMBEDDING_PROVIDER` (`gemini-embedding-001` par défaut,
+        ou `mistral-embed`). `tache` distingue les documents indexés
+        (`TACHE_DOCUMENT`, défaut, ingestion) des questions
+        (`TACHE_REQUETE`, recherche) : Gemini les encode différemment. La
+        même fonction sert à l'ingestion et à la recherche (cohérence des
+        vecteurs, AGENTS.md §3). Seuls les textes absents du cache sont
+        envoyés, par lots de `EMBEDDING_BATCH_SIZE`.
         """
+        if tache not in (TACHE_DOCUMENT, TACHE_REQUETE):
+            raise ValueError(f"Tâche de vecteur inconnue : {tache}")
+        gemini = settings.embedding_provider == PROVIDER_GEMINI
+        # Mistral n'a pas de vecteur propre aux questions : même espace pour les deux.
+        espace = (
+            f"{settings.espace_embeddings}:{tache}"
+            if gemini
+            else settings.espace_embeddings
+        )
+
         results: list[list[float] | None] = [
-            await cache_service.get_cached_embedding(t) for t in texts
+            await cache_service.get_cached_embedding(t, espace=espace) for t in texts
         ]
         missing = [i for i, vec in enumerate(results) if vec is None]
 
@@ -220,7 +286,16 @@ class RAGService:
             batch_idx = missing[start : start + EMBEDDING_BATCH_SIZE]
             batch_texts = [texts[i] for i in batch_idx]
             if self._is_embedding_mock_mode():
-                vectors = [[0.0] * settings.qdrant_vector_size for _ in batch_texts]
+                vectors = [[0.0] * settings.embedding_dimensions for _ in batch_texts]
+            elif gemini:
+                vectors = await llm_provider_service.embed_gemini(
+                    batch_texts,
+                    task_type=(
+                        "RETRIEVAL_QUERY"
+                        if tache == TACHE_REQUETE
+                        else "RETRIEVAL_DOCUMENT"
+                    ),
+                )
             else:
                 response = await self.mistral_client.embeddings.create_async(
                     model=settings.embedding_model,
@@ -229,7 +304,7 @@ class RAGService:
                 vectors = [item.embedding for item in response.data]
             for i, vec in zip(batch_idx, vectors, strict=True):
                 results[i] = vec
-                await cache_service.cache_embedding(texts[i], vec)
+                await cache_service.cache_embedding(texts[i], vec, espace=espace)
 
         return [vec for vec in results if vec is not None]
 
@@ -340,7 +415,7 @@ class RAGService:
         elle ne doit jamais être confondue avec une absence d'information.
         """
         try:
-            vector = await self.get_embedding(query)
+            vector = await self.get_embedding(query, tache=TACHE_REQUETE)
             query_filter = None
             if metier_id is not None:
                 query_filter = Filter(
@@ -353,7 +428,7 @@ class RAGService:
                 )
 
             response = await self.qdrant_client.query_points(
-                collection_name=settings.qdrant_collection,
+                collection_name=settings.collection_vectorielle,
                 query=vector,
                 query_filter=query_filter,
                 limit=top_k,
@@ -444,7 +519,7 @@ class RAGService:
             return []
 
         points, _ = await self.qdrant_client.scroll(
-            collection_name=settings.qdrant_collection,
+            collection_name=settings.collection_vectorielle,
             scroll_filter=query_filter,
             limit=500,
             with_payload=True,
@@ -465,7 +540,11 @@ class RAGService:
             if not overlap:
                 continue
             score = len(overlap) / max(1, len(query_tokens))
-            if score >= settings.rag_min_score:
+            # Un seul mot commun sur une question longue ne prouve rien : il
+            # faut à la fois une part suffisante des mots-clés et un minimum
+            # de mots communs (borné par la taille de la question).
+            min_overlap = min(settings.rag_lexical_min_overlap, len(query_tokens))
+            if score >= settings.rag_lexical_min_score and len(overlap) >= min_overlap:
                 scored.append(
                     {
                         "content": text,
@@ -476,6 +555,85 @@ class RAGService:
 
         scored.sort(key=lambda item: float(item["score"]), reverse=True)
         return scored[:top_k]
+
+    # ── Reformulation multilingue de la requête de recherche ──
+
+    async def reformuler_requete(self, question: str) -> str | None:
+        """Réécrit la question en français technique pour la recherche seule.
+
+        Le LLM reçoit toujours la question d'origine ; seule la recherche
+        vectorielle profite de la reformulation. Retourne `None` si la
+        reformulation est désactivée, en mode mock, identique à la question ou
+        impossible (un échec du fournisseur n'est pas une panne de recherche :
+        la question d'origine reste cherchée).
+        """
+        if not settings.rag_reformulation_requete or self._is_mock_mode():
+            return None
+
+        cle = (
+            _REFORMULATION_CACHE_PREFIX
+            + hashlib.sha256(question.strip().lower().encode("utf-8")).hexdigest()
+        )
+        try:
+            cached = await cache_service.get(cle)
+        except Exception:
+            cached = None
+        if cached is not None:
+            return cached or None
+
+        try:
+            brut = await llm_provider_service.complete_text_with_failover(
+                messages=[
+                    {"role": "system", "content": REFORMULATION_PROMPT},
+                    {"role": "user", "content": question},
+                ],
+                mistral_client=self.mistral_client,
+                temperature=0.0,
+            )
+        except Exception as exc:
+            logger.warning("Reformulation de la requête impossible (%s).", exc)
+            return None
+
+        reformulee = " ".join(brut.split())[:_REFORMULATION_MAX_CHARS].strip(" \"'")
+        if not reformulee or reformulee.lower() == question.strip().lower():
+            reformulee = ""
+        try:
+            await cache_service.set(
+                cle, reformulee, ttl_seconds=_REFORMULATION_TTL_SECONDS
+            )
+        except Exception as exc:
+            logger.warning("Mise en cache de la reformulation impossible (%s).", exc)
+        return reformulee or None
+
+    async def _rechercher(
+        self, question: str, metier_id: int | None, top_k: int = 4
+    ) -> list[dict[str, Any]]:
+        """Cherche la question d'origine et, si utile, sa reformulation française.
+
+        Les extraits des deux recherches sont fusionnés (meilleur score par
+        extrait) : une reformulation maladroite ne peut pas masquer un extrait
+        trouvé par la question d'origine. Chaque recherche applique le même
+        seuil `RAG_MIN_SCORE`.
+        """
+        docs = await self.search_context(query=question, metier_id=metier_id)
+        reformulee = await self.reformuler_requete(question)
+        if not reformulee:
+            return docs
+
+        docs_reformulee = await self.search_context(
+            query=reformulee, metier_id=metier_id
+        )
+        fusion: dict[str, dict[str, Any]] = {}
+        for doc in [*docs, *docs_reformulee]:
+            cle = str(doc.get("content", ""))
+            courant = fusion.get(cle)
+            if courant is None or float(doc.get("score", 0)) > float(
+                courant.get("score", 0)
+            ):
+                fusion[cle] = doc
+        return sorted(
+            fusion.values(), key=lambda d: float(d.get("score", 0)), reverse=True
+        )[:top_k]
 
     # ── Préparation commune ──
 
@@ -544,7 +702,7 @@ class RAGService:
                 )
 
         try:
-            docs = await self.search_context(query=question, metier_id=metier_id)
+            docs = await self._rechercher(question, metier_id)
         except RechercheIndisponibleError as exc:
             # Mode réel : la panne remonte au routeur (503 + question rendue).
             # Répondre « pas d'information » serait faux, et le mettre en cache
@@ -720,9 +878,9 @@ class RAGService:
             return {"reponse": prep.immediate, "sources": prep.sources}
 
         if self._is_mock_mode():
-            answer = _mock_reply(metier_id)
-            await self._cache_if_needed(prep, question, metier_id, answer)
-            return {"reponse": answer, "sources": prep.sources}
+            # Réponse de démonstration : jamais mise en cache (elle survivrait
+            # à la configuration d'une vraie clé IA).
+            return {"reponse": _mock_reply(metier_id), "sources": prep.sources}
 
         candidates = await llm_provider_service.get_candidate_providers()
         if not candidates:
@@ -795,10 +953,9 @@ class RAGService:
                 return
 
             if self._is_mock_mode():
-                answer = _mock_reply(metier_id)
-                async for chunk in _stream_words(answer, 0.04):
+                # Démonstration sans clé IA : jamais mise en cache.
+                async for chunk in _stream_words(_mock_reply(metier_id), 0.04):
                     yield chunk
-                await self._cache_if_needed(prep, question, metier_id, answer)
                 return
 
             candidates = await llm_provider_service.get_candidate_providers()

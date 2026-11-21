@@ -77,6 +77,11 @@ services:
           property: port
       - key: MISTRAL_API_KEY
         sync: false
+      # Gemini : LLM prioritaire et vecteurs de la recherche documentaire.
+      - key: GEMINI_API_KEY
+        sync: false
+      - key: EMBEDDING_PROVIDER
+        value: gemini
 
   - type: redis
     name: prosartisan-redis

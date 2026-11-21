@@ -28,7 +28,7 @@ from qdrant_client.http.models import (
 )
 
 from app.config import settings
-from app.services.rag_service import rag_service
+from app.services.rag_service import TACHE_DOCUMENT, rag_service
 
 logger = logging.getLogger(__name__)
 
@@ -319,8 +319,16 @@ async def run_ingestion(
             continue
 
         # Vérification d'incrémentalité : ignorer si déjà indexé sans modification
+        # DANS LA COLLECTION ACTIVE. Une entrée sans collection date d'avant les
+        # collections par modèle : elle vaut pour la collection historique.
         prev_entry = manifest.get(filename)
-        if not force_reindex and prev_entry and prev_entry.get("sha256") == file_sha:
+        deja_indexe = (
+            prev_entry is not None
+            and prev_entry.get("sha256") == file_sha
+            and prev_entry.get("collection", settings.qdrant_collection)
+            == settings.collection_vectorielle
+        )
+        if not force_reindex and deja_indexe:
             logger.info("Fichier inchangé, saut de l'ingestion : %s", filename)
             skipped_files += 1
             continue
@@ -338,7 +346,7 @@ async def run_ingestion(
 
         # Embeddings calculés par lots (un appel par lot au lieu d'un par chunk).
         try:
-            vectors = await rag_service.get_embeddings(chunks)
+            vectors = await rag_service.get_embeddings(chunks, tache=TACHE_DOCUMENT)
         except Exception as exc:
             erreurs.append(f"{filename} : échec de génération d'embedding ({exc}).")
             continue
@@ -362,7 +370,7 @@ async def run_ingestion(
             batch = points[i : i + batch_size]
             try:
                 await rag_service.qdrant_client.upsert(
-                    collection_name=settings.qdrant_collection,
+                    collection_name=settings.collection_vectorielle,
                     points=batch,
                 )
             except Exception as exc:
@@ -380,7 +388,7 @@ async def run_ingestion(
         # si la nouvelle indexation échoue en cours de route.
         try:
             await rag_service.qdrant_client.delete(
-                collection_name=settings.qdrant_collection,
+                collection_name=settings.collection_vectorielle,
                 points_selector=FilterSelector(
                     filter=Filter(
                         must=[
@@ -402,6 +410,8 @@ async def run_ingestion(
         # Mise à jour du manifeste
         manifest[filename] = {
             "sha256": file_sha,
+            "collection": settings.collection_vectorielle,
+            "modele_vecteurs": settings.espace_embeddings,
             "chunks_count": len(chunks),
             "last_ingested_at": datetime.now(UTC).isoformat(),
             "metadata": meta,

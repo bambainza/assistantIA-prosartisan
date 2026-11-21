@@ -109,7 +109,9 @@ async def test_admin_get_calculators_stats_endpoint(admin_user):
             data = res.json()
             assert "total_calculator_calls" in data
             assert "by_tool" in data
-            assert "calculer_dosage_beton_mortier" in data["by_tool"]
-            assert data["available_tools"] == 5
+            # Noms réels des outils, ceux qu'incrémente /api/chat/calculate
+            assert "calculer_dosage_beton" in data["by_tool"]
+            assert "calculer_agglos_mur" in data["by_tool"]
+            assert data["available_tools"] == 7
     finally:
         app.dependency_overrides.pop(get_db, None)

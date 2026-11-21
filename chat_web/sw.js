@@ -6,7 +6,7 @@
 // mises en cache ici : une réponse technique périmée servie hors-ligne
 // serait pire qu'une absence de réponse.
 
-const CACHE_NAME = 'prosartisan-shell-v3';
+const CACHE_NAME = 'prosartisan-shell-v4';
 const SHELL_ASSETS = [
   '/chat/',
   '/chat/styles.css',

@@ -76,7 +76,7 @@ async def get_admin_overview(
             port=settings.qdrant_port,
         )
         info = await qdrant_client.get_collection(
-            collection_name=settings.qdrant_collection
+            collection_name=settings.collection_vectorielle
         )
         total_chunks = info.points_count
     except Exception:
