@@ -639,6 +639,54 @@ def test_production_live_exige_les_identifiants_operateurs():
         "WAVE_WEBHOOK_SECRET",
         "ORANGE_CLIENT_ID",
         "ORANGE_MERCHANT_KEY",
+        "CINETPAY_API_KEY",
+        "CINETPAY_API_PASSWORD",
         "PUBLIC_BASE_URL",
     ):
         assert variable in message
+
+
+def _settings_production_live(**surcharges):
+    from app.config import Settings
+
+    valeurs = {
+        "app_env": "production",
+        "app_debug": False,
+        "app_secret_key": "s" * 32,
+        "jwt_secret_key": "j" * 32,
+        "mobile_money_secret_key": "m" * 32,
+        "db_password": "p" * 16,
+        "vapid_private_key": "v" * 32,
+        "cors_allowed_origins": "https://prosartisan.ci",
+        "mistral_api_key": "mk_" + "a" * 32,
+        "payment_mode": "live",
+        "public_base_url": "https://prosartisan.ci",
+        "wave_api_key": "wave_sk_" + "w" * 32,
+        "wave_webhook_secret": "whsec_" + "x" * 32,
+        "orange_client_id": "oid",
+        "orange_client_secret": "osecret",
+        "orange_merchant_key": "mkey",
+        "cinetpay_api_key": "cp_key",
+        "cinetpay_api_password": "cp_password",
+    }
+    valeurs.update(surcharges)
+    return Settings(**valeurs)
+
+
+def test_production_live_complete_demarre():
+    settings_live = _settings_production_live()
+    assert settings_live.payment_demo_mode is False
+
+
+@pytest.mark.parametrize(
+    ("champ", "variable"),
+    [
+        ("cinetpay_api_key", "CINETPAY_API_KEY"),
+        ("cinetpay_api_password", "CINETPAY_API_PASSWORD"),
+    ],
+)
+def test_production_live_refuse_identifiants_cinetpay_manquants(champ, variable):
+    with pytest.raises(ValueError) as exc:
+        _settings_production_live(**{champ: ""})
+
+    assert variable in str(exc.value)

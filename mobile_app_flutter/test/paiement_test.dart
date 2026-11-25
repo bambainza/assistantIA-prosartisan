@@ -85,6 +85,32 @@ void main() {
     expect(find.text('Continuer'), findsOneWidget);
   });
 
+  testWidgets('Paywall : CinetPay proposé en premier (moyen par défaut)', (tester) async {
+    final demandes = <List<String>>[];
+    await _ouvrirPaywall(
+      tester,
+      startPayment: (typePass, operateur) async {
+        demandes.add([typePass, operateur]);
+        return {'error': 'Paiement momentanément indisponible.'};
+      },
+      checkPayment: (_) async => null,
+      openUrl: (_) async => true,
+    );
+
+    final boutons = tester
+        .widgetList<ElevatedButton>(find.byType(ElevatedButton))
+        .map((b) => ((b.child as Text).data))
+        .toList();
+    expect(boutons.first, 'Payer avec CinetPay');
+
+    await tester.tap(find.text('Payer avec CinetPay'));
+    await tester.pump();
+
+    expect(demandes, [
+      ['pass_24h', 'CINETPAY'],
+    ]);
+  });
+
   testWidgets('Paywall : erreur serveur affichée, aucune page ouverte', (tester) async {
     final urlsOuvertes = <Uri>[];
     await _ouvrirPaywall(

@@ -175,6 +175,9 @@ class _PaywallDialogState extends State<PaywallDialog> {
               ),
             ),
             const SizedBox(height: 8),
+            // CinetPay : moyen de paiement par défaut, proposé en premier.
+            _boutonOperateur('CINETPAY', 'Payer avec CinetPay', const Color(0xFF2E7D32)),
+            const SizedBox(height: 10),
             _boutonOperateur('WAVE', 'Payer avec Wave', const Color(0xFF1E90FF)),
             const SizedBox(height: 10),
             _boutonOperateur('ORANGE', 'Payer avec Orange Money', const Color(0xFFFF4500)),

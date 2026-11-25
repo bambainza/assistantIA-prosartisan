@@ -35,7 +35,11 @@ from app.models.quota import QuotaUtilisateur
 from app.models.transaction import TransactionMobileMoney
 from app.models.user import User
 from app.services.parametres_service import parametres_service
-from app.services.payment_providers import OPERATEURS, get_provider
+from app.services.payment_providers import (
+    OPERATEUR_PAR_DEFAUT,
+    OPERATEURS,
+    get_provider,
+)
 from app.services.payment_providers.base import (
     CheckoutRequest,
     EtatPaiement,
@@ -116,7 +120,7 @@ class PaymentService:
         db: AsyncSession,
         user_id: uuid.UUID,
         type_pass: str,
-        operateur: str = "WAVE",
+        operateur: str = OPERATEUR_PAR_DEFAUT,
     ) -> dict[str, Any]:
         """Enregistre la transaction puis crée le paiement chez l'opérateur."""
         if type_pass not in TARIFS_PASS:

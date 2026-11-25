@@ -367,6 +367,11 @@ class Settings(BaseSettings):
                 ("ORANGE_CLIENT_ID", self.orange_client_id),
                 ("ORANGE_CLIENT_SECRET", self.orange_client_secret),
                 ("ORANGE_MERCHANT_KEY", self.orange_merchant_key),
+                # CinetPay est proposé aux artisans (actif par défaut dans le
+                # back-office) : sans identifiants, chaque paiement échouerait
+                # à l'authentification opérateur au lieu d'un refus au démarrage.
+                ("CINETPAY_API_KEY", self.cinetpay_api_key),
+                ("CINETPAY_API_PASSWORD", self.cinetpay_api_password),
             ):
                 if not valeur:
                     erreurs.append(nom)

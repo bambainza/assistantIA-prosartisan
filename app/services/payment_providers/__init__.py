@@ -15,6 +15,16 @@ from app.services.payment_providers.wave import WaveLiveProvider
 
 OPERATEURS = ("WAVE", "ORANGE", "CINETPAY")
 
+# Moyen de paiement proposé en premier aux artisans (et retenu quand une
+# requête `/api/payment/init` ne précise pas d'opérateur).
+OPERATEUR_PAR_DEFAUT = "CINETPAY"
+
+
+def ordonner_operateurs(codes: list[str]) -> list[str]:
+    """Place l'opérateur par défaut en tête, sans changer l'ordre des autres."""
+    return sorted(codes, key=lambda code: code != OPERATEUR_PAR_DEFAUT)
+
+
 _LIVE: dict[str, PaymentProvider] = {
     "WAVE": WaveLiveProvider(),
     "ORANGE": OrangeMoneyLiveProvider(),

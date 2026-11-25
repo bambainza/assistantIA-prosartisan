@@ -29,6 +29,7 @@ En production (`APP_ENV=production`), l'application refuse de démarrer si les v
 | `PUBLIC_BASE_URL` | URL publique de l'API (retours et notifications opérateurs) | `https://prosartisan.ci` |
 | `WAVE_API_KEY` / `WAVE_WEBHOOK_SECRET` | Clé API Wave Checkout / secret de signature des webhooks (URL à déclarer : `/api/payment/webhooks/wave`) | requis en `live` |
 | `ORANGE_CLIENT_ID` / `ORANGE_CLIENT_SECRET` / `ORANGE_MERCHANT_KEY` | Identifiants Orange Money WebPay | requis en `live` |
+| `CINETPAY_API_KEY` / `CINETPAY_API_PASSWORD` | Identifiants CinetPay v1 (URL de notification : `/api/payment/webhooks/cinetpay`) | requis en `live` (refus de démarrer sinon) |
 | `ORANGE_WEBPAY_PATH` / `ORANGE_CURRENCY` | Bac à sable ou production Côte d'Ivoire | `/orange-money-webpay/ci/v1` + `XOF` en production |
 | `UPLOAD_DIR` | Dossier des photos de chantier et PDF téléversés — **doit être persistant** | `/app/uploads` (volume `prod_uploads` en Docker Compose ; disque persistant Render ou volume Cloud Storage FUSE sur Cloud Run) |
 | `TRUSTED_PROXY_HOPS` | Nombre de reverse proxies de confiance (IP client lue dans `X-Forwarded-For` depuis la droite) | `1` (Caddy, Render, Cloud Run direct) ; `2` derrière un Load Balancer GCP |
