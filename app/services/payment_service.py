@@ -257,7 +257,15 @@ class PaymentService:
                 "message": "Paiement déjà traité (webhook idempotent)",
                 "user_id": str(txn.user_id),
             }
-        if txn.statut_paiement in STATUTS_FINAUX:
+        # EXPIRED est une clôture locale (« on a cessé d'attendre »), pas un
+        # refus de l'opérateur : un succès confirmé ensuite par l'opérateur
+        # (ex. CinetPay, dont EXPIRED/OTP_EXPIRED ne sont pas finaux) a débité
+        # l'artisan et doit être crédité. FAILED et REFUNDED restent définitifs.
+        succes_tardif = (
+            txn.statut_paiement == StatutOperateur.EXPIRE.value
+            and etat.statut is StatutOperateur.SUCCES
+        )
+        if txn.statut_paiement in STATUTS_FINAUX and not succes_tardif:
             return {"status": "ignored", "message": "Transaction déjà clôturée"}
 
         if etat.statut is StatutOperateur.SUCCES:
@@ -272,6 +280,11 @@ class PaymentService:
                     "status": "montant_invalide",
                     "message": "Montant du paiement absent ou non conforme à la transaction",
                 }
+            if succes_tardif:
+                logger.warning(
+                    "Paiement %s confirmé après sa clôture locale (EXPIRED) : crédité.",
+                    txn.reference_externe,
+                )
             txn.statut_paiement = STATUT_ABOUTI
             txn.provider_transaction_id = etat.transaction_id
             await self._crediter(db, txn)
@@ -439,10 +452,16 @@ class PaymentService:
     async def reconcile_pending(
         self, db: AsyncSession, older_than_minutes: int = 15, limit: int = 100
     ) -> dict[str, int]:
-        """Interroge l'opérateur pour les paiements restés `PENDING` (notification perdue)."""
-        seuil = datetime.now(UTC).replace(tzinfo=None) - timedelta(
-            minutes=older_than_minutes
-        )
+        """Interroge l'opérateur pour les paiements restés `PENDING` (notification perdue).
+
+        Un paiement que l'opérateur dit toujours en attente au-delà de
+        `PAYMENT_PENDING_MAX_HOURS` est clôturé localement (`EXPIRED`), pour ne
+        pas être interrogé indéfiniment. Une erreur de l'opérateur ne clôt
+        jamais une transaction : elle sera réessayée au passage suivant.
+        """
+        maintenant = datetime.now(UTC).replace(tzinfo=None)
+        seuil = maintenant - timedelta(minutes=older_than_minutes)
+        limite_suivi = maintenant - timedelta(hours=settings.payment_pending_max_hours)
         res = await db.execute(
             select(TransactionMobileMoney)
             .where(
@@ -466,6 +485,20 @@ class PaymentService:
             if resultat["status"] == "success":
                 stats["creditees"] += 1
             elif resultat["status"] == "declined":
+                stats["cloturees"] += 1
+            elif (
+                resultat["status"] == "pending"
+                and txn.created_at is not None
+                and txn.created_at <= limite_suivi
+            ):
+                logger.warning(
+                    "Paiement %s (%s) toujours en attente après %s h : clôturé (EXPIRED).",
+                    txn.reference_externe,
+                    txn.operateur,
+                    settings.payment_pending_max_hours,
+                )
+                txn.statut_paiement = StatutOperateur.EXPIRE.value
+                await db.commit()
                 stats["cloturees"] += 1
         return stats
 

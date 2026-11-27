@@ -246,6 +246,10 @@ class Settings(BaseSettings):
     public_base_url: str = "http://localhost:8000"
     # Fenêtre anti-rejeu des webhooks signés (écart max. horodatage / horloge).
     payment_webhook_tolerance_seconds: int = 300
+    # Durée maximale de suivi d'un paiement en attente : au-delà, la
+    # réconciliation le clôt localement (EXPIRED) si l'opérateur le dit
+    # toujours en attente. Un succès confirmé ensuite reste crédité.
+    payment_pending_max_hours: int = Field(default=24, ge=1)
 
     # Wave Checkout API (https://docs.wave.com/checkout)
     wave_api_base: str = "https://api.wave.com"

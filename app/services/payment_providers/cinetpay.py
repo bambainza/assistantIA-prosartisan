@@ -46,12 +46,18 @@ from app.services.payment_providers.base import (
 
 _TIMEOUT = httpx.Timeout(15.0, connect=5.0)
 
+# Seuls SUCCESS (100), FAILED (2010) et INSUFFICIENT_BALANCE (2005) sont des
+# statuts finaux selon la documentation CinetPay v1 (« Codes de statut »).
+# EXPIRED (2003) et OTP_EXPIRED (2008) ne le sont pas : le paiement peut encore
+# aboutir, la transaction reste donc en attente. La réconciliation la clôt
+# localement après PAYMENT_PENDING_MAX_HOURS, et un succès confirmé plus tard
+# est tout de même crédité (voir PaymentService._appliquer_etat).
 _STATUTS_PAR_CHAINE = {
     "SUCCESS": StatutOperateur.SUCCES,
     "FAILED": StatutOperateur.ECHEC,
     "INSUFFICIENT_BALANCE": StatutOperateur.ECHEC,
-    "EXPIRED": StatutOperateur.EXPIRE,
-    "OTP_EXPIRED": StatutOperateur.EXPIRE,
+    "EXPIRED": StatutOperateur.EN_ATTENTE,
+    "OTP_EXPIRED": StatutOperateur.EN_ATTENTE,
     "INITIATED": StatutOperateur.EN_ATTENTE,
     "PENDING": StatutOperateur.EN_ATTENTE,
     "WAITING": StatutOperateur.EN_ATTENTE,
@@ -61,9 +67,9 @@ _STATUTS_PAR_CODE = {
     100: StatutOperateur.SUCCES,
     2001: StatutOperateur.EN_ATTENTE,
     2002: StatutOperateur.EN_ATTENTE,
-    2003: StatutOperateur.EXPIRE,
+    2003: StatutOperateur.EN_ATTENTE,
     2005: StatutOperateur.ECHEC,
-    2008: StatutOperateur.EXPIRE,
+    2008: StatutOperateur.EN_ATTENTE,
     2010: StatutOperateur.ECHEC,
 }
 

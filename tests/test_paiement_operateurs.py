@@ -700,6 +700,103 @@ async def test_client_cinetpay_ip_non_autorisee_erreur_explicite(monkeypatch):
     assert "2011 NOT_ALLOWED" in str(exc.value)
 
 
+@pytest.mark.parametrize(
+    ("statut", "code", "attendu"),
+    [
+        ("EXPIRED", 2003, StatutOperateur.EN_ATTENTE),
+        ("OTP_EXPIRED", 2008, StatutOperateur.EN_ATTENTE),
+        ("EXPIRED", None, StatutOperateur.EN_ATTENTE),
+        ("OTP_EXPIRED", None, StatutOperateur.EN_ATTENTE),
+        ("SUCCESS", 100, StatutOperateur.SUCCES),
+        ("FAILED", 2010, StatutOperateur.ECHEC),
+        ("INSUFFICIENT_BALANCE", 2005, StatutOperateur.ECHEC),
+    ],
+)
+def test_cinetpay_seuls_les_statuts_finaux_de_la_documentation_cloturent(
+    statut, code, attendu
+):
+    """EXPIRED (2003) et OTP_EXPIRED (2008) ne sont pas finaux selon CinetPay v1."""
+    assert cinetpay.statut_cinetpay(statut, code) is attendu
+
+
+@pytest.mark.asyncio
+async def test_cinetpay_succes_confirme_apres_cloture_locale_est_credite():
+    """L'artisan a payé après la clôture locale (EXPIRED) : le Pass est crédité."""
+    _, txn = await _initier("CINETPAY", "pass_24h")
+    txn.statut_paiement = "EXPIRED"
+    notification = await demo.decision_du_payeur(txn.provider_session_id, True)
+
+    db = FakeDB(txn, None)
+    resultat = await payment_service.handle_cinetpay_notification(db, notification.body)
+
+    assert resultat["status"] == "success"
+    assert txn.statut_paiement == "ACCEPTED"
+    assert _quota_cree(db).date_fin_premium is not None
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("statut_local", ["EXPIRED", "FAILED", "REFUNDED"])
+async def test_cinetpay_cloture_definitive_sans_succes_confirme(statut_local):
+    """Un échec sur une transaction close, ou un succès sur FAILED/REFUNDED, ne crédite rien."""
+    _, txn = await _initier("CINETPAY", "pass_24h")
+    txn.statut_paiement = statut_local
+    accepte = statut_local != "EXPIRED"
+    notification = await demo.decision_du_payeur(txn.provider_session_id, accepte)
+
+    db = FakeDB(txn, None)
+    resultat = await payment_service.handle_cinetpay_notification(db, notification.body)
+
+    assert resultat["status"] == "ignored"
+    assert txn.statut_paiement == statut_local
+    assert _quota_cree(db) is None
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(
+    ("age_heures", "statut_attendu", "cloturees"),
+    [(25, "EXPIRED", 1), (2, "PENDING", 0)],
+)
+async def test_reconciliation_cloture_apres_la_duree_maximale_de_suivi(
+    monkeypatch, age_heures, statut_attendu, cloturees
+):
+    """Toujours en attente chez l'opérateur : clôture seulement après PAYMENT_PENDING_MAX_HOURS."""
+    from datetime import UTC, datetime, timedelta
+
+    monkeypatch.setattr(settings, "payment_pending_max_hours", 24)
+    _, txn = await _initier("CINETPAY", "pass_24h")  # le payeur n'a encore rien fait
+    txn.created_at = datetime.now(UTC).replace(tzinfo=None) - timedelta(
+        hours=age_heures
+    )
+
+    db = FakeDB([txn], None)
+    stats = await payment_service.reconcile_pending(db, older_than_minutes=0)
+
+    assert stats["verifiees"] == 1 and stats["cloturees"] == cloturees
+    assert txn.statut_paiement == statut_attendu
+
+
+@pytest.mark.asyncio
+async def test_reconciliation_ne_cloture_pas_sur_erreur_operateur(monkeypatch):
+    """Panne ou refus de l'opérateur : jamais de clôture, nouvel essai plus tard."""
+    from datetime import UTC, datetime, timedelta
+
+    from app.services.payment_providers import demo as demo_module
+
+    async def _panne(self, txn):
+        raise PaymentProviderError("CinetPay a refusé la requête : 2011 NOT_ALLOWED")
+
+    monkeypatch.setattr(demo_module.DemoCinetPayProvider, "fetch_status", _panne)
+    _, txn = await _initier("CINETPAY", "pass_24h")
+    txn.created_at = datetime.now(UTC).replace(tzinfo=None) - timedelta(hours=48)
+
+    stats = await payment_service.reconcile_pending(
+        FakeDB([txn], None), older_than_minutes=0
+    )
+
+    assert stats["erreurs"] == 1 and stats["cloturees"] == 0
+    assert txn.statut_paiement == "PENDING"
+
+
 # ── Réconciliation, suivi, configuration ──
 
 
