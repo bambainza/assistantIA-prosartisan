@@ -41,6 +41,10 @@ from app.schemas.payment import (
 )
 from app.services.cache_service import cache_service
 from app.services.parametres_service import parametres_service
+from app.services.payment_providers import (
+    OPERATEUR_PAR_DEFAUT,
+    ordonner_operateurs,
+)
 from app.services.payment_providers.demo import (
     NotificationSimulee,
     charger_session,
@@ -84,10 +88,18 @@ async def get_tarifs(
     db: AsyncSession = Depends(get_db),
 ) -> dict[str, Any]:
     """Retourne la grille tarifaire des Pass et Packs ProsArtisan ainsi que les opérateurs actifs."""
-    operateurs_actifs = await parametres_service.list_active_payment_operators(db)
+    operateurs_actifs = ordonner_operateurs(
+        await parametres_service.list_active_payment_operators(db)
+    )
     return {
         "offres": TARIFS_PASS,
+        # Opérateur par défaut (CinetPay) en tête s'il est activé.
         "operateurs": operateurs_actifs,
+        "operateur_par_defaut": (
+            OPERATEUR_PAR_DEFAUT
+            if OPERATEUR_PAR_DEFAUT in operateurs_actifs
+            else (operateurs_actifs[0] if operateurs_actifs else None)
+        ),
         "mode": "demo" if settings.payment_demo_mode else "live",
         "disponible": payment_service.paiement_disponible() and bool(operateurs_actifs),
     }

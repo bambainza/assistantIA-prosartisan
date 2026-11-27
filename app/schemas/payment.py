@@ -8,7 +8,8 @@ from pydantic import BaseModel
 class PaymentInitRequest(BaseModel):
     # L'utilisateur est déduit du JWT, jamais transmis par le client.
     type_pass: str  # "pass_24h" | "pass_mois" | "pack_50_requetes"
-    operateur: Literal["WAVE", "ORANGE", "CINETPAY"] = "WAVE"
+    # Valeur par défaut = OPERATEUR_PAR_DEFAUT (app/services/payment_providers).
+    operateur: Literal["WAVE", "ORANGE", "CINETPAY"] = "CINETPAY"
 
 
 class PaymentInitResponse(BaseModel):

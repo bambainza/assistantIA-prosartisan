@@ -18,7 +18,11 @@ from app.models.quota import QuotaUtilisateur
 from app.models.transaction import TransactionMobileMoney
 from app.routers import payment as payment_router
 from app.services.payment_providers import cinetpay, demo, orange_money, wave
-from app.services.payment_providers.base import CheckoutRequest, StatutOperateur
+from app.services.payment_providers.base import (
+    CheckoutRequest,
+    PaymentProviderError,
+    StatutOperateur,
+)
 from app.services.payment_service import (
     WebhookNonAuthentifieError,
     payment_service,
@@ -579,6 +583,296 @@ async def test_client_cinetpay_live_format_officiel(monkeypatch):
     )
 
 
+@pytest.mark.asyncio
+async def test_client_cinetpay_renouvelle_un_jeton_expire_refuse_en_422(monkeypatch):
+    """Réponse réelle de l'API v1 à un jeton expiré : HTTP 422 + code 1002."""
+    monkeypatch.setattr(settings, "cinetpay_api_key", "cp_key")
+    monkeypatch.setattr(settings, "cinetpay_api_password", "cp_pwd")
+    jetons_emis = iter(["jeton_expire", "jeton_neuf"])
+    requetes = []
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        requetes.append(request)
+        if request.url.path == "/v1/oauth/login":
+            return httpx.Response(200, json={"access_token": next(jetons_emis)})
+        if request.headers["Authorization"] == "Bearer jeton_expire":
+            return httpx.Response(
+                422,
+                json={
+                    "code": 1002,
+                    "status": "INVALID_TOKEN",
+                    "description": "Token is invalid",
+                },
+            )
+        return httpx.Response(
+            200,
+            json={
+                "code": 100,
+                "status": "SUCCESS",
+                "transaction_id": "cp_tx_1",
+                "amount": 500,
+                "currency": "XOF",
+            },
+        )
+
+    _transport_simule(monkeypatch, cinetpay, handler)
+    etat = await cinetpay.CinetPayLiveProvider().fetch_status(
+        TransactionMobileMoney(reference_externe="REF-9", montant=500)
+    )
+
+    assert [r.url.path for r in requetes] == [
+        "/v1/oauth/login",
+        "/v1/payment/REF-9",
+        "/v1/oauth/login",
+        "/v1/payment/REF-9",
+    ]
+    assert etat.statut is StatutOperateur.SUCCES and etat.montant == 500
+
+
+@pytest.mark.asyncio
+async def test_client_cinetpay_identifiants_refuses_erreur_explicite(monkeypatch):
+    """Réponse réelle à des identifiants invalides : HTTP 422 + code 1005."""
+    monkeypatch.setattr(settings, "cinetpay_api_key", "mauvaise_cle")
+    monkeypatch.setattr(settings, "cinetpay_api_password", "mauvais_mdp")
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        return httpx.Response(
+            422,
+            json={
+                "code": 1005,
+                "status": "INVALID_CREDENTIALS",
+                "description": "The requested service needs credentials, "
+                "but the ones provided were invalid.",
+            },
+        )
+
+    _transport_simule(monkeypatch, cinetpay, handler)
+    with pytest.raises(PaymentProviderError) as exc:
+        await cinetpay.CinetPayLiveProvider().fetch_status(
+            TransactionMobileMoney(reference_externe="REF-10", montant=500)
+        )
+
+    assert "1005 INVALID_CREDENTIALS" in str(exc.value)
+    assert "mauvais_mdp" not in str(exc.value)
+
+
+@pytest.mark.parametrize(
+    ("saisi", "attendu"),
+    [
+        ("0707000000", "+2250707000000"),
+        ("07 07 00 00 00", "+2250707000000"),
+        ("+2250707000000", "+2250707000000"),
+        ("002250707000000", "+2250707000000"),
+        ("2250707000000", "+2250707000000"),
+        ("07070000", None),
+        ("+33612345678", None),
+        (None, None),
+    ],
+)
+def test_cinetpay_telephone_au_format_international(saisi, attendu):
+    assert cinetpay.telephone_international(saisi) == attendu
+
+
+@pytest.mark.asyncio
+async def test_client_cinetpay_ip_non_autorisee_erreur_explicite(monkeypatch):
+    """Code 2011 NOT_ALLOWED en HTTP 200 : erreur, jamais « paiement en attente »."""
+    monkeypatch.setattr(settings, "cinetpay_api_key", "cp_key")
+    monkeypatch.setattr(settings, "cinetpay_api_password", "cp_pwd")
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        if request.url.path == "/v1/oauth/login":
+            return httpx.Response(200, json={"access_token": "tok"})
+        return httpx.Response(
+            200,
+            json={
+                "code": 2011,
+                "status": "NOT_ALLOWED",
+                "message": "Cette IP n'est pas en liste blanche",
+            },
+        )
+
+    _transport_simule(monkeypatch, cinetpay, handler)
+    with pytest.raises(PaymentProviderError) as exc:
+        await cinetpay.CinetPayLiveProvider().fetch_status(
+            TransactionMobileMoney(reference_externe="REF-11", montant=500)
+        )
+
+    assert "2011 NOT_ALLOWED" in str(exc.value)
+
+
+@pytest.mark.parametrize(
+    ("statut", "code", "attendu"),
+    [
+        ("EXPIRED", 2003, StatutOperateur.EN_ATTENTE),
+        ("OTP_EXPIRED", 2008, StatutOperateur.EN_ATTENTE),
+        ("EXPIRED", None, StatutOperateur.EN_ATTENTE),
+        ("OTP_EXPIRED", None, StatutOperateur.EN_ATTENTE),
+        ("SUCCESS", 100, StatutOperateur.SUCCES),
+        ("FAILED", 2010, StatutOperateur.ECHEC),
+        ("INSUFFICIENT_BALANCE", 2005, StatutOperateur.ECHEC),
+    ],
+)
+def test_cinetpay_seuls_les_statuts_finaux_de_la_documentation_cloturent(
+    statut, code, attendu
+):
+    """EXPIRED (2003) et OTP_EXPIRED (2008) ne sont pas finaux selon CinetPay v1."""
+    assert cinetpay.statut_cinetpay(statut, code) is attendu
+
+
+@pytest.mark.asyncio
+async def test_cinetpay_succes_confirme_apres_cloture_locale_est_credite():
+    """L'artisan a payé après la clôture locale (EXPIRED) : le Pass est crédité."""
+    _, txn = await _initier("CINETPAY", "pass_24h")
+    txn.statut_paiement = "EXPIRED"
+    notification = await demo.decision_du_payeur(txn.provider_session_id, True)
+
+    db = FakeDB(txn, None)
+    resultat = await payment_service.handle_cinetpay_notification(db, notification.body)
+
+    assert resultat["status"] == "success"
+    assert txn.statut_paiement == "ACCEPTED"
+    assert _quota_cree(db).date_fin_premium is not None
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("statut_local", ["EXPIRED", "FAILED", "REFUNDED"])
+async def test_cinetpay_cloture_definitive_sans_succes_confirme(statut_local):
+    """Un échec sur une transaction close, ou un succès sur FAILED/REFUNDED, ne crédite rien."""
+    _, txn = await _initier("CINETPAY", "pass_24h")
+    txn.statut_paiement = statut_local
+    accepte = statut_local != "EXPIRED"
+    notification = await demo.decision_du_payeur(txn.provider_session_id, accepte)
+
+    db = FakeDB(txn, None)
+    resultat = await payment_service.handle_cinetpay_notification(db, notification.body)
+
+    assert resultat["status"] == "ignored"
+    assert txn.statut_paiement == statut_local
+    assert _quota_cree(db) is None
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(
+    ("age_heures", "statut_attendu", "cloturees"),
+    [(25, "EXPIRED", 1), (2, "PENDING", 0)],
+)
+async def test_reconciliation_cloture_apres_la_duree_maximale_de_suivi(
+    monkeypatch, age_heures, statut_attendu, cloturees
+):
+    """Toujours en attente chez l'opérateur : clôture seulement après PAYMENT_PENDING_MAX_HOURS."""
+    from datetime import UTC, datetime, timedelta
+
+    monkeypatch.setattr(settings, "payment_pending_max_hours", 24)
+    _, txn = await _initier("CINETPAY", "pass_24h")  # le payeur n'a encore rien fait
+    txn.created_at = datetime.now(UTC).replace(tzinfo=None) - timedelta(
+        hours=age_heures
+    )
+
+    db = FakeDB([txn], None)
+    stats = await payment_service.reconcile_pending(db, older_than_minutes=0)
+
+    assert stats["verifiees"] == 1 and stats["cloturees"] == cloturees
+    assert txn.statut_paiement == statut_attendu
+
+
+@pytest.mark.asyncio
+async def test_reconciliation_ne_cloture_pas_sur_erreur_operateur(monkeypatch):
+    """Panne ou refus de l'opérateur : jamais de clôture, nouvel essai plus tard."""
+    from datetime import UTC, datetime, timedelta
+
+    from app.services.payment_providers import demo as demo_module
+
+    async def _panne(self, txn):
+        raise PaymentProviderError("CinetPay a refusé la requête : 2011 NOT_ALLOWED")
+
+    monkeypatch.setattr(demo_module.DemoCinetPayProvider, "fetch_status", _panne)
+    _, txn = await _initier("CINETPAY", "pass_24h")
+    txn.created_at = datetime.now(UTC).replace(tzinfo=None) - timedelta(hours=48)
+
+    stats = await payment_service.reconcile_pending(
+        FakeDB([txn], None), older_than_minutes=0
+    )
+
+    assert stats["erreurs"] == 1 and stats["cloturees"] == 0
+    assert txn.statut_paiement == "PENDING"
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(
+    "corps_statut",
+    [
+        {"code": 100, "status": "SUCCESS", "transaction_id": "cp_tx"},
+        {"code": 100, "status": "SUCCESS", "amount": None},
+        {"code": 100, "status": "SUCCESS", "amount": "cinq cents"},
+        {"code": 100, "status": "SUCCESS", "amount": 500, "currency": "XAF"},
+        {"code": 200, "status": "OK", "data": {"status": "SUCCESS", "code": 100}},
+    ],
+)
+async def test_client_cinetpay_montant_non_confirme_jamais_suppose(
+    monkeypatch, corps_statut
+):
+    """Montant absent, illisible ou en autre devise : None, jamais le montant attendu."""
+    monkeypatch.setattr(settings, "cinetpay_api_key", "cp_key")
+    monkeypatch.setattr(settings, "cinetpay_api_password", "cp_pwd")
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        if request.url.path == "/v1/oauth/login":
+            return httpx.Response(200, json={"access_token": "tok"})
+        return httpx.Response(200, json=corps_statut)
+
+    _transport_simule(monkeypatch, cinetpay, handler)
+    etat = await cinetpay.CinetPayLiveProvider().fetch_status(
+        TransactionMobileMoney(reference_externe="REF-12", montant=500)
+    )
+
+    assert etat.statut is StatutOperateur.SUCCES
+    assert etat.montant is None
+
+
+def _succes_sans_montant(monkeypatch):
+    from app.services.payment_providers.base import EtatPaiement
+
+    async def _fetch(self, txn):
+        return EtatPaiement(StatutOperateur.SUCCES, transaction_id="CP1", montant=None)
+
+    monkeypatch.setattr(demo.DemoCinetPayProvider, "fetch_status", _fetch)
+
+
+@pytest.mark.asyncio
+async def test_cinetpay_notification_sans_montant_confirme_non_creditee(monkeypatch):
+    _, txn = await _initier("CINETPAY", "pass_24h")
+    notification = await demo.decision_du_payeur(txn.provider_session_id, True)
+    _succes_sans_montant(monkeypatch)
+
+    db = FakeDB(txn, None)
+    resultat = await payment_service.handle_cinetpay_notification(db, notification.body)
+
+    assert resultat["status"] == "montant_invalide"
+    assert txn.statut_paiement == "PENDING"
+    assert _quota_cree(db) is None
+
+
+@pytest.mark.asyncio
+async def test_reconciliation_signale_le_montant_non_confirme_sans_cloturer(
+    monkeypatch,
+):
+    """Succès sans montant : anomalie, jamais crédité ni clôturé, même après 24 h."""
+    from datetime import UTC, datetime, timedelta
+
+    monkeypatch.setattr(settings, "payment_pending_max_hours", 24)
+    _, txn = await _initier("CINETPAY", "pass_24h")
+    txn.created_at = datetime.now(UTC).replace(tzinfo=None) - timedelta(hours=48)
+    _succes_sans_montant(monkeypatch)
+
+    db = FakeDB([txn], None)
+    stats = await payment_service.reconcile_pending(db, older_than_minutes=0)
+
+    assert stats["anomalies"] == 1
+    assert stats["creditees"] == 0 and stats["cloturees"] == 0
+    assert txn.statut_paiement == "PENDING"
+    assert _quota_cree(db) is None
+
+
 # ── Réconciliation, suivi, configuration ──
 
 
@@ -590,7 +884,13 @@ async def test_reconciliation_credite_un_paiement_dont_la_notification_est_perdu
     db = FakeDB([txn], None)
     stats = await payment_service.reconcile_pending(db, older_than_minutes=0)
 
-    assert stats == {"verifiees": 1, "creditees": 1, "cloturees": 0, "erreurs": 0}
+    assert stats == {
+        "verifiees": 1,
+        "creditees": 1,
+        "cloturees": 0,
+        "anomalies": 0,
+        "erreurs": 0,
+    }
     assert txn.statut_paiement == "ACCEPTED"
 
 
@@ -639,6 +939,54 @@ def test_production_live_exige_les_identifiants_operateurs():
         "WAVE_WEBHOOK_SECRET",
         "ORANGE_CLIENT_ID",
         "ORANGE_MERCHANT_KEY",
+        "CINETPAY_API_KEY",
+        "CINETPAY_API_PASSWORD",
         "PUBLIC_BASE_URL",
     ):
         assert variable in message
+
+
+def _settings_production_live(**surcharges):
+    from app.config import Settings
+
+    valeurs = {
+        "app_env": "production",
+        "app_debug": False,
+        "app_secret_key": "s" * 32,
+        "jwt_secret_key": "j" * 32,
+        "mobile_money_secret_key": "m" * 32,
+        "db_password": "p" * 16,
+        "vapid_private_key": "v" * 32,
+        "cors_allowed_origins": "https://prosartisan.ci",
+        "mistral_api_key": "mk_" + "a" * 32,
+        "payment_mode": "live",
+        "public_base_url": "https://prosartisan.ci",
+        "wave_api_key": "wave_sk_" + "w" * 32,
+        "wave_webhook_secret": "whsec_" + "x" * 32,
+        "orange_client_id": "oid",
+        "orange_client_secret": "osecret",
+        "orange_merchant_key": "mkey",
+        "cinetpay_api_key": "cp_key",
+        "cinetpay_api_password": "cp_password",
+    }
+    valeurs.update(surcharges)
+    return Settings(**valeurs)
+
+
+def test_production_live_complete_demarre():
+    settings_live = _settings_production_live()
+    assert settings_live.payment_demo_mode is False
+
+
+@pytest.mark.parametrize(
+    ("champ", "variable"),
+    [
+        ("cinetpay_api_key", "CINETPAY_API_KEY"),
+        ("cinetpay_api_password", "CINETPAY_API_PASSWORD"),
+    ],
+)
+def test_production_live_refuse_identifiants_cinetpay_manquants(champ, variable):
+    with pytest.raises(ValueError) as exc:
+        _settings_production_live(**{champ: ""})
+
+    assert variable in str(exc.value)

@@ -2333,7 +2333,10 @@ if ('serviceWorker' in navigator) {
 // arrive par le webhook opérateur indépendamment du retour navigateur.
 let paywallTrigger = null;
 
-function ensurePaywallOperateurButtons(operateursDisponibles = ['WAVE', 'ORANGE', 'CINETPAY']) {
+// CinetPay est le moyen de paiement par défaut : proposé en premier.
+const PAYWALL_OPERATEURS_ORDRE = ['CINETPAY', 'WAVE', 'ORANGE'];
+
+function ensurePaywallOperateurButtons(operateursDisponibles = PAYWALL_OPERATEURS_ORDRE) {
     const group = document.querySelector('#paywall-modal .modal-form-group');
     if (!group) return;
     const labels = {
@@ -2343,7 +2346,7 @@ function ensurePaywallOperateurButtons(operateursDisponibles = ['WAVE', 'ORANGE'
     };
     const activeSet = new Set(operateursDisponibles.map(op => String(op).toUpperCase()));
     group.innerHTML = '';
-    ['WAVE', 'ORANGE', 'CINETPAY'].forEach((code) => {
+    PAYWALL_OPERATEURS_ORDRE.forEach((code) => {
         if (!activeSet.has(code)) return;
         const btn = document.createElement('button');
         btn.type = 'button';

@@ -28,6 +28,20 @@ async def test_get_tarifs():
     assert "offres" in data
     assert "pass_24h" in data["offres"]
     assert data["offres"]["pass_24h"]["montant"] == 500
+    # CinetPay est le moyen de paiement par défaut, proposé en premier.
+    assert data["operateurs"][0] == "CINETPAY"
+    assert data["operateur_par_defaut"] == "CINETPAY"
+
+
+def test_ordonner_operateurs_place_cinetpay_en_tete():
+    from app.services.payment_providers import ordonner_operateurs
+
+    assert ordonner_operateurs(["WAVE", "ORANGE", "CINETPAY"]) == [
+        "CINETPAY",
+        "WAVE",
+        "ORANGE",
+    ]
+    assert ordonner_operateurs(["WAVE", "ORANGE"]) == ["WAVE", "ORANGE"]
 
 
 @pytest.mark.asyncio
@@ -45,8 +59,9 @@ async def test_init_payment_success():
     assert response.status_code == 200
     data = response.json()
     assert data["status"] == "success"
-    # Mode démo par défaut : URL du simulateur d'opérateur.
-    assert "/api/payment/demo/checkout/cos-" in data["payment_url"]
+    # Mode démo par défaut, opérateur par défaut CinetPay : URL du simulateur.
+    assert "/api/payment/demo/checkout/cp-" in data["payment_url"]
+    assert data["operateur"] == "CINETPAY"
     assert data["mode"] == "demo"
 
 

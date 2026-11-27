@@ -25,6 +25,8 @@ Parcours officiel :
 from __future__ import annotations
 
 import json
+import logging
+import re
 import time
 from dataclasses import dataclass
 from decimal import Decimal, InvalidOperation
@@ -43,14 +45,22 @@ from app.services.payment_providers.base import (
     StatutOperateur,
 )
 
+logger = logging.getLogger(__name__)
+
 _TIMEOUT = httpx.Timeout(15.0, connect=5.0)
 
+# Seuls SUCCESS (100), FAILED (2010) et INSUFFICIENT_BALANCE (2005) sont des
+# statuts finaux selon la documentation CinetPay v1 (« Codes de statut »).
+# EXPIRED (2003) et OTP_EXPIRED (2008) ne le sont pas : le paiement peut encore
+# aboutir, la transaction reste donc en attente. La réconciliation la clôt
+# localement après PAYMENT_PENDING_MAX_HOURS, et un succès confirmé plus tard
+# est tout de même crédité (voir PaymentService._appliquer_etat).
 _STATUTS_PAR_CHAINE = {
     "SUCCESS": StatutOperateur.SUCCES,
     "FAILED": StatutOperateur.ECHEC,
     "INSUFFICIENT_BALANCE": StatutOperateur.ECHEC,
-    "EXPIRED": StatutOperateur.EXPIRE,
-    "OTP_EXPIRED": StatutOperateur.EXPIRE,
+    "EXPIRED": StatutOperateur.EN_ATTENTE,
+    "OTP_EXPIRED": StatutOperateur.EN_ATTENTE,
     "INITIATED": StatutOperateur.EN_ATTENTE,
     "PENDING": StatutOperateur.EN_ATTENTE,
     "WAITING": StatutOperateur.EN_ATTENTE,
@@ -60,9 +70,9 @@ _STATUTS_PAR_CODE = {
     100: StatutOperateur.SUCCES,
     2001: StatutOperateur.EN_ATTENTE,
     2002: StatutOperateur.EN_ATTENTE,
-    2003: StatutOperateur.EXPIRE,
+    2003: StatutOperateur.EN_ATTENTE,
     2005: StatutOperateur.ECHEC,
-    2008: StatutOperateur.EXPIRE,
+    2008: StatutOperateur.EN_ATTENTE,
     2010: StatutOperateur.ECHEC,
 }
 
@@ -89,6 +99,58 @@ def statut_cinetpay(status_val: Any, code_val: Any = None) -> StatutOperateur:
     if s in _STATUTS_PAR_CHAINE:
         return _STATUTS_PAR_CHAINE[s]
     return StatutOperateur.EN_ATTENTE
+
+
+_CODES_JETON_INVALIDE = (1002, 1003)
+
+# Codes d'erreur de la documentation CinetPay v1 (« Codes de statut ») qui ne
+# décrivent pas un paiement mais un refus de la requête : jamais lus comme
+# « paiement en attente », sinon la transaction resterait bloquée sans alerte.
+_CODES_ERREUR_REQUETE = {
+    -1: "OPERATION_ERROR",
+    1004: "INVALID_PARAMS",
+    1005: "INVALID_CREDENTIALS",
+    2011: "NOT_ALLOWED (IP du serveur absente de la liste blanche CinetPay)",
+}
+
+_TELEPHONE_CI_RE = re.compile(r"^(?:\+225|00225|225)?(\d{10})$")
+
+
+def telephone_international(telephone: str | None) -> str | None:
+    """Numéro ivoirien au format attendu par CinetPay (`+2250707000000`).
+
+    `client_phone_number` est facultatif : un numéro non reconnu n'est pas
+    transmis plutôt que de faire échouer l'initialisation (`1004`).
+    """
+    if not telephone:
+        return None
+    compact = re.sub(r"[\s.\-()]", "", telephone)
+    correspondance = _TELEPHONE_CI_RE.match(compact)
+    return f"+225{correspondance.group(1)}" if correspondance else None
+
+
+def _corps_json(response: httpx.Response) -> dict[str, Any]:
+    try:
+        body = response.json()
+    except ValueError:
+        return {}
+    return body if isinstance(body, dict) else {}
+
+
+def _jeton_rejete(response: httpx.Response) -> bool:
+    """Jeton OAuth refusé : HTTP 401, ou code 1002/1003 quel que soit le statut HTTP."""
+    if response.status_code == 401:
+        return True
+    return _corps_json(response).get("code") in _CODES_JETON_INVALIDE
+
+
+def _erreur_cinetpay(response: httpx.Response) -> str:
+    """Résumé d'une erreur CinetPay (HTTP, code et statut métier, jamais le jeton)."""
+    body = _corps_json(response)
+    details = " ".join(
+        str(body[cle]) for cle in ("code", "status") if body.get(cle) is not None
+    )
+    return f"HTTP {response.status_code}" + (f" ({details})" if details else "")
 
 
 @dataclass(frozen=True)
@@ -140,7 +202,11 @@ class CinetPayLiveProvider:
             },
             headers={"Accept": "application/json"},
         )
-        response.raise_for_status()
+        if response.is_error:
+            # Ex. : HTTP 422 {"code": 1005, "status": "INVALID_CREDENTIALS"}.
+            raise PaymentProviderError(
+                f"Authentification CinetPay refusée : {_erreur_cinetpay(response)}"
+            )
         data = response.json()
         nested = data.get("data") if isinstance(data.get("data"), dict) else {}
         token = (
@@ -161,20 +227,9 @@ class CinetPayLiveProvider:
     ) -> dict[str, Any]:
         try:
             async with httpx.AsyncClient(timeout=_TIMEOUT) as client:
-                token = await self._access_token(client)
-                response = await client.request(
-                    method,
-                    f"{settings.cinetpay_api_base}{path}",
-                    json=payload,
-                    headers={
-                        "Authorization": f"Bearer {token}",
-                        "Accept": "application/json",
-                    },
-                )
-                # Renouvellement automatique si le jeton a expiré côté CinetPay
-                if response.status_code == 401:
-                    token = await self._access_token(client, force_refresh=True)
-                    response = await client.request(
+
+                async def envoyer(token: str) -> httpx.Response:
+                    return await client.request(
                         method,
                         f"{settings.cinetpay_api_base}{path}",
                         json=payload,
@@ -183,23 +238,28 @@ class CinetPayLiveProvider:
                             "Accept": "application/json",
                         },
                     )
-                response.raise_for_status()
+
+                response = await envoyer(await self._access_token(client))
+                # Jeton expiré ou révoqué côté CinetPay : l'API répond
+                # HTTP 422 {"code": 1002, "status": "INVALID_TOKEN"} (ou 401).
+                # Le code est lu AVANT tout contrôle du statut HTTP, sinon le
+                # renouvellement ne se déclencherait jamais.
+                if _jeton_rejete(response):
+                    response = await envoyer(
+                        await self._access_token(client, force_refresh=True)
+                    )
+                if response.is_error:
+                    raise PaymentProviderError(
+                        f"CinetPay a refusé la requête : {_erreur_cinetpay(response)}"
+                    )
                 body = response.json()
-                if isinstance(body, dict) and body.get("code") in (1002, 1003):
-                    token = await self._access_token(client, force_refresh=True)
-                    response = await client.request(
-                        method,
-                        f"{settings.cinetpay_api_base}{path}",
-                        json=payload,
-                        headers={
-                            "Authorization": f"Bearer {token}",
-                            "Accept": "application/json",
-                        },
-                    )
-                    response.raise_for_status()
-                    body = response.json()
                 if not isinstance(body, dict):
                     raise PaymentProviderError("Réponse CinetPay invalide.")
+                if body.get("code") in _CODES_ERREUR_REQUETE:
+                    raise PaymentProviderError(
+                        "CinetPay a refusé la requête : "
+                        f"{body['code']} {_CODES_ERREUR_REQUETE[body['code']]}"
+                    )
                 return body
         except (httpx.HTTPError, KeyError, ValueError) as exc:
             raise PaymentProviderError(f"CinetPay indisponible : {exc}") from exc
@@ -219,8 +279,9 @@ class CinetPayLiveProvider:
             "failed_url": request.error_url,
             "notify_url": request.notif_url,
         }
-        if request.client_phone_number:
-            payload["client_phone_number"] = request.client_phone_number
+        telephone = telephone_international(request.client_phone_number)
+        if telephone:
+            payload["client_phone_number"] = telephone
         if settings.cinetpay_payment_method:
             payload["payment_method"] = settings.cinetpay_payment_method
 
@@ -261,10 +322,22 @@ class CinetPayLiveProvider:
         raw_amount = (
             sous_objet.get("amount") if "amount" in sous_objet else data.get("amount")
         )
-        montant = _parse_amount(raw_amount) if raw_amount is not None else txn.montant
+        # Règle d'or : un crédit exige le montant CONFIRMÉ par CinetPay. Un
+        # montant absent, illisible ou dans une autre devise n'est jamais
+        # remplacé par celui de notre transaction : il reste non confirmé
+        # (None) et le paiement n'est pas crédité (`montant_invalide`).
+        montant = _parse_amount(raw_amount)
         devise = sous_objet.get("currency") or data.get("currency")
         if devise and str(devise).upper() != settings.cinetpay_currency.upper():
             montant = None
+        if statut is StatutOperateur.SUCCES and montant is None:
+            logger.error(
+                "Paiement CinetPay %s réussi mais montant non confirmé "
+                "(montant %r, devise %r) : non crédité, vérification manuelle requise.",
+                txn.reference_externe,
+                raw_amount,
+                devise,
+            )
 
         return EtatPaiement(
             statut=statut,

@@ -27,8 +27,10 @@ En production (`APP_ENV=production`), l'application refuse de démarrer si les v
 | `PAYMENT_MODE` | `demo` (simulateur des parcours officiels) ou `live` (API Wave / Orange Money) | `demo` tant que les accès officiels ne sont pas reçus |
 | `PAYMENT_DEMO_IN_PRODUCTION` | Autorise le simulateur en production (sinon paiements en `503`) | `false` (ne mettre `true` que pour une bêta fermée) |
 | `PUBLIC_BASE_URL` | URL publique de l'API (retours et notifications opérateurs) | `https://prosartisan.ci` |
+| `PAYMENT_PENDING_MAX_HOURS` | Durée de suivi d'un paiement en attente avant clôture locale `EXPIRED` par la réconciliation | `24` (minimum `1`) |
 | `WAVE_API_KEY` / `WAVE_WEBHOOK_SECRET` | Clé API Wave Checkout / secret de signature des webhooks (URL à déclarer : `/api/payment/webhooks/wave`) | requis en `live` |
 | `ORANGE_CLIENT_ID` / `ORANGE_CLIENT_SECRET` / `ORANGE_MERCHANT_KEY` | Identifiants Orange Money WebPay | requis en `live` |
+| `CINETPAY_API_KEY` / `CINETPAY_API_PASSWORD` | `account_key` / `account_password` du compte CinetPay **Côte d'Ivoire** (un compte par pays, devise `XOF`). URL de notification : `/api/payment/webhooks/cinetpay`, en HTTPS, sans authentification ni WAF qui bloquerait CinetPay. Déclarer l'IP sortante du serveur dans la liste blanche CinetPay (sinon code `2011 NOT_ALLOWED`) | requis en `live` (refus de démarrer sinon) ; identifiants refusés → code `1005` dans les journaux |
 | `ORANGE_WEBPAY_PATH` / `ORANGE_CURRENCY` | Bac à sable ou production Côte d'Ivoire | `/orange-money-webpay/ci/v1` + `XOF` en production |
 | `UPLOAD_DIR` | Dossier des photos de chantier et PDF téléversés — **doit être persistant** | `/app/uploads` (volume `prod_uploads` en Docker Compose ; disque persistant Render ou volume Cloud Storage FUSE sur Cloud Run) |
 | `TRUSTED_PROXY_HOPS` | Nombre de reverse proxies de confiance (IP client lue dans `X-Forwarded-For` depuis la droite) | `1` (Caddy, Render, Cloud Run direct) ; `2` derrière un Load Balancer GCP |
@@ -123,7 +125,7 @@ Au démarrage, le conteneur applique `alembic upgrade head` (désactivable avec 
 
 ## Tâches d'exploitation
 
-- **Réconciliation des paiements** (toutes les 10-15 min, cron / Cloud Scheduler) : `python -m app.scripts.reconcile_payments` — rattrape les notifications opérateur perdues.
+- **Réconciliation des paiements** (toutes les 10-15 min, cron / Cloud Scheduler) : `python -m app.scripts.reconcile_payments` — rattrape les notifications opérateur perdues et clôture en `EXPIRED` les paiements toujours en attente après `PAYMENT_PENDING_MAX_HOURS` (24 h par défaut). Un paiement confirmé après cette clôture reste crédité. Le compteur « anomalies de montant » signale un paiement réussi chez l'opérateur mais non crédité (montant absent ou différent) : la transaction reste `PENDING` et doit être vérifiée à la main (journaux `ERROR`).
 - **Reprise des photos Base64** (une fois) : `python -m app.scripts.migrate_chat_images --dry-run`, puis sans `--dry-run`.
 - **Purge de l'ancien historique anonyme partagé** (une fois, irréversible) : `python -m app.scripts.purge_anonymous_history --dry-run`, puis sans `--dry-run`.
 
