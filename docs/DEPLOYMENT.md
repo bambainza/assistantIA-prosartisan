@@ -125,7 +125,7 @@ Au démarrage, le conteneur applique `alembic upgrade head` (désactivable avec 
 
 ## Tâches d'exploitation
 
-- **Réconciliation des paiements** (toutes les 10-15 min, cron / Cloud Scheduler) : `python -m app.scripts.reconcile_payments` — rattrape les notifications opérateur perdues et clôture en `EXPIRED` les paiements toujours en attente après `PAYMENT_PENDING_MAX_HOURS` (24 h par défaut). Un paiement confirmé après cette clôture reste crédité.
+- **Réconciliation des paiements** (toutes les 10-15 min, cron / Cloud Scheduler) : `python -m app.scripts.reconcile_payments` — rattrape les notifications opérateur perdues et clôture en `EXPIRED` les paiements toujours en attente après `PAYMENT_PENDING_MAX_HOURS` (24 h par défaut). Un paiement confirmé après cette clôture reste crédité. Le compteur « anomalies de montant » signale un paiement réussi chez l'opérateur mais non crédité (montant absent ou différent) : la transaction reste `PENDING` et doit être vérifiée à la main (journaux `ERROR`).
 - **Reprise des photos Base64** (une fois) : `python -m app.scripts.migrate_chat_images --dry-run`, puis sans `--dry-run`.
 - **Purge de l'ancien historique anonyme partagé** (une fois, irréversible) : `python -m app.scripts.purge_anonymous_history --dry-run`, puis sans `--dry-run`.
 

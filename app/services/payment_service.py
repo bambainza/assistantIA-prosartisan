@@ -270,8 +270,10 @@ class PaymentService:
 
         if etat.statut is StatutOperateur.SUCCES:
             if etat.montant != txn.montant:
-                logger.warning(
-                    "Paiement %s refusé : montant confirmé %s, attendu %s.",
+                # Paiement réussi chez l'opérateur mais non crédité : anomalie
+                # à vérifier par un humain (la transaction reste PENDING).
+                logger.error(
+                    "Paiement %s non crédité : montant confirmé %s, attendu %s.",
                     txn.reference_externe,
                     etat.montant,
                     txn.montant,
@@ -472,7 +474,13 @@ class PaymentService:
             .order_by(TransactionMobileMoney.created_at)
             .limit(limit)
         )
-        stats = {"verifiees": 0, "creditees": 0, "cloturees": 0, "erreurs": 0}
+        stats = {
+            "verifiees": 0,
+            "creditees": 0,
+            "cloturees": 0,
+            "anomalies": 0,
+            "erreurs": 0,
+        }
         for txn in res.scalars().all():
             stats["verifiees"] += 1
             try:
@@ -486,6 +494,10 @@ class PaymentService:
                 stats["creditees"] += 1
             elif resultat["status"] == "declined":
                 stats["cloturees"] += 1
+            elif resultat["status"] == "montant_invalide":
+                # Succès chez l'opérateur, montant absent ou différent : jamais
+                # crédité ni clôturé (l'artisan a peut-être payé), à vérifier.
+                stats["anomalies"] += 1
             elif (
                 resultat["status"] == "pending"
                 and txn.created_at is not None

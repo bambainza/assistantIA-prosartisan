@@ -38,7 +38,8 @@ def main() -> None:
     stats = asyncio.run(reconcile(args.older_than, args.limit))
     print(
         f"Vérifiées : {stats['verifiees']} — créditées : {stats['creditees']} — "
-        f"clôturées : {stats['cloturees']} — erreurs : {stats['erreurs']}"
+        f"clôturées : {stats['cloturees']} — anomalies de montant : "
+        f"{stats['anomalies']} — erreurs : {stats['erreurs']}"
     )
 
 

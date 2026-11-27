@@ -797,6 +797,82 @@ async def test_reconciliation_ne_cloture_pas_sur_erreur_operateur(monkeypatch):
     assert txn.statut_paiement == "PENDING"
 
 
+@pytest.mark.asyncio
+@pytest.mark.parametrize(
+    "corps_statut",
+    [
+        {"code": 100, "status": "SUCCESS", "transaction_id": "cp_tx"},
+        {"code": 100, "status": "SUCCESS", "amount": None},
+        {"code": 100, "status": "SUCCESS", "amount": "cinq cents"},
+        {"code": 100, "status": "SUCCESS", "amount": 500, "currency": "XAF"},
+        {"code": 200, "status": "OK", "data": {"status": "SUCCESS", "code": 100}},
+    ],
+)
+async def test_client_cinetpay_montant_non_confirme_jamais_suppose(
+    monkeypatch, corps_statut
+):
+    """Montant absent, illisible ou en autre devise : None, jamais le montant attendu."""
+    monkeypatch.setattr(settings, "cinetpay_api_key", "cp_key")
+    monkeypatch.setattr(settings, "cinetpay_api_password", "cp_pwd")
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        if request.url.path == "/v1/oauth/login":
+            return httpx.Response(200, json={"access_token": "tok"})
+        return httpx.Response(200, json=corps_statut)
+
+    _transport_simule(monkeypatch, cinetpay, handler)
+    etat = await cinetpay.CinetPayLiveProvider().fetch_status(
+        TransactionMobileMoney(reference_externe="REF-12", montant=500)
+    )
+
+    assert etat.statut is StatutOperateur.SUCCES
+    assert etat.montant is None
+
+
+def _succes_sans_montant(monkeypatch):
+    from app.services.payment_providers.base import EtatPaiement
+
+    async def _fetch(self, txn):
+        return EtatPaiement(StatutOperateur.SUCCES, transaction_id="CP1", montant=None)
+
+    monkeypatch.setattr(demo.DemoCinetPayProvider, "fetch_status", _fetch)
+
+
+@pytest.mark.asyncio
+async def test_cinetpay_notification_sans_montant_confirme_non_creditee(monkeypatch):
+    _, txn = await _initier("CINETPAY", "pass_24h")
+    notification = await demo.decision_du_payeur(txn.provider_session_id, True)
+    _succes_sans_montant(monkeypatch)
+
+    db = FakeDB(txn, None)
+    resultat = await payment_service.handle_cinetpay_notification(db, notification.body)
+
+    assert resultat["status"] == "montant_invalide"
+    assert txn.statut_paiement == "PENDING"
+    assert _quota_cree(db) is None
+
+
+@pytest.mark.asyncio
+async def test_reconciliation_signale_le_montant_non_confirme_sans_cloturer(
+    monkeypatch,
+):
+    """Succès sans montant : anomalie, jamais crédité ni clôturé, même après 24 h."""
+    from datetime import UTC, datetime, timedelta
+
+    monkeypatch.setattr(settings, "payment_pending_max_hours", 24)
+    _, txn = await _initier("CINETPAY", "pass_24h")
+    txn.created_at = datetime.now(UTC).replace(tzinfo=None) - timedelta(hours=48)
+    _succes_sans_montant(monkeypatch)
+
+    db = FakeDB([txn], None)
+    stats = await payment_service.reconcile_pending(db, older_than_minutes=0)
+
+    assert stats["anomalies"] == 1
+    assert stats["creditees"] == 0 and stats["cloturees"] == 0
+    assert txn.statut_paiement == "PENDING"
+    assert _quota_cree(db) is None
+
+
 # ── Réconciliation, suivi, configuration ──
 
 
@@ -808,7 +884,13 @@ async def test_reconciliation_credite_un_paiement_dont_la_notification_est_perdu
     db = FakeDB([txn], None)
     stats = await payment_service.reconcile_pending(db, older_than_minutes=0)
 
-    assert stats == {"verifiees": 1, "creditees": 1, "cloturees": 0, "erreurs": 0}
+    assert stats == {
+        "verifiees": 1,
+        "creditees": 1,
+        "cloturees": 0,
+        "anomalies": 0,
+        "erreurs": 0,
+    }
     assert txn.statut_paiement == "ACCEPTED"
 
 

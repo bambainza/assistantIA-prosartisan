@@ -25,6 +25,7 @@ Parcours officiel :
 from __future__ import annotations
 
 import json
+import logging
 import re
 import time
 from dataclasses import dataclass
@@ -43,6 +44,8 @@ from app.services.payment_providers.base import (
     PaymentProviderError,
     StatutOperateur,
 )
+
+logger = logging.getLogger(__name__)
 
 _TIMEOUT = httpx.Timeout(15.0, connect=5.0)
 
@@ -319,10 +322,22 @@ class CinetPayLiveProvider:
         raw_amount = (
             sous_objet.get("amount") if "amount" in sous_objet else data.get("amount")
         )
-        montant = _parse_amount(raw_amount) if raw_amount is not None else txn.montant
+        # Règle d'or : un crédit exige le montant CONFIRMÉ par CinetPay. Un
+        # montant absent, illisible ou dans une autre devise n'est jamais
+        # remplacé par celui de notre transaction : il reste non confirmé
+        # (None) et le paiement n'est pas crédité (`montant_invalide`).
+        montant = _parse_amount(raw_amount)
         devise = sous_objet.get("currency") or data.get("currency")
         if devise and str(devise).upper() != settings.cinetpay_currency.upper():
             montant = None
+        if statut is StatutOperateur.SUCCES and montant is None:
+            logger.error(
+                "Paiement CinetPay %s réussi mais montant non confirmé "
+                "(montant %r, devise %r) : non crédité, vérification manuelle requise.",
+                txn.reference_externe,
+                raw_amount,
+                devise,
+            )
 
         return EtatPaiement(
             statut=statut,
