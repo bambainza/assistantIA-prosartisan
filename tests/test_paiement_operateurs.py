@@ -18,7 +18,11 @@ from app.models.quota import QuotaUtilisateur
 from app.models.transaction import TransactionMobileMoney
 from app.routers import payment as payment_router
 from app.services.payment_providers import cinetpay, demo, orange_money, wave
-from app.services.payment_providers.base import CheckoutRequest, StatutOperateur
+from app.services.payment_providers.base import (
+    CheckoutRequest,
+    PaymentProviderError,
+    StatutOperateur,
+)
 from app.services.payment_service import (
     WebhookNonAuthentifieError,
     payment_service,
@@ -577,6 +581,123 @@ async def test_client_cinetpay_live_format_officiel(monkeypatch):
         and etat.transaction_id == "cp_tx_456"
         and etat.montant == 3000
     )
+
+
+@pytest.mark.asyncio
+async def test_client_cinetpay_renouvelle_un_jeton_expire_refuse_en_422(monkeypatch):
+    """Réponse réelle de l'API v1 à un jeton expiré : HTTP 422 + code 1002."""
+    monkeypatch.setattr(settings, "cinetpay_api_key", "cp_key")
+    monkeypatch.setattr(settings, "cinetpay_api_password", "cp_pwd")
+    jetons_emis = iter(["jeton_expire", "jeton_neuf"])
+    requetes = []
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        requetes.append(request)
+        if request.url.path == "/v1/oauth/login":
+            return httpx.Response(200, json={"access_token": next(jetons_emis)})
+        if request.headers["Authorization"] == "Bearer jeton_expire":
+            return httpx.Response(
+                422,
+                json={
+                    "code": 1002,
+                    "status": "INVALID_TOKEN",
+                    "description": "Token is invalid",
+                },
+            )
+        return httpx.Response(
+            200,
+            json={
+                "code": 100,
+                "status": "SUCCESS",
+                "transaction_id": "cp_tx_1",
+                "amount": 500,
+                "currency": "XOF",
+            },
+        )
+
+    _transport_simule(monkeypatch, cinetpay, handler)
+    etat = await cinetpay.CinetPayLiveProvider().fetch_status(
+        TransactionMobileMoney(reference_externe="REF-9", montant=500)
+    )
+
+    assert [r.url.path for r in requetes] == [
+        "/v1/oauth/login",
+        "/v1/payment/REF-9",
+        "/v1/oauth/login",
+        "/v1/payment/REF-9",
+    ]
+    assert etat.statut is StatutOperateur.SUCCES and etat.montant == 500
+
+
+@pytest.mark.asyncio
+async def test_client_cinetpay_identifiants_refuses_erreur_explicite(monkeypatch):
+    """Réponse réelle à des identifiants invalides : HTTP 422 + code 1005."""
+    monkeypatch.setattr(settings, "cinetpay_api_key", "mauvaise_cle")
+    monkeypatch.setattr(settings, "cinetpay_api_password", "mauvais_mdp")
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        return httpx.Response(
+            422,
+            json={
+                "code": 1005,
+                "status": "INVALID_CREDENTIALS",
+                "description": "The requested service needs credentials, "
+                "but the ones provided were invalid.",
+            },
+        )
+
+    _transport_simule(monkeypatch, cinetpay, handler)
+    with pytest.raises(PaymentProviderError) as exc:
+        await cinetpay.CinetPayLiveProvider().fetch_status(
+            TransactionMobileMoney(reference_externe="REF-10", montant=500)
+        )
+
+    assert "1005 INVALID_CREDENTIALS" in str(exc.value)
+    assert "mauvais_mdp" not in str(exc.value)
+
+
+@pytest.mark.parametrize(
+    ("saisi", "attendu"),
+    [
+        ("0707000000", "+2250707000000"),
+        ("07 07 00 00 00", "+2250707000000"),
+        ("+2250707000000", "+2250707000000"),
+        ("002250707000000", "+2250707000000"),
+        ("2250707000000", "+2250707000000"),
+        ("07070000", None),
+        ("+33612345678", None),
+        (None, None),
+    ],
+)
+def test_cinetpay_telephone_au_format_international(saisi, attendu):
+    assert cinetpay.telephone_international(saisi) == attendu
+
+
+@pytest.mark.asyncio
+async def test_client_cinetpay_ip_non_autorisee_erreur_explicite(monkeypatch):
+    """Code 2011 NOT_ALLOWED en HTTP 200 : erreur, jamais « paiement en attente »."""
+    monkeypatch.setattr(settings, "cinetpay_api_key", "cp_key")
+    monkeypatch.setattr(settings, "cinetpay_api_password", "cp_pwd")
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        if request.url.path == "/v1/oauth/login":
+            return httpx.Response(200, json={"access_token": "tok"})
+        return httpx.Response(
+            200,
+            json={
+                "code": 2011,
+                "status": "NOT_ALLOWED",
+                "message": "Cette IP n'est pas en liste blanche",
+            },
+        )
+
+    _transport_simule(monkeypatch, cinetpay, handler)
+    with pytest.raises(PaymentProviderError) as exc:
+        await cinetpay.CinetPayLiveProvider().fetch_status(
+            TransactionMobileMoney(reference_externe="REF-11", montant=500)
+        )
+
+    assert "2011 NOT_ALLOWED" in str(exc.value)
 
 
 # ── Réconciliation, suivi, configuration ──
